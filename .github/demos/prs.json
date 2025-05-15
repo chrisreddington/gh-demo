@@ -1,0 +1,10 @@
+[
+  {
+    "title": "Demo PR 1",
+    "body": "This is a sample pull request for demo purposes.",
+    "head": "demo-branch",
+    "base": "main",
+    "labels": ["enhancement", "demo"],
+    "assignees": ["octocat"]
+  }
+]
