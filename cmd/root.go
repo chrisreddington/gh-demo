@@ -1,31 +1,21 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
+	   "os"
+	   "github.com/spf13/cobra"
 )
 
-// List of available subcommands
-var subcommands = []string{"hydrate"}
+var rootCmd = &cobra.Command{
+	   Use:   "gh-demo",
+	   Short: "GitHub Demo CLI Extension",
+}
 
 func Execute() {
-	if len(os.Args) < 2 {
-		fmt.Println("Available subcommands:")
-		for _, cmd := range subcommands {
-			fmt.Printf("  %s\n", cmd)
-		}
-		os.Exit(0)
-	}
+	   if err := rootCmd.Execute(); err != nil {
+			   os.Exit(1)
+	   }
+}
 
-	switch os.Args[1] {
-	case "hydrate":
-		hydrateCmd()
-	default:
-		fmt.Printf("Unknown subcommand: %s\n", os.Args[1])
-		fmt.Println("Available subcommands:")
-		for _, cmd := range subcommands {
-			fmt.Printf("  %s\n", cmd)
-		}
-		os.Exit(1)
-	}
+func init() {
+	   rootCmd.AddCommand(NewHydrateCmd())
 }

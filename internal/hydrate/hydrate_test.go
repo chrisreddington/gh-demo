@@ -7,11 +7,36 @@ import (
 	"testing"
 )
 
+import "github.com/chrisreddington/gh-demo/internal/githubapi"
+func TestHydrateWithRealGHClient(t *testing.T) {
+	   // This test uses the real (stubbed) GHClient to ensure wiring is correct.
+	   client := githubapi.NewGHClient("octocat", "demo-repo")
+
+	   root, err := FindProjectRoot()
+	   if err != nil {
+			   t.Fatalf("could not find project root: %v", err)
+	   }
+	   issuesPath := filepath.Join(root, ".github", "demos", "issues.json")
+	   discussionsPath := filepath.Join(root, ".github", "demos", "discussions.json")
+	   prsPath := filepath.Join(root, ".github", "demos", "prs.json")
+
+	   // Should not error with stubbed methods
+	   err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true)
+	   if err != nil {
+			   t.Fatalf("HydrateWithLabels with real GHClient failed: %v", err)
+	   }
+}
+
 // MockGitHubClient is a mock for label operations
 type MockGitHubClient struct {
 	ExistingLabels map[string]bool
 	CreatedLabels  []string
 }
+
+// Add stubs for the rest of the interface
+func (m *MockGitHubClient) CreateIssue(issue githubapi.IssueInput) error    { return nil }
+func (m *MockGitHubClient) CreateDiscussion(d githubapi.DiscussionInput) error { return nil }
+func (m *MockGitHubClient) CreatePR(pr githubapi.PRInput) error           { return nil }
 
 func (m *MockGitHubClient) ListLabels() ([]string, error) {
 	labels := make([]string, 0, len(m.ExistingLabels))
@@ -32,7 +57,7 @@ func TestHydrateWithLabels(t *testing.T) {
 	client := &MockGitHubClient{ExistingLabels: map[string]bool{"bug": true, "demo": true}}
 
 	// Use demo files for content
-	root, err := findProjectRoot()
+root, err := FindProjectRoot()
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
@@ -59,7 +84,7 @@ func TestHydrateWithLabels(t *testing.T) {
 }
 
 func TestReadIssuesJSON(t *testing.T) {
-	root, err := findProjectRoot()
+root, err := FindProjectRoot()
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
@@ -78,7 +103,7 @@ func TestReadIssuesJSON(t *testing.T) {
 }
 
 func TestReadDiscussionsJSON(t *testing.T) {
-	root, err := findProjectRoot()
+root, err := FindProjectRoot()
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
@@ -97,7 +122,7 @@ func TestReadDiscussionsJSON(t *testing.T) {
 }
 
 func TestReadPRsJSON(t *testing.T) {
-	root, err := findProjectRoot()
+root, err := FindProjectRoot()
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}

@@ -5,10 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/chrisreddington/gh-demo/internal/githubapi"
 )
 
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
-func HydrateWithLabels(client GitHubLabelClient, issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs bool) error {
+func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs bool) error {
 	issues, discussions, prs, err := HydrateFromFiles(issuesPath, discussionsPath, prsPath, includeIssues, includeDiscussions, includePRs)
 	if err != nil {
 		return err
@@ -44,14 +46,8 @@ type PullRequest struct {
 	Assignees []string `json:"assignees"`
 }
 
-// GitHubLabelClient defines the interface for label operations (for mocking/testing)
-type GitHubLabelClient interface {
-	ListLabels() ([]string, error)
-	CreateLabel(label string) error
-}
-
 // EnsureLabelsExist checks if each label exists in the repo, and creates it if not.
-func EnsureLabelsExist(client GitHubLabelClient, labels []string) error {
+func EnsureLabelsExist(client githubapi.GitHubClient, labels []string) error {
 	existing, err := client.ListLabels()
 	if err != nil {
 		return err
@@ -133,8 +129,8 @@ func CollectLabels(issues []Issue, discussions []Discussion, prs []PullRequest) 
 	return out
 }
 
-// findProjectRoot traverses up from the current file to find the directory containing go.mod
-func findProjectRoot() (string, error) {
+// FindProjectRoot traverses up from the current file to find the directory containing go.mod
+func FindProjectRoot() (string, error) {
 	_, filename, _, _ := runtime.Caller(0)
 	dir := filepath.Dir(filename)
 	for {
