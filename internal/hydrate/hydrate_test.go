@@ -13,12 +13,12 @@ import (
 
 // MockGitHubClient is a mock implementation of the GitHubClient interface
 type MockGitHubClient struct {
-	CreateIssueFunc            func(ctx context.Context, owner, repo string, input *githubapi.IssueInput) (string, error)
-	CreateDiscussionFunc       func(ctx context.Context, input *githubapi.DiscussionInput) (string, error)
+	CreateIssueFunc             func(ctx context.Context, owner, repo string, input *githubapi.IssueInput) (string, error)
+	CreateDiscussionFunc        func(ctx context.Context, input *githubapi.DiscussionInput) (string, error)
 	GetDiscussionCategoriesFunc func(ctx context.Context, owner, repo string) ([]githubapi.DiscussionCategory, error)
-	CreatePullRequestFunc      func(ctx context.Context, owner, repo string, input *githubapi.PullRequestInput) (string, error)
-	CreateLabelFunc            func(ctx context.Context, owner, repo string, input *githubapi.LabelInput) (string, error)
-	GetRepositoryIDFunc        func(ctx context.Context, owner, repo string) (string, error)
+	CreatePullRequestFunc       func(ctx context.Context, owner, repo string, input *githubapi.PullRequestInput) (string, error)
+	CreateLabelFunc             func(ctx context.Context, owner, repo string, input *githubapi.LabelInput) (string, error)
+	GetRepositoryIDFunc         func(ctx context.Context, owner, repo string) (string, error)
 }
 
 func (m *MockGitHubClient) CreateIssue(ctx context.Context, owner, repo string, input *githubapi.IssueInput) (string, error) {

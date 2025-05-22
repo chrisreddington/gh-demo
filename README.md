@@ -213,10 +213,18 @@ go fmt ./...
 
 ### Project Structure
 
-- `/cmd`: Main command implementations
+- `/cmd`: Main command implementations (using Cobra CLI framework)
 - `/internal/githubapi`: GitHub API client interfaces and implementations
 - `/internal/hydrate`: Hydration logic and schema definitions
 - `/prd`: Product documentation and requirements
+
+### Dependencies
+
+- [go-gh](https://github.com/cli/go-gh): Official GitHub API Go client
+- [Cobra](https://github.com/spf13/cobra): Modern CLI framework for Go applications
+  - Provides a consistent command structure
+  - Handles command-line argument parsing
+  - Supports automatic help generation for better accessibility
 
 ## License
 

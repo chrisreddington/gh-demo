@@ -14,19 +14,19 @@ type IssueInput struct {
 
 // DiscussionInput represents the input for creating a discussion
 type DiscussionInput struct {
-	Title         string `json:"title"`
-	Body          string `json:"body"`
-	CategoryID    string `json:"categoryId"`
-	RepositoryID  string `json:"repositoryId"`
+	Title        string `json:"title"`
+	Body         string `json:"body"`
+	CategoryID   string `json:"categoryId"`
+	RepositoryID string `json:"repositoryId"`
 }
 
 // PullRequestInput represents the input for creating a pull request
 type PullRequestInput struct {
-	Title  string `json:"title"`
-	Body   string `json:"body"`
-	Head   string `json:"head"`
-	Base   string `json:"base"`
-	Draft  bool   `json:"draft,omitempty"`
+	Title string `json:"title"`
+	Body  string `json:"body"`
+	Head  string `json:"head"`
+	Base  string `json:"base"`
+	Draft bool   `json:"draft,omitempty"`
 }
 
 // LabelInput represents the input for creating a label

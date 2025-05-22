@@ -1,35 +1,26 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
+
+	"github.com/spf13/cobra"
 )
 
-// List of available subcommands
-var subcommands = []string{"hydrate"}
+var rootCmd = &cobra.Command{
+	Use:   "gh-demo",
+	Short: "A tool to automate GitHub repository hydration",
+	Long: `A GitHub CLI extension that automates repository hydration tasks, 
+such as creating issues, discussions, pull requests, and labels 
+using the GitHub API.`,
+}
 
 // Mock os.Exit for testing
 var osExit = os.Exit
 
-// Execute runs the appropriate subcommand
+// Execute runs the root command
 func Execute() {
-	if len(os.Args) < 2 {
-		fmt.Println("Available subcommands:")
-		for _, cmd := range subcommands {
-			fmt.Printf("  %s\n", cmd)
-		}
-		osExit(0)
-	}
-
-	switch os.Args[1] {
-	case "hydrate":
-		hydrateCmd()
-	default:
-		fmt.Printf("Unknown subcommand: %s\n", os.Args[1])
-		fmt.Println("Available subcommands:")
-		for _, cmd := range subcommands {
-			fmt.Printf("  %s\n", cmd)
-		}
+	err := rootCmd.Execute()
+	if err != nil {
 		osExit(1)
 	}
 }

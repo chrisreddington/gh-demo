@@ -57,9 +57,14 @@ This is a GitHub CLI Extension written in Go to automate repository hydration ta
 2. **Command Structure**:
    - New features should be added as subcommands or options to the CLI
    - Maintain consistency in command structure and naming
+   - Always use Cobra for CLI command handling (`github.com/spf13/cobra`)
+     - Provides consistent help text and error messaging
+     - Improves accessibility through standardized command patterns
+     - Enables automatic command completion and documentation generation
 
 3. **API Usage**:
    - Use the `go-gh` library for all GitHub API interactions
+   - Use the `github.com/spf13/cobra` library for CLI command structure and handling
    - Prefer interfaces for API clients to enable mocking and testing
    - Avoid hardcoding repository or owner names; pass them as parameters or config
 

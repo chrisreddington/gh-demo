@@ -1,39 +1,37 @@
 package cmd
 
 import (
-	"os"
+	"bytes"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 func TestHydrateCmd_MissingArguments(t *testing.T) {
-	// Save original args and restore after test
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
-
-	// Set up test case with missing arguments
-	os.Args = []string{"gh-demo", "hydrate"}
-
-	// Save the original exit function
-	origExit := osExit
-	defer func() { osExit = origExit }()
-	
-	// Replace the exit function
-	osExit = func(code int) {
-		// Don't actually exit the test
-		panic("exit")
+	// Create a command for testing
+	cmd := &cobra.Command{
+		Use:  "hydrate",
+		RunE: runHydrateCmd,
+		Args: cobra.MinimumNArgs(2),
 	}
 
-	// Run the function and recover from the panic
-	defer func() {
-		if r := recover(); r != nil {
-			if r != "exit" {
-				t.Errorf("Unexpected panic: %v", r)
-			}
-		}
-	}()
+	// Set args to insufficient number
+	cmd.SetArgs([]string{})
 
-	hydrateCmd()
+	// Create an output buffer to capture error message
+	buf := new(bytes.Buffer)
+	cmd.SetErr(buf)
 
-	// The function should panic with "exit" before reaching here
-	t.Error("Expected command to exit, but it did not")
+	// Run the command and capture the error
+	err := cmd.Execute()
+
+	// The command should return an error with insufficient args
+	if err == nil {
+		t.Error("Expected command to return an error with insufficient arguments, but it did not")
+	}
+
+	// Check if the error message contains information about required arguments
+	if buf.Len() == 0 {
+		t.Error("Expected an error message but got none")
+	}
 }
