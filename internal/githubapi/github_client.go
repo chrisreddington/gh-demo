@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
+	"github.com/cli/go-gh/v2/pkg/repository"
 )
 
 // GitHubClientImpl implements the GitHubClient interface
@@ -278,6 +279,20 @@ func (c *GitHubClientImpl) CreateLabel(ctx context.Context, owner, repo string, 
 
 // GetRepositoryID retrieves the ID of a repository
 func (c *GitHubClientImpl) GetRepositoryID(ctx context.Context, owner, repo string) (string, error) {
+	// If owner or repo is empty, get current repository
+	if owner == "" || repo == "" {
+		currentOwner, currentRepo, err := c.GetCurrentRepository(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to get current repository: %w", err)
+		}
+		if owner == "" {
+			owner = currentOwner
+		}
+		if repo == "" {
+			repo = currentRepo
+		}
+	}
+
 	// Build the GraphQL query
 	query := `
 	query GetRepositoryID($owner: String!, $name: String!) {
@@ -306,4 +321,16 @@ func (c *GitHubClientImpl) GetRepositoryID(ctx context.Context, owner, repo stri
 	}
 
 	return response.Repository.ID, nil
+}
+
+// GetCurrentRepository gets the current repository from git remotes
+func (c *GitHubClientImpl) GetCurrentRepository(ctx context.Context) (string, string, error) {
+	// Use the repository package from go-gh library
+	// This needs to be imported at the top of the file
+	repo, err := repository.Current()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to determine current repository: %w", err)
+	}
+	
+	return repo.Owner, repo.Name, nil
 }

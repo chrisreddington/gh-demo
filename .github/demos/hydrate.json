@@ -1,0 +1,54 @@
+{
+    "labels": [
+        {
+            "name": "bug",
+            "color": "d73a4a",
+            "description": "Something isn't working"
+        },
+        {
+            "name": "enhancement",
+            "color": "a2eeef",
+            "description": "New feature or request"
+        },
+        {
+            "name": "documentation",
+            "color": "0075ca",
+            "description": "Improvements or additions to documentation"
+        }
+    ],
+    "issues": [
+        {
+            "title": "Welcome to the Repository",
+            "body": "This is a welcome issue to help you get started with the repository.",
+            "labels": ["documentation"],
+            "assignees": []
+        },
+        {
+            "title": "Project Setup Guide",
+            "body": "Create initial project setup documentation",
+            "labels": ["documentation"],
+            "assignees": []
+        }
+    ],
+    "discussions": [
+        {
+            "title": "Welcome to Discussions",
+            "body": "This is a place to ask questions and share ideas about the project.",
+            "category": "General"
+        },
+        {
+            "title": "Contributing Guidelines",
+            "body": "Let's discuss how we can contribute to this project effectively.",
+            "category": "Ideas"
+        }
+    ],
+    "prs": [
+        {
+            "title": "Initial Project Setup",
+            "body": "This PR sets up the basic project structure and documentation.",
+            "head": "feature/initial-setup",
+            "base": "main",
+            "draft": true
+        }
+    ]
+}

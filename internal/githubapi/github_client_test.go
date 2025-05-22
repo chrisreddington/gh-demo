@@ -75,6 +75,165 @@ func TestGetRepositoryID_Error(t *testing.T) {
 	}
 }
 
+// MockGitHubClient implements GitHubClient interface for testing
+type MockGitHubClient struct {
+	GetRepositoryIDFunc      func(ctx context.Context, owner, repo string) (string, error)
+	GetCurrentRepositoryFunc func(ctx context.Context) (string, string, error)
+	// Add other methods as needed
+}
+
+func (m *MockGitHubClient) GetRepositoryID(ctx context.Context, owner, repo string) (string, error) {
+	return m.GetRepositoryIDFunc(ctx, owner, repo)
+}
+
+func (m *MockGitHubClient) GetCurrentRepository(ctx context.Context) (string, string, error) {
+	return m.GetCurrentRepositoryFunc(ctx)
+}
+
+// Implement other required interface methods with empty implementations
+func (m *MockGitHubClient) CreateIssue(ctx context.Context, owner, repo string, input *IssueInput) (string, error) {
+	return "", nil
+}
+func (m *MockGitHubClient) CreateDiscussion(ctx context.Context, input *DiscussionInput) (string, error) {
+	return "", nil
+}
+func (m *MockGitHubClient) GetDiscussionCategories(ctx context.Context, owner, repo string) ([]DiscussionCategory, error) {
+	return nil, nil
+}
+func (m *MockGitHubClient) CreatePullRequest(ctx context.Context, owner, repo string, input *PullRequestInput) (string, error) {
+	return "", nil
+}
+func (m *MockGitHubClient) CreateLabel(ctx context.Context, owner, repo string, input *LabelInput) (string, error) {
+	return "", nil
+}
+
+// TestGetRepositoryID_WithCurrentRepository tests GetRepositoryID with empty owner and repo
+func TestGetRepositoryID_WithCurrentRepository(t *testing.T) {
+	// Initialize variables to track calls
+	var usedCurrentRepo bool
+	var queriedOwner, queriedRepo string
+
+	// Create a mock client
+	client := &GitHubClientImpl{
+		client: &MockGQLClient{
+			DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+				// Track which owner and repo were used in the GraphQL query
+				queriedOwner = variables["owner"].(string)
+				queriedRepo = variables["name"].(string)
+
+				// Set the response
+				resp := response.(*struct {
+					Repository struct {
+						ID string `json:"id"`
+					} `json:"repository"`
+				})
+				resp.Repository.ID = "R_current"
+				return nil
+			},
+		},
+	}
+
+	// Replace GetCurrentRepository with a test double
+	// We'll use a separate function that delegates to the original when not testing
+	originalFunc := client.GetCurrentRepository
+	testGetCurrentRepository := func(ctx context.Context) (string, string, error) {
+		usedCurrentRepo = true // Flag that we called this function
+		return "currentowner", "currentrepo", nil
+	}
+
+	// Swap the implementation
+	client.GetCurrentRepository = testGetCurrentRepository
+
+	// Test with empty owner and repo
+	id, err := client.GetRepositoryID(context.Background(), "", "")
+
+	// Restore the original function
+	client.GetCurrentRepository = originalFunc
+
+	// Check results
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+
+	if id != "R_current" {
+		t.Errorf("Expected repository ID to be 'R_current', got %v", id)
+	}
+
+	if !usedCurrentRepo {
+		t.Error("Expected GetCurrentRepository to be called, but it wasn't")
+	}
+
+	if queriedOwner != "currentowner" || queriedRepo != "currentrepo" {
+		t.Errorf("Expected owner='currentowner' and repo='currentrepo', got owner='%s' repo='%s'",
+			queriedOwner, queriedRepo)
+	}
+}
+
+// TestGetRepositoryID_EmptyParams tests that GetRepositoryID uses GetCurrentRepository when parameters are empty
+func TestGetRepositoryID_EmptyParams(t *testing.T) {
+	// Track if the current repository method was called
+	getCurrentRepoCalled := false
+
+	// Create the mock to handle GetRepositoryID calls
+	mockGQL := &MockGQLClient{
+		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+			owner := variables["owner"].(string)
+			repo := variables["name"].(string)
+
+			// Verify the values were correctly passed through
+			if owner != "currentowner" {
+				t.Errorf("Expected owner to be 'currentowner', got %v", owner)
+			}
+			if repo != "currentrepo" {
+				t.Errorf("Expected repo to be 'currentrepo', got %v", repo)
+			}
+
+			// Set the response
+			resp := response.(*struct {
+				Repository struct {
+					ID string `json:"id"`
+				} `json:"repository"`
+			})
+			resp.Repository.ID = "R_current"
+			return nil
+		},
+	}
+
+	// Create a client with our mocked GraphQL client
+	client := &GitHubClientImpl{
+		client: mockGQL,
+	}
+
+	// Store a reference to the original method
+	originalMethod := client.GetCurrentRepository
+
+	// Create a test implementation
+	testImplementation := func(ctx context.Context) (string, string, error) {
+		getCurrentRepoCalled = true
+		return "currentowner", "currentrepo", nil
+	}
+
+	// Replace the method with our test implementation
+	client.GetCurrentRepository = testImplementation
+
+	// Call the method with empty owner and repo
+	id, err := client.GetRepositoryID(context.Background(), "", "")
+
+	// Restore the original implementation
+	client.GetCurrentRepository = originalMethod
+
+	// Verify expectations
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+	if id != "R_current" {
+		t.Errorf("Expected repository ID 'R_current', got %v", id)
+	}
+	if !getCurrentRepoCalled {
+		t.Error("Expected GetCurrentRepository to be called, but it wasn't")
+	}
+}
+
 // TestCreateIssue tests the CreateIssue method
 func TestCreateIssue(t *testing.T) {
 	// Create a mock GQL client that returns a successful issue creation response

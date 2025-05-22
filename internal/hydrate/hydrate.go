@@ -25,29 +25,41 @@ func NewHydrator(client githubapi.GitHubClient) *Hydrator {
 
 // findConfigFile attempts to find a hydration configuration file
 func findConfigFile(path string) (string, error) {
-	// Check if path is a file
-	fileInfo, err := os.Stat(path)
-	if err == nil && !fileInfo.IsDir() {
-		return path, nil
-	}
+	// Check if a specific path was provided
+	if path != "" {
+		// Check if path is a file
+		fileInfo, err := os.Stat(path)
+		if err == nil && !fileInfo.IsDir() {
+			return path, nil
+		}
 
-	// If path is a directory, look for hydrate.json
-	if err == nil && fileInfo.IsDir() {
-		configPath := filepath.Join(path, "hydrate.json")
-		_, err := os.Stat(configPath)
-		if err == nil {
-			return configPath, nil
+		// If path is a directory, look for hydrate.json
+		if err == nil && fileInfo.IsDir() {
+			configPath := filepath.Join(path, "hydrate.json")
+			_, err := os.Stat(configPath)
+			if err == nil {
+				return configPath, nil
+			}
 		}
 	}
 
-	// Default to using the current directory
+	// Check default locations
+
+	// Check .github/demos/hydrate.json
+	defaultPath := filepath.Join(".github", "demos", "hydrate.json")
+	_, err := os.Stat(defaultPath)
+	if err == nil {
+		return defaultPath, nil
+	}
+
+	// Try in the current directory
 	configPath := "hydrate.json"
 	_, err = os.Stat(configPath)
 	if err == nil {
 		return configPath, nil
 	}
 
-	return "", fmt.Errorf("configuration file not found")
+	return "", fmt.Errorf("configuration file not found. Please create a hydrate.json file in the current directory or in .github/demos/")
 }
 
 // Hydrate processes a configuration file and creates the specified GitHub resources

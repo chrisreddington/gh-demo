@@ -60,6 +60,7 @@ type LabelClient interface {
 // RepositoryClient defines the interface for working with GitHub repositories
 type RepositoryClient interface {
 	GetRepositoryID(ctx context.Context, owner, repo string) (string, error)
+	GetCurrentRepository(ctx context.Context) (string, string, error)
 }
 
 // GitHubClient combines all GitHub API client interfaces
