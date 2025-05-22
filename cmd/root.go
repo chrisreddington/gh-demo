@@ -8,13 +8,17 @@ import (
 // List of available subcommands
 var subcommands = []string{"hydrate"}
 
+// Mock os.Exit for testing
+var osExit = os.Exit
+
+// Execute runs the appropriate subcommand
 func Execute() {
 	if len(os.Args) < 2 {
 		fmt.Println("Available subcommands:")
 		for _, cmd := range subcommands {
 			fmt.Printf("  %s\n", cmd)
 		}
-		os.Exit(0)
+		osExit(0)
 	}
 
 	switch os.Args[1] {
@@ -26,6 +30,6 @@ func Execute() {
 		for _, cmd := range subcommands {
 			fmt.Printf("  %s\n", cmd)
 		}
-		os.Exit(1)
+		osExit(1)
 	}
 }
