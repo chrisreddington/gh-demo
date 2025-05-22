@@ -26,6 +26,8 @@ This is a GitHub CLI Extension written in Go to automate repository hydration ta
 - Use meaningful variable and function names
 - Keep functions small and focused on a single responsibility
 - Separate interface definitions from implementations where appropriate
+- Having multiple files in a package is acceptable (e.g. `client.go`, `interfaces.go`, `types.go`), but keep related code together
+- Use `context.Context` for passing request-scoped values and cancellation signals
 
 ## Development Flow
 
