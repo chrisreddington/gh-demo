@@ -3,6 +3,6 @@
     "title": "Demo Issue 1",
     "body": "This is a sample issue for demo purposes.",
     "labels": ["bug", "demo"],
-    "assignees": ["octocat"]
+    "assignees": ["chrisreddington"]
   }
 ]
