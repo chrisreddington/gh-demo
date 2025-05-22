@@ -9,8 +9,8 @@ import (
 
 // MockClient implements the interface required by GQLClient
 type MockGQLClient struct {
-	QueryFunc   func(string, interface{}, map[string]interface{}) error
-	MutateFunc  func(string, interface{}, map[string]interface{}) error
+	QueryFunc  func(string, interface{}, map[string]interface{}) error
+	MutateFunc func(string, interface{}, map[string]interface{}) error
 }
 
 func (m *MockGQLClient) Query(name string, query interface{}, variables map[string]interface{}) error {

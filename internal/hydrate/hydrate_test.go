@@ -152,7 +152,7 @@ func TestGracefulErrorHandling(t *testing.T) {
 
 	// Create temporary test files
 	tempDir := t.TempDir()
-	
+
 	// Create issues.json
 	issuesPath := filepath.Join(tempDir, "issues.json")
 	issues := []Issue{{Title: "Test Issue", Body: "Test body", Labels: []string{"enhancement"}}}
@@ -177,20 +177,20 @@ func TestGracefulErrorHandling(t *testing.T) {
 
 	// Test that the function continues processing despite PR failure
 	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, false, true, false)
-	
+
 	// Should return error mentioning the PR failure, but should have succeeded with issues
 	if err == nil {
 		t.Fatal("expected error due to PR creation failure")
 	}
-	
+
 	if !strings.Contains(err.Error(), "some items failed to create") {
 		t.Errorf("expected error to mention partial failures, got: %v", err)
 	}
-	
+
 	if !strings.Contains(err.Error(), "Pull Request 1") {
 		t.Errorf("expected error to mention PR failure, got: %v", err)
 	}
-	
+
 	if !strings.Contains(err.Error(), "Test PR") {
 		t.Errorf("expected error to include PR title, got: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestPRValidation(t *testing.T) {
 	// Use the real GHClient to test validation logic, but with no actual REST client
 	// since validation happens before the REST call
 	tempDir := t.TempDir()
-	
+
 	// Create prs.json with invalid PR (empty head)
 	prsPath := filepath.Join(tempDir, "prs.json")
 	prs := []PullRequest{{Title: "Invalid PR", Body: "Test body", Head: "", Base: "main"}}
@@ -226,7 +226,7 @@ func TestPRValidation(t *testing.T) {
 
 	// Should fail gracefully with validation error
 	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, false, false, true, false)
-	
+
 	if err == nil {
 		// The MockGitHubClient doesn't implement validation, so this test won't work as expected
 		// Instead, let's test validation directly on the GHClient

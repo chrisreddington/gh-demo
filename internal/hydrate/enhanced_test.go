@@ -10,11 +10,11 @@ import (
 
 // Enhanced MockGitHubClient that tracks created content
 type EnhancedMockGitHubClient struct {
-	ExistingLabels  map[string]bool
-	CreatedLabels   []string
-	CreatedIssues   []githubapi.IssueInput
-	CreatedDiscs    []githubapi.DiscussionInput
-	CreatedPRs      []githubapi.PRInput
+	ExistingLabels map[string]bool
+	CreatedLabels  []string
+	CreatedIssues  []githubapi.IssueInput
+	CreatedDiscs   []githubapi.DiscussionInput
+	CreatedPRs     []githubapi.PRInput
 }
 
 func (m *EnhancedMockGitHubClient) ListLabels() ([]string, error) {
@@ -171,12 +171,12 @@ func TestEnhancedHydrateWithLabels(t *testing.T) {
 	for _, l := range client.CreatedLabels {
 		created[l] = true
 	}
-	
+
 	// Should not create "bug" again as it already exists
 	if created["bug"] {
 		t.Error("should not create 'bug' label that already exists")
 	}
-	
+
 	// Should have created all expected labels
 	for _, label := range expectedLabels {
 		if !created[label] {
@@ -231,20 +231,20 @@ func TestEnhancedHydrateWithLabels(t *testing.T) {
 		CreatedDiscs:   []githubapi.DiscussionInput{},
 		CreatedPRs:     []githubapi.PRInput{},
 	}
-	
+
 	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, false, false, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels with only issues failed: %v", err)
 	}
-	
+
 	if len(client.CreatedIssues) != 1 {
 		t.Errorf("expected 1 issue to be created, got %d", len(client.CreatedIssues))
 	}
-	
+
 	if len(client.CreatedDiscs) != 0 {
 		t.Errorf("expected 0 discussions to be created, got %d", len(client.CreatedDiscs))
 	}
-	
+
 	if len(client.CreatedPRs) != 0 {
 		t.Errorf("expected 0 PRs to be created, got %d", len(client.CreatedPRs))
 	}
