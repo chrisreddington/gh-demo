@@ -15,11 +15,60 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 	if err != nil {
 		return err
 	}
+	
+	// Collect and ensure all labels exist before creating content
 	labels := CollectLabels(issues, discussions, prs)
 	if err := EnsureLabelsExist(client, labels); err != nil {
 		return err
 	}
-	// (In a real implementation, would proceed to create issues/discussions/PRs here)
+	
+	// Create issues
+	if includeIssues {
+		for _, issue := range issues {
+			issueInput := githubapi.IssueInput{
+				Title:     issue.Title,
+				Body:      issue.Body,
+				Labels:    issue.Labels,
+				Assignees: issue.Assignees,
+			}
+			if err := client.CreateIssue(issueInput); err != nil {
+				return err
+			}
+		}
+	}
+	
+	// Create discussions
+	if includeDiscussions {
+		for _, discussion := range discussions {
+			discussionInput := githubapi.DiscussionInput{
+				Title:    discussion.Title,
+				Body:     discussion.Body,
+				Category: discussion.Category,
+				Labels:   discussion.Labels,
+			}
+			if err := client.CreateDiscussion(discussionInput); err != nil {
+				return err
+			}
+		}
+	}
+	
+	// Create pull requests
+	if includePRs {
+		for _, pr := range prs {
+			prInput := githubapi.PRInput{
+				Title:     pr.Title,
+				Body:      pr.Body,
+				Head:      pr.Head,
+				Base:      pr.Base,
+				Labels:    pr.Labels,
+				Assignees: pr.Assignees,
+			}
+			if err := client.CreatePR(prInput); err != nil {
+				return err
+			}
+		}
+	}
+	
 	return nil
 }
 
