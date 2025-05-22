@@ -94,6 +94,27 @@ func (c *RESTClient) Request(method string, path string, body interface{}, respo
 	}
 
 	if resp.StatusCode >= 400 {
+		// Try to read the error response body for more details
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		if readErr == nil && len(bodyBytes) > 0 {
+			// Try to parse as GitHub API error format
+			var apiError struct {
+				Message string `json:"message"`
+				Errors  []struct {
+					Field   string `json:"field"`
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"errors"`
+			}
+			if jsonErr := json.Unmarshal(bodyBytes, &apiError); jsonErr == nil && apiError.Message != "" {
+				if len(apiError.Errors) > 0 {
+					return fmt.Errorf("HTTP %d: %s - %s", resp.StatusCode, apiError.Message, apiError.Errors[0].Message)
+				}
+				return fmt.Errorf("HTTP %d: %s", resp.StatusCode, apiError.Message)
+			}
+			// If not parseable as JSON, return raw body
+			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+		}
 		return fmt.Errorf("API request failed with status %d", resp.StatusCode)
 	}
 
@@ -251,6 +272,17 @@ func (c *GHClient) CreatePR(pr PRInput) error {
 		return fmt.Errorf("REST client is not initialized")
 	}
 
+	// Basic validation
+	if pr.Head == "" {
+		return fmt.Errorf("PR head branch cannot be empty")
+	}
+	if pr.Base == "" {
+		return fmt.Errorf("PR base branch cannot be empty")
+	}
+	if pr.Head == pr.Base {
+		return fmt.Errorf("PR head and base branches cannot be the same (%s)", pr.Head)
+	}
+
 	path := fmt.Sprintf("repos/%s/%s/pulls", c.Owner, c.Repo)
 	payload := map[string]interface{}{
 		"title": pr.Title,
@@ -262,7 +294,7 @@ func (c *GHClient) CreatePR(pr PRInput) error {
 	var response map[string]interface{}
 	err := c.restClient.Request("POST", path, payload, &response)
 	if err != nil {
-		return fmt.Errorf("failed to create pull request: %w", err)
+		return fmt.Errorf("failed to create pull request '%s' (head: %s, base: %s): %w", pr.Title, pr.Head, pr.Base, err)
 	}
 
 	// If the PR was created successfully and has labels/assignees, add them
@@ -274,7 +306,7 @@ func (c *GHClient) CreatePR(pr PRInput) error {
 
 		issuePath := fmt.Sprintf("repos/%s/%s/issues/%d", c.Owner, c.Repo, int(prNumber))
 		if err := c.restClient.Request("PATCH", issuePath, issuePayload, nil); err != nil {
-			return fmt.Errorf("created PR but failed to add labels/assignees: %w", err)
+			return fmt.Errorf("created PR '%s' but failed to add labels/assignees: %w", pr.Title, err)
 		}
 	}
 

@@ -2,14 +2,17 @@ package hydrate
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 )
 
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
+// It continues processing even if individual items fail, collecting all errors and reporting them at the end.
 func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs bool) error {
 	issues, discussions, prs, err := HydrateFromFiles(issuesPath, discussionsPath, prsPath, includeIssues, includeDiscussions, includePRs)
 	if err != nil {
@@ -19,12 +22,14 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 	// Collect and ensure all labels exist before creating content
 	labels := CollectLabels(issues, discussions, prs)
 	if err := EnsureLabelsExist(client, labels); err != nil {
-		return err
+		return fmt.Errorf("failed to ensure labels exist: %w", err)
 	}
+	
+	var errors []string
 	
 	// Create issues
 	if includeIssues {
-		for _, issue := range issues {
+		for i, issue := range issues {
 			issueInput := githubapi.IssueInput{
 				Title:     issue.Title,
 				Body:      issue.Body,
@@ -32,14 +37,14 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				Assignees: issue.Assignees,
 			}
 			if err := client.CreateIssue(issueInput); err != nil {
-				return err
+				errors = append(errors, fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err))
 			}
 		}
 	}
 	
 	// Create discussions
 	if includeDiscussions {
-		for _, discussion := range discussions {
+		for i, discussion := range discussions {
 			discussionInput := githubapi.DiscussionInput{
 				Title:    discussion.Title,
 				Body:     discussion.Body,
@@ -47,14 +52,14 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				Labels:   discussion.Labels,
 			}
 			if err := client.CreateDiscussion(discussionInput); err != nil {
-				return err
+				errors = append(errors, fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err))
 			}
 		}
 	}
 	
 	// Create pull requests
 	if includePRs {
-		for _, pr := range prs {
+		for i, pr := range prs {
 			prInput := githubapi.PRInput{
 				Title:     pr.Title,
 				Body:      pr.Body,
@@ -64,9 +69,14 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				Assignees: pr.Assignees,
 			}
 			if err := client.CreatePR(prInput); err != nil {
-				return err
+				errors = append(errors, fmt.Sprintf("Pull Request %d (%s): %v", i+1, pr.Title, err))
 			}
 		}
+	}
+	
+	// If any errors occurred, return them as a combined error but don't fail completely
+	if len(errors) > 0 {
+		return fmt.Errorf("some items failed to create:\n  - %s", strings.Join(errors, "\n  - "))
 	}
 	
 	return nil

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 	"github.com/chrisreddington/gh-demo/internal/hydrate"
@@ -51,10 +52,18 @@ func NewHydrateCmd() *cobra.Command {
 			client := githubapi.NewGHClient(resolvedOwner, resolvedRepo)
 			err = hydrate.HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, issues, discussions, prs)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Hydration failed: %v\n", err)
-				os.Exit(1)
+				// Check if this is a partial failure (some items succeeded, some failed)
+				if strings.Contains(err.Error(), "some items failed to create:") {
+					fmt.Fprintf(os.Stderr, "Hydration completed with some failures:\n%v\n", err)
+					fmt.Println("Repository hydration completed with some failures. Check the errors above for details.")
+				} else {
+					// Complete failure
+					fmt.Fprintf(os.Stderr, "Hydration failed: %v\n", err)
+					os.Exit(1)
+				}
+			} else {
+				fmt.Println("Repository hydrated successfully!")
 			}
-			fmt.Println("Repository hydrated successfully!")
 		},
 	}
 

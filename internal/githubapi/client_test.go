@@ -350,3 +350,44 @@ func TestCreatePR(t *testing.T) {
 		t.Error("Expected error for invalid PR, got nil")
 	}
 }
+
+func TestCreatePRValidation(t *testing.T) {
+	client := &GHClient{
+		Owner:      "testowner",
+		Repo:       "testrepo",
+		restClient: &RESTClient{client: &MockRESTClient{}}, // Won't be called due to validation
+	}
+
+	// Test empty head
+	err := client.CreatePR(PRInput{
+		Title: "Test PR",
+		Body:  "Test body",
+		Head:  "",
+		Base:  "main",
+	})
+	if err == nil || !strings.Contains(err.Error(), "PR head branch cannot be empty") {
+		t.Errorf("Expected head validation error, got: %v", err)
+	}
+
+	// Test empty base
+	err = client.CreatePR(PRInput{
+		Title: "Test PR",
+		Body:  "Test body",
+		Head:  "feature",
+		Base:  "",
+	})
+	if err == nil || !strings.Contains(err.Error(), "PR base branch cannot be empty") {
+		t.Errorf("Expected base validation error, got: %v", err)
+	}
+
+	// Test same head and base
+	err = client.CreatePR(PRInput{
+		Title: "Test PR",
+		Body:  "Test body",
+		Head:  "main",
+		Base:  "main",
+	})
+	if err == nil || !strings.Contains(err.Error(), "PR head and base branches cannot be the same") {
+		t.Errorf("Expected same branch validation error, got: %v", err)
+	}
+}
