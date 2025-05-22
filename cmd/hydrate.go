@@ -16,6 +16,7 @@ import (
 func NewHydrateCmd() *cobra.Command {
 	var owner, repo string
 	var issues, discussions, prs bool
+	var debug bool
 
 	cmd := &cobra.Command{
 		Use:   "hydrate",
@@ -50,7 +51,7 @@ func NewHydrateCmd() *cobra.Command {
 			prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 			client := githubapi.NewGHClient(resolvedOwner, resolvedRepo)
-			err = hydrate.HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, issues, discussions, prs)
+			err = hydrate.HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, issues, discussions, prs, debug)
 			if err != nil {
 				// Check if this is a partial failure (some items succeeded, some failed)
 				if strings.Contains(err.Error(), "some items failed to create:") {
@@ -72,6 +73,7 @@ func NewHydrateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&issues, "issues", true, "Include issues")
 	cmd.Flags().BoolVar(&discussions, "discussions", true, "Include discussions")
 	cmd.Flags().BoolVar(&prs, "prs", true, "Include pull requests")
+	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug mode for detailed logging")
 
 	return cmd
 }

@@ -156,7 +156,7 @@ func TestEnhancedHydrateWithLabels(t *testing.T) {
 	}
 
 	// Test hydration with all content types
-	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true)
+	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels failed: %v", err)
 	}
@@ -228,7 +228,7 @@ func TestEnhancedHydrateWithLabels(t *testing.T) {
 		CreatedPRs:     []githubapi.PRInput{},
 	}
 	
-	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, false, false)
+	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, false, false, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels with only issues failed: %v", err)
 	}

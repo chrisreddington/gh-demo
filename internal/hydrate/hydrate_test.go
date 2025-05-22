@@ -25,7 +25,7 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 	// Should not error with stubbed methods
-	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true)
+	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels with real GHClient failed: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestHydrateWithLabels(t *testing.T) {
 	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 	// Hydrate and ensure labels
-	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true)
+	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels failed: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestGracefulErrorHandling(t *testing.T) {
 	}
 
 	// Test that the function continues processing despite PR failure
-	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, false, true)
+	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, false, true, false)
 	
 	// Should return error mentioning the PR failure, but should have succeeded with issues
 	if err == nil {
@@ -221,7 +221,7 @@ func TestPRValidation(t *testing.T) {
 	}
 
 	// Should fail gracefully with validation error
-	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, false, false, true)
+	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, false, false, true, false)
 	
 	if err == nil {
 		// The MockGitHubClient doesn't implement validation, so this test won't work as expected

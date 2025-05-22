@@ -11,9 +11,42 @@ import (
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 )
 
+// Logger handles debug and info logging
+type Logger struct {
+	debug bool
+}
+
+// NewLogger creates a new logger with the specified debug mode
+func NewLogger(debug bool) *Logger {
+	return &Logger{debug: debug}
+}
+
+// Debug logs a message only when debug mode is enabled
+func (l *Logger) Debug(format string, args ...interface{}) {
+	if l.debug {
+		fmt.Printf("[DEBUG] "+format+"\n", args...)
+	}
+}
+
+// Info logs a message always
+func (l *Logger) Info(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
+}
+
+// SectionSummary holds statistics for a section
+type SectionSummary struct {
+	Name     string
+	Total    int
+	Success  int
+	Failures int
+	Errors   []string
+}
+
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
-func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs bool) error {
+func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs, debug bool) error {
+	logger := NewLogger(debug)
+	
 	issues, discussions, prs, err := HydrateFromFiles(issuesPath, discussionsPath, prsPath, includeIssues, includeDiscussions, includePRs)
 	if err != nil {
 		return err
@@ -21,14 +54,24 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 	
 	// Collect and ensure all labels exist before creating content
 	labels := CollectLabels(issues, discussions, prs)
-	if err := EnsureLabelsExist(client, labels); err != nil {
+	labelSummary := &SectionSummary{Name: "Labels", Total: len(labels)}
+	
+	logger.Debug("Found %d unique labels to ensure exist: %v", len(labels), labels)
+	
+	if err := EnsureLabelsExist(client, labels, logger, labelSummary); err != nil {
 		return fmt.Errorf("failed to ensure labels exist: %w", err)
 	}
 	
-	var errors []string
+	// Report label summary
+	logger.Info("Labels: %d total, %d successful, %d failed", labelSummary.Total, labelSummary.Success, labelSummary.Failures)
+	
+	var allErrors []string
 	
 	// Create issues
 	if includeIssues {
+		issueSummary := &SectionSummary{Name: "Issues", Total: len(issues)}
+		logger.Debug("Creating %d issues", len(issues))
+		
 		for i, issue := range issues {
 			issueInput := githubapi.IssueInput{
 				Title:     issue.Title,
@@ -37,13 +80,25 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				Assignees: issue.Assignees,
 			}
 			if err := client.CreateIssue(issueInput); err != nil {
-				errors = append(errors, fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err))
+				errorMsg := fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err)
+				allErrors = append(allErrors, errorMsg)
+				issueSummary.Errors = append(issueSummary.Errors, errorMsg)
+				issueSummary.Failures++
+				logger.Debug("Failed to create issue '%s': %v", issue.Title, err)
+			} else {
+				issueSummary.Success++
+				logger.Debug("Successfully created issue '%s'", issue.Title)
 			}
 		}
+		
+		logger.Info("Issues: %d total, %d successful, %d failed", issueSummary.Total, issueSummary.Success, issueSummary.Failures)
 	}
 	
 	// Create discussions
 	if includeDiscussions {
+		discussionSummary := &SectionSummary{Name: "Discussions", Total: len(discussions)}
+		logger.Debug("Creating %d discussions", len(discussions))
+		
 		for i, discussion := range discussions {
 			discussionInput := githubapi.DiscussionInput{
 				Title:    discussion.Title,
@@ -52,13 +107,25 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				Labels:   discussion.Labels,
 			}
 			if err := client.CreateDiscussion(discussionInput); err != nil {
-				errors = append(errors, fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err))
+				errorMsg := fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err)
+				allErrors = append(allErrors, errorMsg)
+				discussionSummary.Errors = append(discussionSummary.Errors, errorMsg)
+				discussionSummary.Failures++
+				logger.Debug("Failed to create discussion '%s': %v", discussion.Title, err)
+			} else {
+				discussionSummary.Success++
+				logger.Debug("Successfully created discussion '%s'", discussion.Title)
 			}
 		}
+		
+		logger.Info("Discussions: %d total, %d successful, %d failed", discussionSummary.Total, discussionSummary.Success, discussionSummary.Failures)
 	}
 	
 	// Create pull requests
 	if includePRs {
+		prSummary := &SectionSummary{Name: "Pull Requests", Total: len(prs)}
+		logger.Debug("Creating %d pull requests", len(prs))
+		
 		for i, pr := range prs {
 			prInput := githubapi.PRInput{
 				Title:     pr.Title,
@@ -69,14 +136,23 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				Assignees: pr.Assignees,
 			}
 			if err := client.CreatePR(prInput); err != nil {
-				errors = append(errors, fmt.Sprintf("Pull Request %d (%s): %v", i+1, pr.Title, err))
+				errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pr.Title, err)
+				allErrors = append(allErrors, errorMsg)
+				prSummary.Errors = append(prSummary.Errors, errorMsg)
+				prSummary.Failures++
+				logger.Debug("Failed to create pull request '%s': %v", pr.Title, err)
+			} else {
+				prSummary.Success++
+				logger.Debug("Successfully created pull request '%s'", pr.Title)
 			}
 		}
+		
+		logger.Info("Pull Requests: %d total, %d successful, %d failed", prSummary.Total, prSummary.Success, prSummary.Failures)
 	}
 	
 	// If any errors occurred, return them as a combined error but don't fail completely
-	if len(errors) > 0 {
-		return fmt.Errorf("some items failed to create:\n  - %s", strings.Join(errors, "\n  - "))
+	if len(allErrors) > 0 {
+		return fmt.Errorf("some items failed to create:\n  - %s", strings.Join(allErrors, "\n  - "))
 	}
 	
 	return nil
@@ -106,22 +182,42 @@ type PullRequest struct {
 }
 
 // EnsureLabelsExist checks if each label exists in the repo, and creates it if not.
-func EnsureLabelsExist(client githubapi.GitHubClient, labels []string) error {
+func EnsureLabelsExist(client githubapi.GitHubClient, labels []string, logger *Logger, summary *SectionSummary) error {
+	if len(labels) == 0 {
+		return nil
+	}
+	
+	logger.Debug("Fetching existing labels from repository")
 	existing, err := client.ListLabels()
 	if err != nil {
 		return err
 	}
+	
 	existSet := make(map[string]struct{}, len(existing))
 	for _, l := range existing {
 		existSet[l] = struct{}{}
 	}
+	
+	logger.Debug("Found %d existing labels in repository", len(existing))
+	
 	for _, l := range labels {
 		if _, ok := existSet[l]; !ok {
+			logger.Debug("Creating missing label '%s'", l)
 			if err := client.CreateLabel(l); err != nil {
-				return err
+				errorMsg := fmt.Sprintf("Label '%s': %v", l, err)
+				summary.Errors = append(summary.Errors, errorMsg)
+				summary.Failures++
+				logger.Debug("Failed to create label '%s': %v", l, err)
+			} else {
+				summary.Success++
+				logger.Debug("Successfully created label '%s'", l)
 			}
+		} else {
+			summary.Success++
+			logger.Debug("Label '%s' already exists", l)
 		}
 	}
+	
 	return nil
 }
 
