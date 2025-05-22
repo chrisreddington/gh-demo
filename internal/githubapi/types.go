@@ -1,5 +1,10 @@
 package githubapi
 
+type LabelInput struct {
+	Name  string
+	Color string
+}
+
 type IssueInput struct {
 	Title     string
 	Body      string

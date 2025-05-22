@@ -1,6 +1,7 @@
 package githubapi
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -168,50 +169,76 @@ func TestListLabels(t *testing.T) {
 func TestCreateDiscussion(t *testing.T) {
 	mockGQLClient := &MockGQLClient{
 		QueryFunc: func(name string, query interface{}, variables map[string]interface{}) error {
-			// Type assertion to get the query struct
-			q, ok := query.(*struct {
-				Repository struct {
-					ID         string
-					Categories struct {
-						Nodes []struct {
-							ID   string
-							Name string
-						}
-					} `graphql:"discussionCategories(first: 50)"`
-				} `graphql:"repository(owner: $owner, name: $name)"`
-			})
-			if !ok {
-				t.Fatalf("query type assertion failed")
-			}
+			// Handle different query types based on the name parameter
+			switch name {
+			case "RepositoryInfo":
+				// Type assertion for repository info query
+				q, ok := query.(*struct {
+					Repository struct {
+						ID         string
+						Categories struct {
+							Nodes []struct {
+								ID   string
+								Name string
+							}
+						} `graphql:"discussionCategories(first: 50)"`
+					} `graphql:"repository(owner: $owner, name: $name)"`
+				})
+				if !ok {
+					t.Fatalf("repository info query type assertion failed")
+				}
 
-			// Populate the query with test data
-			q.Repository.ID = "R_1234"
-			q.Repository.Categories.Nodes = []struct {
-				ID   string
-				Name string
-			}{
-				{ID: "C_1", Name: "General"},
-				{ID: "C_2", Name: "Ideas"},
-				{ID: "C_3", Name: "Q&A"},
+				// Populate the query with test data
+				q.Repository.ID = "R_1234"
+				q.Repository.Categories.Nodes = []struct {
+					ID   string
+					Name string
+				}{
+					{ID: "C_1", Name: "General"},
+					{ID: "C_2", Name: "Ideas"},
+					{ID: "C_3", Name: "Q&A"},
+				}
+			case "GetLabelID":
+				// Type assertion for label ID query
+				q, ok := query.(*struct {
+					Repository struct {
+						Label struct {
+							ID string
+						} `graphql:"label(name: $name)"`
+					} `graphql:"repository(owner: $owner, name: $repo)"`
+				})
+				if !ok {
+					// If we can't cast, just skip - this means the discussion doesn't have labels
+					return nil
+				}
+				
+				// Mock label ID
+				q.Repository.Label.ID = "L_123"
 			}
 
 			return nil
 		},
 		MutateFunc: func(name string, mutation interface{}, variables map[string]interface{}) error {
-			// Type assertion to get the mutation struct
-			m, ok := mutation.(*struct {
-				CreateDiscussion struct {
-					Discussion struct {
-						ID string
-					}
-				} `graphql:"createDiscussion(input: $input)"`
-			})
-			if !ok {
-				t.Fatalf("mutation type assertion failed")
-			}
+			switch name {
+			case "CreateDiscussion":
+				// Type assertion to get the mutation struct
+				m, ok := mutation.(*struct {
+					CreateDiscussion struct {
+						Discussion struct {
+							ID string
+						}
+					} `graphql:"createDiscussion(input: $input)"`
+				})
+				if !ok {
+					t.Fatalf("create discussion mutation type assertion failed")
+				}
 
-			// Populate the mutation response
-			m.CreateDiscussion.Discussion.ID = "D_1234"
+				// Populate the mutation response
+				m.CreateDiscussion.Discussion.ID = "D_1234"
+			case "AddLabelToDiscussion":
+				// Just return success for label addition
+				return nil
+			}
 
 			return nil
 		},
@@ -389,5 +416,176 @@ func TestCreatePRValidation(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "PR head and base branches cannot be the same") {
 		t.Errorf("Expected same branch validation error, got: %v", err)
+	}
+}
+
+// Test SetLogger function
+func TestSetLogger(t *testing.T) {
+	client := NewGHClient("testowner", "testrepo")
+	
+	logger := &TestLogger{}
+	client.SetLogger(logger)
+	
+	if client.logger != logger {
+		t.Error("Expected logger to be set")
+	}
+}
+
+// TestLogger for testing
+type TestLogger struct {
+	debugCalled bool
+	infoCalled  bool
+	lastMessage string
+}
+
+func (l *TestLogger) Debug(format string, args ...interface{}) {
+	l.debugCalled = true
+	l.lastMessage = format
+}
+
+func (l *TestLogger) Info(format string, args ...interface{}) {
+	l.infoCalled = true
+	l.lastMessage = format
+}
+
+// Test debugLog function
+func TestDebugLog(t *testing.T) {
+	client := NewGHClient("testowner", "testrepo")
+	
+	// Test with no logger
+	client.debugLog("test message")
+	
+	// Test with logger
+	logger := &TestLogger{}
+	client.SetLogger(logger)
+	client.debugLog("test message with args: %s", "value")
+	
+	if !logger.debugCalled {
+		t.Error("Expected debug to be called")
+	}
+	
+	if logger.lastMessage != "test message with args: %s" {
+		t.Errorf("Expected message 'test message with args: %%s', got %s", logger.lastMessage)
+	}
+}
+
+// Test error cases for existing functions
+func TestListLabelsError(t *testing.T) {
+	// Test with no GraphQL client
+	client := &GHClient{
+		Owner: "testowner",
+		Repo:  "testrepo",
+	}
+	
+	_, err := client.ListLabels()
+	if err == nil || !strings.Contains(err.Error(), "GraphQL client is not initialized") {
+		t.Errorf("Expected GraphQL client error, got: %v", err)
+	}
+	
+	// Test with GraphQL error
+	mockGQLClient := &MockGQLClient{
+		QueryFunc: func(name string, query interface{}, variables map[string]interface{}) error {
+			return fmt.Errorf("GraphQL error")
+		},
+	}
+	
+	client = &GHClient{
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: &GQLClient{client: mockGQLClient},
+	}
+	
+	_, err = client.ListLabels()
+	if err == nil || !strings.Contains(err.Error(), "GraphQL error") {
+		t.Errorf("Expected GraphQL error, got: %v", err)
+	}
+}
+
+func TestCreateLabelError(t *testing.T) {
+	// Test with no REST client
+	client := &GHClient{
+		Owner: "testowner",
+		Repo:  "testrepo",
+	}
+	
+	err := client.CreateLabel("test")
+	if err == nil || !strings.Contains(err.Error(), "REST client is not initialized") {
+		t.Errorf("Expected REST client error, got: %v", err)
+	}
+}
+
+func TestCreateIssueError(t *testing.T) {
+	// Test with no REST client
+	client := &GHClient{
+		Owner: "testowner",
+		Repo:  "testrepo",
+	}
+	
+	err := client.CreateIssue(IssueInput{Title: "test", Body: "test body"})
+	if err == nil || !strings.Contains(err.Error(), "REST client is not initialized") {
+		t.Errorf("Expected REST client error, got: %v", err)
+	}
+}
+
+func TestCreateDiscussionError(t *testing.T) {
+	// Test with no GraphQL client
+	client := &GHClient{
+		Owner: "testowner",
+		Repo:  "testrepo",
+	}
+	
+	err := client.CreateDiscussion(DiscussionInput{Title: "test", Body: "test body", Category: "General"})
+	if err == nil || !strings.Contains(err.Error(), "GraphQL client is not initialized") {
+		t.Errorf("Expected GraphQL client error, got: %v", err)
+	}
+	
+	// Test category not found
+	mockGQLClient := &MockGQLClient{
+		QueryFunc: func(name string, query interface{}, variables map[string]interface{}) error {
+			// Return empty categories
+			q, ok := query.(*struct {
+				Repository struct {
+					ID         string
+					Categories struct {
+						Nodes []struct {
+							ID   string
+							Name string
+						}
+					} `graphql:"discussionCategories(first: 50)"`
+				} `graphql:"repository(owner: $owner, name: $name)"`
+			})
+			if ok {
+				q.Repository.ID = "R_123"
+				q.Repository.Categories.Nodes = []struct {
+					ID   string
+					Name string
+				}{} // Empty categories
+			}
+			return nil
+		},
+	}
+	
+	client = &GHClient{
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: &GQLClient{client: mockGQLClient},
+	}
+	
+	err = client.CreateDiscussion(DiscussionInput{Title: "test", Body: "test body", Category: "NonExistent"})
+	if err == nil || !strings.Contains(err.Error(), "discussion category 'NonExistent' not found") {
+		t.Errorf("Expected category not found error, got: %v", err)
+	}
+}
+
+func TestCreatePRError(t *testing.T) {
+	// Test with no REST client
+	client := &GHClient{
+		Owner: "testowner",
+		Repo:  "testrepo",
+	}
+	
+	err := client.CreatePR(PRInput{Title: "test", Body: "test body", Head: "feature", Base: "main"})
+	if err == nil || !strings.Contains(err.Error(), "REST client is not initialized") {
+		t.Errorf("Expected REST client error, got: %v", err)
 	}
 }

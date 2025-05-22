@@ -300,8 +300,57 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 
 	// Add labels if specified
 	if len(disc.Labels) > 0 && mutation.CreateDiscussion.Discussion.ID != "" {
-		// Note: Adding labels to discussions might require additional API calls
-		// This would be implemented in a full solution
+		// Add labels to the discussion using the discussion ID
+		for _, label := range disc.Labels {
+			var labelMutation struct {
+				AddLabelsToLabelable struct {
+					Labelable struct {
+						ID string
+					}
+				} `graphql:"addLabelsToLabelable(input: $input)"`
+			}
+			
+			// First, we need to find the label ID for the label name
+			var labelQuery struct {
+				Repository struct {
+					Label struct {
+						ID string
+					} `graphql:"label(name: $name)"`
+				} `graphql:"repository(owner: $owner, name: $repo)"`
+			}
+			
+			labelVariables := map[string]interface{}{
+				"owner": graphql.String(c.Owner),
+				"repo":  graphql.String(c.Repo),
+				"name":  graphql.String(label),
+			}
+			
+			err = c.gqlClient.Query("GetLabelID", &labelQuery, labelVariables)
+			if err != nil {
+				c.debugLog("Failed to find label '%s' for discussion: %v", label, err)
+				continue // Skip this label if not found
+			}
+			
+			if labelQuery.Repository.Label.ID == "" {
+				c.debugLog("Label '%s' not found in repository", label)
+				continue
+			}
+			
+			labelMutationVariables := map[string]interface{}{
+				"input": map[string]interface{}{
+					"labelableId": mutation.CreateDiscussion.Discussion.ID,
+					"labelIds":    []string{labelQuery.Repository.Label.ID},
+				},
+			}
+			
+			err = c.gqlClient.Mutate("AddLabelToDiscussion", &labelMutation, labelMutationVariables)
+			if err != nil {
+				c.debugLog("Failed to add label '%s' to discussion: %v", label, err)
+				// Continue with other labels even if one fails
+			} else {
+				c.debugLog("Successfully added label '%s' to discussion", label)
+			}
+		}
 	}
 
 	c.debugLog("Successfully created discussion '%s'", disc.Title)
