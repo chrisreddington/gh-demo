@@ -46,6 +46,10 @@ func (m *EnhancedMockGitHubClient) CreatePR(pr githubapi.PRInput) error {
 	return nil
 }
 
+func (m *EnhancedMockGitHubClient) SetLogger(logger githubapi.Logger) {
+	// Mock implementation - does nothing
+}
+
 func TestHydrateFromFileErrors(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "hydrate-error-test")
 	if err != nil {

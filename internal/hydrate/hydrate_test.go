@@ -70,6 +70,10 @@ func (m *MockGitHubClient) CreateLabel(label string) error {
 	return nil
 }
 
+func (m *MockGitHubClient) SetLogger(logger githubapi.Logger) {
+	// Mock implementation - does nothing
+}
+
 func TestHydrateWithLabels(t *testing.T) {
 	// Setup mock client with only "bug" and "demo" existing
 	client := &MockGitHubClient{ExistingLabels: map[string]bool{"bug": true, "demo": true}}

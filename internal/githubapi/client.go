@@ -18,6 +18,7 @@ type GHClient struct {
 	Repo       string
 	gqlClient  *GQLClient
 	restClient *RESTClient
+	logger     Logger
 }
 
 // GQLClient wraps the GraphQL client for testability
@@ -59,6 +60,19 @@ func NewGHClient(owner, repo string) *GHClient {
 		Repo:       repo,
 		gqlClient:  gqlClient,
 		restClient: restClient,
+		logger:     nil, // Will be set when SetLogger is called
+	}
+}
+
+// SetLogger sets the logger for debug output
+func (c *GHClient) SetLogger(logger Logger) {
+	c.logger = logger
+}
+
+// debugLog logs a debug message if logger is available
+func (c *GHClient) debugLog(format string, args ...interface{}) {
+	if c.logger != nil {
+		c.logger.Debug(format, args...)
 	}
 }
 
@@ -127,6 +141,8 @@ func (c *GHClient) ListLabels() ([]string, error) {
 		return nil, fmt.Errorf("GraphQL client is not initialized")
 	}
 
+	c.debugLog("Fetching labels from repository %s/%s", c.Owner, c.Repo)
+
 	var query struct {
 		Repository struct {
 			Labels struct {
@@ -148,6 +164,7 @@ func (c *GHClient) ListLabels() ([]string, error) {
 
 	err := c.gqlClient.Query("RepositoryLabels", &query, variables)
 	if err != nil {
+		c.debugLog("Failed to fetch labels: %v", err)
 		return nil, fmt.Errorf("failed to fetch labels: %w", err)
 	}
 
@@ -156,6 +173,7 @@ func (c *GHClient) ListLabels() ([]string, error) {
 		labels = append(labels, label.Name)
 	}
 
+	c.debugLog("Successfully fetched %d labels", len(labels))
 	return labels, nil
 }
 
@@ -163,6 +181,8 @@ func (c *GHClient) CreateLabel(label string) error {
 	if c.restClient == nil {
 		return fmt.Errorf("REST client is not initialized")
 	}
+
+	c.debugLog("Creating label '%s' in repository %s/%s", label, c.Owner, c.Repo)
 
 	// Using the REST API for label creation as it's simpler than GraphQL for this case
 	path := fmt.Sprintf("repos/%s/%s/labels", c.Owner, c.Repo)
@@ -172,7 +192,14 @@ func (c *GHClient) CreateLabel(label string) error {
 		"color":       "ededed", // Light gray color as default
 	}
 
-	return c.restClient.Request("POST", path, payload, nil)
+	err := c.restClient.Request("POST", path, payload, nil)
+	if err != nil {
+		c.debugLog("Failed to create label '%s': %v", label, err)
+		return err
+	}
+
+	c.debugLog("Successfully created label '%s'", label)
+	return nil
 }
 
 // Issue operations
@@ -180,6 +207,8 @@ func (c *GHClient) CreateIssue(issue IssueInput) error {
 	if c.restClient == nil {
 		return fmt.Errorf("REST client is not initialized")
 	}
+
+	c.debugLog("Creating issue '%s' in repository %s/%s", issue.Title, c.Owner, c.Repo)
 
 	path := fmt.Sprintf("repos/%s/%s/issues", c.Owner, c.Repo)
 	payload := map[string]interface{}{
@@ -189,7 +218,14 @@ func (c *GHClient) CreateIssue(issue IssueInput) error {
 		"assignees": issue.Assignees,
 	}
 
-	return c.restClient.Request("POST", path, payload, nil)
+	err := c.restClient.Request("POST", path, payload, nil)
+	if err != nil {
+		c.debugLog("Failed to create issue '%s': %v", issue.Title, err)
+		return err
+	}
+
+	c.debugLog("Successfully created issue '%s'", issue.Title)
+	return nil
 }
 
 // Discussion operations
@@ -197,6 +233,8 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 	if c.gqlClient == nil {
 		return fmt.Errorf("GraphQL client is not initialized")
 	}
+
+	c.debugLog("Creating discussion '%s' in repository %s/%s", disc.Title, c.Owner, c.Repo)
 
 	// First, get the repository ID and category ID
 	var repoQuery struct {
@@ -218,6 +256,7 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 
 	err := c.gqlClient.Query("RepositoryInfo", &repoQuery, repoVariables)
 	if err != nil {
+		c.debugLog("Failed to fetch repository info for discussion: %v", err)
 		return fmt.Errorf("failed to fetch repository info: %w", err)
 	}
 
@@ -231,6 +270,7 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 	}
 
 	if categoryID == "" {
+		c.debugLog("Discussion category '%s' not found", disc.Category)
 		return fmt.Errorf("discussion category '%s' not found", disc.Category)
 	}
 
@@ -254,6 +294,7 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 
 	err = c.gqlClient.Mutate("CreateDiscussion", &mutation, mutationVariables)
 	if err != nil {
+		c.debugLog("Failed to create discussion '%s': %v", disc.Title, err)
 		return fmt.Errorf("failed to create discussion: %w", err)
 	}
 
@@ -263,6 +304,7 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 		// This would be implemented in a full solution
 	}
 
+	c.debugLog("Successfully created discussion '%s'", disc.Title)
 	return nil
 }
 
@@ -272,14 +314,19 @@ func (c *GHClient) CreatePR(pr PRInput) error {
 		return fmt.Errorf("REST client is not initialized")
 	}
 
+	c.debugLog("Creating pull request '%s' in repository %s/%s (head: %s, base: %s)", pr.Title, c.Owner, c.Repo, pr.Head, pr.Base)
+
 	// Basic validation
 	if pr.Head == "" {
+		c.debugLog("PR head branch is empty")
 		return fmt.Errorf("PR head branch cannot be empty")
 	}
 	if pr.Base == "" {
+		c.debugLog("PR base branch is empty")
 		return fmt.Errorf("PR base branch cannot be empty")
 	}
 	if pr.Head == pr.Base {
+		c.debugLog("PR head and base branches are the same: %s", pr.Head)
 		return fmt.Errorf("PR head and base branches cannot be the same (%s)", pr.Head)
 	}
 
@@ -294,11 +341,13 @@ func (c *GHClient) CreatePR(pr PRInput) error {
 	var response map[string]interface{}
 	err := c.restClient.Request("POST", path, payload, &response)
 	if err != nil {
+		c.debugLog("Failed to create pull request '%s': %v", pr.Title, err)
 		return fmt.Errorf("failed to create pull request '%s' (head: %s, base: %s): %w", pr.Title, pr.Head, pr.Base, err)
 	}
 
 	// If the PR was created successfully and has labels/assignees, add them
 	if prNumber, ok := response["number"].(float64); ok && (len(pr.Labels) > 0 || len(pr.Assignees) > 0) {
+		c.debugLog("Adding labels/assignees to PR '%s'", pr.Title)
 		issuePayload := map[string]interface{}{
 			"labels":    pr.Labels,
 			"assignees": pr.Assignees,
@@ -306,9 +355,11 @@ func (c *GHClient) CreatePR(pr PRInput) error {
 
 		issuePath := fmt.Sprintf("repos/%s/%s/issues/%d", c.Owner, c.Repo, int(prNumber))
 		if err := c.restClient.Request("PATCH", issuePath, issuePayload, nil); err != nil {
+			c.debugLog("Failed to add labels/assignees to PR '%s': %v", pr.Title, err)
 			return fmt.Errorf("created PR '%s' but failed to add labels/assignees: %w", pr.Title, err)
 		}
 	}
 
+	c.debugLog("Successfully created pull request '%s'", pr.Title)
 	return nil
 }

@@ -12,6 +12,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// DebugLogger implements the Logger interface for debug output
+type DebugLogger struct{}
+
+func (l *DebugLogger) Debug(format string, args ...interface{}) {
+	fmt.Printf("[DEBUG] "+format+"\n", args...)
+}
+
+func (l *DebugLogger) Info(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
+}
+
 // NewHydrateCmd returns the Cobra command for repository hydration
 func NewHydrateCmd() *cobra.Command {
 	var owner, repo string
@@ -51,6 +62,10 @@ func NewHydrateCmd() *cobra.Command {
 			prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 			client := githubapi.NewGHClient(resolvedOwner, resolvedRepo)
+			// Set logger for debug mode
+			if debug {
+				client.SetLogger(&DebugLogger{})
+			}
 			err = hydrate.HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, issues, discussions, prs, debug)
 			if err != nil {
 				// Check if this is a partial failure (some items succeeded, some failed)
