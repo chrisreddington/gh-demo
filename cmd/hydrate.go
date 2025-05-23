@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 	"github.com/chrisreddington/gh-demo/internal/hydrate"
@@ -11,10 +12,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// DebugLogger implements the Logger interface for debug output
+type DebugLogger struct{}
+
+func (l *DebugLogger) Debug(format string, args ...interface{}) {
+	fmt.Printf("[DEBUG] "+format+"\n", args...)
+}
+
+func (l *DebugLogger) Info(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
+}
+
 // NewHydrateCmd returns the Cobra command for repository hydration
 func NewHydrateCmd() *cobra.Command {
 	var owner, repo string
 	var issues, discussions, prs bool
+	var debug bool
 
 	cmd := &cobra.Command{
 		Use:   "hydrate",
@@ -49,12 +62,24 @@ func NewHydrateCmd() *cobra.Command {
 			prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 			client := githubapi.NewGHClient(resolvedOwner, resolvedRepo)
-			err = hydrate.HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, issues, discussions, prs)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Hydration failed: %v\n", err)
-				os.Exit(1)
+			// Set logger for debug mode
+			if debug {
+				client.SetLogger(&DebugLogger{})
 			}
-			fmt.Println("Repository hydrated successfully!")
+			err = hydrate.HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, issues, discussions, prs, debug)
+			if err != nil {
+				// Check if this is a partial failure (some items succeeded, some failed)
+				if strings.Contains(err.Error(), "some items failed to create:") {
+					fmt.Fprintf(os.Stderr, "Hydration completed with some failures:\n%v\n", err)
+					fmt.Println("Repository hydration completed with some failures. Check the errors above for details.")
+				} else {
+					// Complete failure
+					fmt.Fprintf(os.Stderr, "Hydration failed: %v\n", err)
+					os.Exit(1)
+				}
+			} else {
+				fmt.Println("Repository hydrated successfully!")
+			}
 		},
 	}
 
@@ -63,6 +88,7 @@ func NewHydrateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&issues, "issues", true, "Include issues")
 	cmd.Flags().BoolVar(&discussions, "discussions", true, "Include discussions")
 	cmd.Flags().BoolVar(&prs, "prs", true, "Include pull requests")
+	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug mode for detailed logging")
 
 	return cmd
 }

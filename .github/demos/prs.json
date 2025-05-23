@@ -5,6 +5,6 @@
     "head": "demo-branch",
     "base": "main",
     "labels": ["enhancement", "demo"],
-    "assignees": ["octocat"]
+    "assignees": ["chrisreddington"]
   }
 ]
