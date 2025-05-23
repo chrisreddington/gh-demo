@@ -419,7 +419,7 @@ func TestFindProjectRoot_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current working directory: %v", err)
 	}
-	defer func() { 
+	defer func() {
 		if chErr := os.Chdir(originalWd); chErr != nil {
 			t.Errorf("Failed to restore original working directory: %v", chErr)
 		}

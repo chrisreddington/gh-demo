@@ -14,10 +14,10 @@ func TestExecute(t *testing.T) {
 	// Save original args and restore afterwards
 	originalArgs := os.Args
 	defer func() { os.Args = originalArgs }()
-	
+
 	// Set args to show help (which should not return an error)
 	os.Args = []string{"gh-demo", "--help"}
-	
+
 	err := Execute()
 	// Help command should not return an error
 	if err != nil {
@@ -30,10 +30,10 @@ func TestExecuteWithError(t *testing.T) {
 	// Save original args and restore afterwards
 	originalArgs := os.Args
 	defer func() { os.Args = originalArgs }()
-	
+
 	// Set invalid args that should cause an error
 	os.Args = []string{"gh-demo", "invalid-command"}
-	
+
 	err := Execute()
 	// Invalid command should return an error
 	if err == nil {
