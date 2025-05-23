@@ -1,0 +1,24 @@
+mode: set
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:18.65,20.2 1 1
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:22.64,24.2 1 1
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:27.37,35.48 4 1
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:35.48,38.49 3 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:38.49,41.19 2 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:41.19,42.29 1 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:42.29,44.7 1 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:45.6,45.28 1 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:45.28,47.7 1 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:50.4,50.49 1 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:50.49,53.5 2 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:55.4,56.18 2 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:56.18,59.5 2 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:60.4,66.13 5 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:66.13,68.5 1 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:69.4,70.18 2 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:70.18,72.70 1 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:72.70,75.6 2 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:75.11,79.6 2 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:80.10,82.5 1 0
+github.com/chrisreddington/gh-demo/cmd/hydrate.go:86.2,93.12 7 1
+github.com/chrisreddington/gh-demo/cmd/root.go:12.22,14.2 1 1
+github.com/chrisreddington/gh-demo/cmd/root.go:16.13,18.2 1 1

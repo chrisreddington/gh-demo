@@ -1,9 +1,21 @@
 package main
 
-import "github.com/chrisreddington/gh-demo/cmd"
+import (
+	"fmt"
+	"os"
+
+	"github.com/chrisreddington/gh-demo/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	return cmd.Execute()
 }
 
 // For more examples of using go-gh, see:

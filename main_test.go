@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/chrisreddington/gh-demo/cmd"
@@ -36,37 +39,139 @@ func TestMainImports(t *testing.T) {
 	}
 }
 
-// TestMainFunctionExists verifies that main function exists
-// We can't test main() directly without it trying to execute the CLI
-func TestMainFunctionExists(t *testing.T) {
-	// The existence of this test file and successful compilation
-	// verifies that main() function exists and imports work correctly
+// TestRunFunction tests the run() function
+func TestRunFunction(t *testing.T) {
+	// Test that run() function can be called and returns an error
+	// when Execute() would fail (no arguments provided)
+	
+	// Save original args and restore afterwards
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	
+	// Set args to show help (which should not return an error)
+	os.Args = []string{"gh-demo", "--help"}
+	
+	err := run()
+	// Help command should not return an error
+	if err != nil {
+		t.Errorf("run() with --help should not return error, got: %v", err)
+	}
+}
 
-	// Test passes if compilation succeeded
+// TestRunFunctionWithInvalidArgs tests run() with invalid arguments
+func TestRunFunctionWithInvalidArgs(t *testing.T) {
+	// Save original args and restore afterwards
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	
+	// Set invalid args that should cause an error
+	os.Args = []string{"gh-demo", "invalid-command"}
+	
+	err := run()
+	// Invalid command should return an error
+	if err == nil {
+		t.Error("run() with invalid command should return an error")
+	}
+}
+
+// TestMainFunctionExists verifies that main function exists
+func TestMainFunctionExists(t *testing.T) {
+	// Test that main function exists by verifying we can build the program
 	if testing.Short() {
 		t.Skip("Skipping in short mode")
+	}
+	
+	// The existence of this test and successful compilation verifies main() exists
+	// This is a structural test to ensure the main function is present
+}
+
+// TestMainFunctionIntegration tests main() indirectly through subprocess
+func TestMainFunctionIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+	
+	// Test main() function by running the program as a subprocess with --help
+	cmd := exec.Command("go", "run", "main.go", "--help")
+	cmd.Dir = "/home/runner/work/gh-demo/gh-demo"
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Errorf("main() execution with --help failed: %v\nOutput: %s", err, output)
+		return
+	}
+	
+	// Verify the help output contains expected content
+	outputStr := string(output)
+	if !strings.Contains(outputStr, "GitHub Demo CLI Extension") {
+		t.Error("main() should show GitHub Demo CLI Extension in help output")
+	}
+}
+
+// TestMainFunctionWithError tests main() error handling through subprocess
+func TestMainFunctionWithErrorSubprocess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+	
+	// Test main() function by running the program as a subprocess with invalid command
+	cmd := exec.Command("go", "run", "main.go", "invalid-command")
+	cmd.Dir = "/home/runner/work/gh-demo/gh-demo"
+	
+	output, err := cmd.CombinedOutput()
+	// This should fail (exit code 1) due to invalid command
+	if err == nil {
+		t.Error("main() with invalid command should exit with error")
+		return
+	}
+	
+	// Verify we get the expected error output
+	outputStr := string(output)
+	if !strings.Contains(outputStr, "Error:") || !strings.Contains(outputStr, "unknown command") {
+		t.Errorf("main() should show error for invalid input, got: %s", outputStr)
+	}
+}
+
+// TestMainFunctionErrorPath tests main() error handling by mocking
+func TestMainFunctionErrorPath(t *testing.T) {
+	// We can't easily test main() directly due to os.Exit(), but we can test
+	// the error path by testing the run() function that main() calls
+	
+	// Save original args and restore afterwards
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	
+	// Test with an invalid subcommand to trigger error in run()
+	os.Args = []string{"gh-demo", "nonexistent-command"}
+	
+	err := run()
+	if err == nil {
+		t.Error("run() should return error for invalid command")
+	}
+	
+	// Verify error message
+	if !strings.Contains(err.Error(), "unknown command") {
+		t.Errorf("Expected 'unknown command' error, got: %v", err)
 	}
 }
 
 // TestCmdExecuteAccessible tests that cmd.Execute is accessible from main
 func TestCmdExecuteAccessible(t *testing.T) {
-	// We can't actually call cmd.Execute() as it would run the CLI,
-	// but we can verify that it's accessible (which exercises the import path)
-
-	// This test verifies that the main.go import structure is correct
-	// If cmd.Execute wasn't accessible, main.go wouldn't compile
-
-	// Create a new command to verify we can access the cmd package functionality
-	// that main() would use
-	hydrateCmd := cmd.NewHydrateCmd()
-
-	if hydrateCmd == nil {
-		t.Error("Should be able to access cmd package functionality")
-		return
-	}
-
-	// Verify we can access the command that main() would execute through cmd.Execute()
-	if hydrateCmd.Use != "hydrate" {
-		t.Error("Should be able to access hydrate command")
+	// We can verify that cmd.Execute returns the expected type
+	// by calling it with help arguments
+	
+	// Save original args and restore afterwards
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	
+	// Set args to show help 
+	os.Args = []string{"gh-demo", "--help"}
+	
+	// Call cmd.Execute() directly (which is what run() does)
+	err := cmd.Execute()
+	
+	// Help should not return an error
+	if err != nil {
+		t.Errorf("cmd.Execute() with --help should not return error, got: %v", err)
 	}
 }
