@@ -56,11 +56,16 @@ func TestExecuteWithHelp(t *testing.T) {
 	err := testRootCmd.Execute()
 
 	// Restore stdout
-	w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Errorf("Failed to close stdout writer: %v", closeErr)
+	}
 	os.Stdout = old
 
 	// Read captured output
-	out, _ := io.ReadAll(r)
+	out, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatalf("Failed to read captured output: %v", readErr)
+	}
 	output := string(out)
 
 	// Help should not return an error
@@ -139,12 +144,16 @@ func TestRootCmdExecution(t *testing.T) {
 	err := cmd.Execute()
 
 	// Restore stderr
-	w.Close()
+	if closeErr := w.Close(); closeErr != nil {
+		t.Errorf("Failed to close stderr writer: %v", closeErr)
+	}
 	os.Stderr = originalStderr
 
 	// Read captured output
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, copyErr := io.Copy(&buf, r); copyErr != nil {
+		t.Errorf("Failed to copy captured output: %v", copyErr)
+	}
 
 	// Help command should not return an error
 	if err != nil {

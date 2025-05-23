@@ -12,6 +12,7 @@ func TestMainPackageStructure(t *testing.T) {
 	hydrateCmd := cmd.NewHydrateCmd()
 	if hydrateCmd == nil {
 		t.Error("Expected to be able to create hydrate command")
+		return
 	}
 
 	if hydrateCmd.Use != "hydrate" {
@@ -61,6 +62,7 @@ func TestCmdExecuteAccessible(t *testing.T) {
 
 	if hydrateCmd == nil {
 		t.Error("Should be able to access cmd package functionality")
+		return
 	}
 
 	// Verify we can access the command that main() would execute through cmd.Execute()

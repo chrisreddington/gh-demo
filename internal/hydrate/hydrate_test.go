@@ -337,18 +337,29 @@ func TestCollectLabels_WithLabels(t *testing.T) {
 // Test FindProjectRoot error cases
 func TestFindProjectRoot_NotFound(t *testing.T) {
 	// Save current directory
-	originalWd, _ := os.Getwd()
-	defer os.Chdir(originalWd)
+	originalWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+	defer func() { 
+		if chErr := os.Chdir(originalWd); chErr != nil {
+			t.Errorf("Failed to restore original working directory: %v", chErr)
+		}
+	}()
 
 	// Create temporary directory without git
 	tempDir := t.TempDir()
-	os.Chdir(tempDir)
+	if chErr := os.Chdir(tempDir); chErr != nil {
+		t.Fatalf("Failed to change to temp directory: %v", chErr)
+	}
 
 	// Remove any potential .git directory
-	os.RemoveAll(filepath.Join(tempDir, ".git"))
+	if rmErr := os.RemoveAll(filepath.Join(tempDir, ".git")); rmErr != nil {
+		t.Logf("Warning: failed to remove .git directory: %v", rmErr)
+	}
 
-	_, err := FindProjectRoot()
-	if err == nil {
+	_, findErr := FindProjectRoot()
+	if findErr == nil {
 		// In some environments, FindProjectRoot might still find a parent git repository
 		// So we'll allow this test to pass if it succeeds, but expect error in isolated environments
 		t.Logf("FindProjectRoot succeeded even in temp directory - may have found parent git repo")

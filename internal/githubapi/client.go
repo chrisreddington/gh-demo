@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -83,7 +84,13 @@ func (c *RESTClient) Request(method string, path string, body interface{}, respo
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { 
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			// Log the error but don't fail the operation
+			// In a real application, you'd use a proper logger here
+			fmt.Fprintf(os.Stderr, "Warning: failed to close response body: %v\n", closeErr)
+		}
+	}()
 
 	if response != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return json.NewDecoder(resp.Body).Decode(response)
