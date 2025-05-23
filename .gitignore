@@ -1,2 +1,6 @@
 /gh-demo
 /gh-demo.exe
+
+# Coverage files
+*.out
+coverage.html

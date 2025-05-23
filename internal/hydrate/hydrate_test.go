@@ -37,6 +37,7 @@ type MockGitHubClient struct {
 	CreatedLabels  []string
 	FailPRs        bool // If true, CreatePR will fail
 	FailIssues     bool // If true, CreateIssue will fail
+	FailListLabels bool // If true, ListLabels will fail
 }
 
 // Add stubs for the rest of the interface
@@ -57,6 +58,9 @@ func (m *MockGitHubClient) CreatePR(pr githubapi.PRInput) error {
 }
 
 func (m *MockGitHubClient) ListLabels() ([]string, error) {
+	if m.FailListLabels {
+		return nil, fmt.Errorf("simulated list labels failure")
+	}
 	labels := make([]string, 0, len(m.ExistingLabels))
 	for l := range m.ExistingLabels {
 		labels = append(labels, l)
@@ -296,9 +300,83 @@ func TestHydrateFromFiles_InvalidJSON(t *testing.T) {
 }
 
 func TestHydrateFromFiles_NonExistentFile(t *testing.T) {
-	_, _, _, err := HydrateFromFiles("/non/existent/file.json", "/non/existent/file2.json", "/non/existent/file3.json", true, false, false)
+	// Test with non-existent issues file
+	_, _, _, err := HydrateFromFiles("/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, false, false)
 	if err == nil {
-		t.Error("Expected error for non-existent file")
+		t.Error("Expected error for non-existent issues file")
+	}
+
+	// Test with non-existent discussions file
+	tempDir := t.TempDir()
+	validIssuesPath := filepath.Join(tempDir, "issues.json")
+	if err := os.WriteFile(validIssuesPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create issues file: %v", err)
+	}
+
+	_, _, _, err = HydrateFromFiles(validIssuesPath, "/non/existent/discussions.json", "/non/existent/prs.json", true, true, false)
+	if err == nil {
+		t.Error("Expected error for non-existent discussions file")
+	}
+
+	// Test with non-existent prs file
+	validDiscussionsPath := filepath.Join(tempDir, "discussions.json")
+	if err := os.WriteFile(validDiscussionsPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create discussions file: %v", err)
+	}
+
+	_, _, _, err = HydrateFromFiles(validIssuesPath, validDiscussionsPath, "/non/existent/prs.json", true, true, true)
+	if err == nil {
+		t.Error("Expected error for non-existent prs file")
+	}
+}
+
+// TestHydrateFromFiles_InvalidDiscussionsJSON tests HydrateFromFiles with invalid discussions JSON
+func TestHydrateFromFiles_InvalidDiscussionsJSON(t *testing.T) {
+	tempDir := t.TempDir()
+
+	validIssuesPath := filepath.Join(tempDir, "issues.json")
+	if err := os.WriteFile(validIssuesPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create issues file: %v", err)
+	}
+
+	invalidDiscussionsPath := filepath.Join(tempDir, "discussions.json")
+	if err := os.WriteFile(invalidDiscussionsPath, []byte("{invalid json"), 0644); err != nil {
+		t.Fatalf("Failed to create invalid discussions file: %v", err)
+	}
+
+	validPRsPath := filepath.Join(tempDir, "prs.json")
+	if err := os.WriteFile(validPRsPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create prs file: %v", err)
+	}
+
+	_, _, _, err := HydrateFromFiles(validIssuesPath, invalidDiscussionsPath, validPRsPath, true, true, false)
+	if err == nil {
+		t.Error("Expected error for invalid discussions JSON")
+	}
+}
+
+// TestHydrateFromFiles_InvalidPRsJSON tests HydrateFromFiles with invalid PRs JSON
+func TestHydrateFromFiles_InvalidPRsJSON(t *testing.T) {
+	tempDir := t.TempDir()
+
+	validIssuesPath := filepath.Join(tempDir, "issues.json")
+	if err := os.WriteFile(validIssuesPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create issues file: %v", err)
+	}
+
+	validDiscussionsPath := filepath.Join(tempDir, "discussions.json")
+	if err := os.WriteFile(validDiscussionsPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create discussions file: %v", err)
+	}
+
+	invalidPRsPath := filepath.Join(tempDir, "prs.json")
+	if err := os.WriteFile(invalidPRsPath, []byte("{invalid json"), 0644); err != nil {
+		t.Fatalf("Failed to create invalid prs file: %v", err)
+	}
+
+	_, _, _, err := HydrateFromFiles(validIssuesPath, validDiscussionsPath, invalidPRsPath, true, true, true)
+	if err == nil {
+		t.Error("Expected error for invalid PRs JSON")
 	}
 }
 
@@ -341,7 +419,7 @@ func TestFindProjectRoot_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to get current working directory: %v", err)
 	}
-	defer func() { 
+	defer func() {
 		if chErr := os.Chdir(originalWd); chErr != nil {
 			t.Errorf("Failed to restore original working directory: %v", chErr)
 		}
@@ -402,6 +480,51 @@ func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 	}
 }
 
+// TestEnsureLabelsExist_ListLabelsError tests error handling when ListLabels fails
+func TestEnsureLabelsExist_ListLabelsError(t *testing.T) {
+	// Create a mock client that fails on ListLabels
+	client := &MockGitHubClient{
+		FailListLabels: true, // This will cause ListLabels to return an error
+		ExistingLabels: map[string]bool{},
+		CreatedLabels:  []string{},
+	}
+
+	logger := NewLogger(false)
+	summary := &SectionSummary{}
+	labels := []string{"test-label"}
+
+	err := EnsureLabelsExist(client, labels, logger, summary)
+
+	// This should return an error due to ListLabels failing
+	if err == nil {
+		t.Error("Expected error when ListLabels fails")
+	}
+
+	expectedError := "simulated list labels failure"
+	if !strings.Contains(err.Error(), expectedError) {
+		t.Errorf("Expected error containing '%s', got: %v", expectedError, err)
+	}
+}
+
+// TestEnsureLabelsExist_EmptyLabels tests the early return when no labels provided
+func TestEnsureLabelsExist_EmptyLabels(t *testing.T) {
+	client := &MockGitHubClient{
+		ExistingLabels: map[string]bool{},
+		CreatedLabels:  []string{},
+	}
+
+	logger := NewLogger(false)
+	summary := &SectionSummary{}
+	labels := []string{} // Empty labels slice
+
+	err := EnsureLabelsExist(client, labels, logger, summary)
+
+	// This should return nil without calling any client methods
+	if err != nil {
+		t.Errorf("Expected no error for empty labels, got: %v", err)
+	}
+}
+
 // Test HydrateWithLabels with debug mode
 func TestHydrateWithLabels_DebugMode(t *testing.T) {
 	client := &MockGitHubClient{
@@ -444,5 +567,87 @@ func TestHydrateWithLabels_FileReadError(t *testing.T) {
 	err := HydrateWithLabels(client, "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, true, true, false)
 	if err == nil {
 		t.Error("Expected error when files don't exist")
+	}
+}
+
+// TestHydrateWithLabels_EnsureLabelsExistError tests error handling in EnsureLabelsExist
+func TestHydrateWithLabels_EnsureLabelsExistError(t *testing.T) {
+	// Create a mock client that fails on ListLabels to trigger EnsureLabelsExist error
+	client := &MockGitHubClient{
+		FailListLabels: true,
+		ExistingLabels: map[string]bool{},
+		CreatedLabels:  []string{},
+	}
+
+	tempDir := t.TempDir()
+
+	// Create files with labels to trigger EnsureLabelsExist call
+	issuesPath := filepath.Join(tempDir, "issues.json")
+	issuesJSON := `[{"title": "Test Issue", "body": "Test body", "labels": ["bug"], "assignees": []}]`
+	if err := os.WriteFile(issuesPath, []byte(issuesJSON), 0644); err != nil {
+		t.Fatalf("Failed to create issues file: %v", err)
+	}
+
+	discussionsPath := filepath.Join(tempDir, "discussions.json")
+	if err := os.WriteFile(discussionsPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create discussions file: %v", err)
+	}
+
+	prsPath := filepath.Join(tempDir, "prs.json")
+	if err := os.WriteFile(prsPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create prs file: %v", err)
+	}
+
+	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, false, false, false)
+
+	if err == nil {
+		t.Error("Expected error when EnsureLabelsExist fails")
+	}
+
+	if !strings.Contains(err.Error(), "failed to ensure labels exist") {
+		t.Errorf("Expected 'failed to ensure labels exist' error, got: %v", err)
+	}
+}
+
+// TestHydrateWithLabels_AggregatedErrors tests error aggregation when some items fail
+func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
+	// Create a mock client that fails for both issues and PRs
+	client := &MockGitHubClient{
+		ExistingLabels: map[string]bool{},
+		CreatedLabels:  []string{},
+		FailIssues:     true, // Issues will fail
+		FailPRs:        true, // PRs will fail
+	}
+
+	tempDir := t.TempDir()
+
+	// Create files with content that will fail
+	issuesPath := filepath.Join(tempDir, "issues.json")
+	issuesJSON := `[{"title": "Test Issue", "body": "Test body", "labels": [], "assignees": []}]`
+	if err := os.WriteFile(issuesPath, []byte(issuesJSON), 0644); err != nil {
+		t.Fatalf("Failed to create issues file: %v", err)
+	}
+
+	discussionsPath := filepath.Join(tempDir, "discussions.json")
+	discussionsJSON := `[{"title": "Test Discussion", "body": "Test body", "category": "General", "labels": []}]`
+	if err := os.WriteFile(discussionsPath, []byte(discussionsJSON), 0644); err != nil {
+		t.Fatalf("Failed to create discussions file: %v", err)
+	}
+
+	prsPath := filepath.Join(tempDir, "prs.json")
+	prsJSON := `[{"title": "Test PR", "body": "Test body", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
+	if err := os.WriteFile(prsPath, []byte(prsJSON), 0644); err != nil {
+		t.Fatalf("Failed to create prs file: %v", err)
+	}
+
+	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+
+	// Should return aggregated errors
+	if err == nil {
+		t.Error("Expected aggregated errors when some items fail")
+	}
+
+	if !strings.Contains(err.Error(), "some items failed to create") {
+		t.Errorf("Expected 'some items failed to create' error, got: %v", err)
 	}
 }

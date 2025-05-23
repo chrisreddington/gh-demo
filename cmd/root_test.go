@@ -10,6 +10,39 @@ import (
 )
 
 func TestExecute(t *testing.T) {
+	// Test that Execute function can be called directly
+	// Save original args and restore afterwards
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	// Set args to show help (which should not return an error)
+	os.Args = []string{"gh-demo", "--help"}
+
+	err := Execute()
+	// Help command should not return an error
+	if err != nil {
+		t.Errorf("Execute() with --help should not return error, got: %v", err)
+	}
+}
+
+// TestExecuteWithError tests Execute() with invalid arguments
+func TestExecuteWithError(t *testing.T) {
+	// Save original args and restore afterwards
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+
+	// Set invalid args that should cause an error
+	os.Args = []string{"gh-demo", "invalid-command"}
+
+	err := Execute()
+	// Invalid command should return an error
+	if err == nil {
+		t.Error("Execute() with invalid command should return an error")
+	}
+}
+
+// TestExecuteStructure tests the structure rather than execution
+func TestExecuteStructure(t *testing.T) {
 	// Test that Execute function exists and can be called
 	// We test the structure rather than actual execution to avoid os.Exit calls
 

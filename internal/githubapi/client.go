@@ -84,7 +84,7 @@ func (c *RESTClient) Request(method string, path string, body interface{}, respo
 	if err != nil {
 		return err
 	}
-	defer func() { 
+	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			// Log the error but don't fail the operation
 			// In a real application, you'd use a proper logger here
