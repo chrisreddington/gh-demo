@@ -11,11 +11,16 @@ import (
 	"github.com/cli/go-gh/v2/pkg/api"
 )
 
+// GraphQLClient interface for testability
+type GraphQLClient interface {
+	Do(query string, variables map[string]interface{}, response interface{}) error
+}
+
 // GHClient is the main client for all GitHub API operations
 type GHClient struct {
 	Owner      string
 	Repo       string
-	gqlClient  *api.GraphQLClient
+	gqlClient  GraphQLClient
 	restClient *RESTClient
 	logger     Logger
 }
@@ -287,13 +292,13 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 	}
 
 	if categoryID == "" {
-		c.debugLog("Discussion category '%s' not found in available categories: %v", 
+		c.debugLog("Discussion category '%s' not found in available categories: %v",
 			disc.Category, availableCategories)
-		return fmt.Errorf("discussion category '%s' not found in available categories: %v", 
+		return fmt.Errorf("discussion category '%s' not found in available categories: %v",
 			disc.Category, availableCategories)
 	}
-	
-	c.debugLog("Found matching category ID for '%s': %s (actual: '%s')", 
+
+	c.debugLog("Found matching category ID for '%s': %s (actual: '%s')",
 		disc.Category, categoryID, matchedCategory)
 
 	// Create the discussion
@@ -339,20 +344,20 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 		c.debugLog("Failed to create discussion '%s': %v", disc.Title, err)
 		return fmt.Errorf("failed to create discussion: %w", err)
 	}
-	
+
 	// Debug: Log what we got back from GitHub
 	c.debugLog("GitHub response - Discussion.ID: '%s', Number: %d, Title: '%s', URL: '%s'",
 		mutationResponse.CreateDiscussion.Discussion.ID,
 		mutationResponse.CreateDiscussion.Discussion.Number,
 		mutationResponse.CreateDiscussion.Discussion.Title,
 		mutationResponse.CreateDiscussion.Discussion.URL)
-	
+
 	// Verify discussion was created by checking for a valid ID and URL
 	if mutationResponse.CreateDiscussion.Discussion.ID == "" {
 		c.debugLog("Discussion creation for '%s' failed - no Discussion ID returned", disc.Title)
 		return fmt.Errorf("discussion creation for '%s' failed - no Discussion ID returned from GitHub API", disc.Title)
 	}
-	
+
 	discussionID := mutationResponse.CreateDiscussion.Discussion.ID
 	discussionURL := mutationResponse.CreateDiscussion.Discussion.URL
 	c.debugLog("Discussion created with ID: %s, URL: %s", discussionID, discussionURL)
