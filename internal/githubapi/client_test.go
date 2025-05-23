@@ -492,3 +492,402 @@ func TestCreatePRError(t *testing.T) {
 		t.Error("Expected an error when REST client is nil")
 	}
 }
+
+// TestCreateDiscussionWithLabels tests the addLabelToDiscussion function through CreateDiscussion
+func TestCreateDiscussionWithLabels(t *testing.T) {
+	gqlClient := &MockGraphQLClient{
+		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+			if strings.Contains(query, "discussionCategories") {
+				// Repository info query
+				resp := response.(*struct {
+					Repository struct {
+						ID         string `json:"id"`
+						Categories struct {
+							Nodes []struct {
+								ID   string `json:"id"`
+								Name string `json:"name"`
+							} `json:"nodes"`
+						} `json:"discussionCategories"`
+					} `json:"repository"`
+				})
+				resp.Repository.ID = "repo-id-123"
+				resp.Repository.Categories.Nodes = []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				}{
+					{ID: "cat-id-123", Name: "General"},
+				}
+			} else if strings.Contains(query, "createDiscussion") {
+				// Create discussion mutation
+				resp := response.(*struct {
+					CreateDiscussion struct {
+						Discussion struct {
+							ID     string `json:"id"`
+							Number int    `json:"number"`
+							Title  string `json:"title"`
+							URL    string `json:"url"`
+						} `json:"discussion"`
+					} `json:"createDiscussion"`
+				})
+				resp.CreateDiscussion.Discussion.ID = "disc-id-123"
+				resp.CreateDiscussion.Discussion.Number = 1
+				resp.CreateDiscussion.Discussion.Title = "Test Discussion"
+				resp.CreateDiscussion.Discussion.URL = "https://github.com/testowner/testrepo/discussions/1"
+			} else if strings.Contains(query, "label(name:") {
+				// Label query for addLabelToDiscussion
+				resp := response.(*struct {
+					Repository struct {
+						Label struct {
+							ID string `json:"id"`
+						} `json:"label"`
+					} `json:"repository"`
+				})
+				resp.Repository.Label.ID = "label-id-123"
+			} else if strings.Contains(query, "addLabelsToLabelable") {
+				// Add label mutation
+				resp := response.(*struct {
+					AddLabelsToLabelable struct {
+						ClientMutationID string `json:"clientMutationId"`
+					} `json:"addLabelsToLabelable"`
+				})
+				resp.AddLabelsToLabelable.ClientMutationID = "mutation-id-123"
+			}
+			return nil
+		},
+	}
+
+	client := &GHClient{
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: gqlClient,
+	}
+
+	err := client.CreateDiscussion(DiscussionInput{
+		Title:    "Test Discussion",
+		Body:     "This is a test discussion",
+		Category: "General",
+		Labels:   []string{"bug", "enhancement"},
+	})
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+}
+
+// TestAddLabelToDiscussion_LabelNotFound tests error handling in addLabelToDiscussion
+func TestAddLabelToDiscussion_LabelNotFound(t *testing.T) {
+	gqlClient := &MockGraphQLClient{
+		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+			if strings.Contains(query, "discussionCategories") {
+				// Repository info query
+				resp := response.(*struct {
+					Repository struct {
+						ID         string `json:"id"`
+						Categories struct {
+							Nodes []struct {
+								ID   string `json:"id"`
+								Name string `json:"name"`
+							} `json:"nodes"`
+						} `json:"discussionCategories"`
+					} `json:"repository"`
+				})
+				resp.Repository.ID = "repo-id-123"
+				resp.Repository.Categories.Nodes = []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				}{
+					{ID: "cat-id-123", Name: "General"},
+				}
+			} else if strings.Contains(query, "createDiscussion") {
+				// Create discussion mutation
+				resp := response.(*struct {
+					CreateDiscussion struct {
+						Discussion struct {
+							ID     string `json:"id"`
+							Number int    `json:"number"`
+							Title  string `json:"title"`
+							URL    string `json:"url"`
+						} `json:"discussion"`
+					} `json:"createDiscussion"`
+				})
+				resp.CreateDiscussion.Discussion.ID = "disc-id-123"
+				resp.CreateDiscussion.Discussion.Number = 1
+				resp.CreateDiscussion.Discussion.Title = "Test Discussion"
+				resp.CreateDiscussion.Discussion.URL = "https://github.com/testowner/testrepo/discussions/1"
+			} else if strings.Contains(query, "label(name:") {
+				// Label query that returns empty (label not found)
+				resp := response.(*struct {
+					Repository struct {
+						Label struct {
+							ID string `json:"id"`
+						} `json:"label"`
+					} `json:"repository"`
+				})
+				resp.Repository.Label.ID = "" // Empty ID means label not found
+			}
+			return nil
+		},
+	}
+
+	client := &GHClient{
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: gqlClient,
+	}
+
+	// This should still succeed, but the label addition will fail silently
+	err := client.CreateDiscussion(DiscussionInput{
+		Title:    "Test Discussion",
+		Body:     "This is a test discussion",
+		Category: "General",
+		Labels:   []string{"nonexistent-label"},
+	})
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+}
+
+// TestAddLabelToDiscussion_GraphQLError tests GraphQL error handling
+func TestAddLabelToDiscussion_GraphQLError(t *testing.T) {
+	gqlClient := &MockGraphQLClient{
+		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+			if strings.Contains(query, "discussionCategories") {
+				// Repository info query
+				resp := response.(*struct {
+					Repository struct {
+						ID         string `json:"id"`
+						Categories struct {
+							Nodes []struct {
+								ID   string `json:"id"`
+								Name string `json:"name"`
+							} `json:"nodes"`
+						} `json:"discussionCategories"`
+					} `json:"repository"`
+				})
+				resp.Repository.ID = "repo-id-123"
+				resp.Repository.Categories.Nodes = []struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				}{
+					{ID: "cat-id-123", Name: "General"},
+				}
+			} else if strings.Contains(query, "createDiscussion") {
+				// Create discussion mutation
+				resp := response.(*struct {
+					CreateDiscussion struct {
+						Discussion struct {
+							ID     string `json:"id"`
+							Number int    `json:"number"`
+							Title  string `json:"title"`
+							URL    string `json:"url"`
+						} `json:"discussion"`
+					} `json:"createDiscussion"`
+				})
+				resp.CreateDiscussion.Discussion.ID = "disc-id-123"
+				resp.CreateDiscussion.Discussion.Number = 1
+				resp.CreateDiscussion.Discussion.Title = "Test Discussion"
+				resp.CreateDiscussion.Discussion.URL = "https://github.com/testowner/testrepo/discussions/1"
+			} else if strings.Contains(query, "label(name:") {
+				// Return error for label query
+				return fmt.Errorf("GraphQL error: label query failed")
+			}
+			return nil
+		},
+	}
+
+	client := &GHClient{
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: gqlClient,
+	}
+
+	// This should still succeed overall, but label addition will fail
+	err := client.CreateDiscussion(DiscussionInput{
+		Title:    "Test Discussion",
+		Body:     "This is a test discussion",
+		Category: "General",
+		Labels:   []string{"test-label"},
+	})
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+}
+
+// TestCreatePR_ValidationErrors tests CreatePR validation error paths
+func TestCreatePR_ValidationErrors(t *testing.T) {
+	restClient := &MockRESTClient{
+		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 201,
+				Body:       io.NopCloser(strings.NewReader(`{"number": 1}`)),
+			}, nil
+		},
+	}
+
+	client := &GHClient{
+		Owner:      "testowner",
+		Repo:       "testrepo",
+		restClient: &RESTClient{client: restClient},
+	}
+
+	// Test empty head branch
+	err := client.CreatePR(PRInput{
+		Title: "Test PR",
+		Body:  "Test body",
+		Head:  "", // Empty head should cause error
+		Base:  "main",
+	})
+	if err == nil {
+		t.Error("Expected error for empty head branch")
+	}
+	if !strings.Contains(err.Error(), "head branch cannot be empty") {
+		t.Errorf("Expected 'head branch cannot be empty' error, got: %v", err)
+	}
+
+	// Test empty base branch
+	err = client.CreatePR(PRInput{
+		Title: "Test PR",
+		Body:  "Test body",
+		Head:  "feature",
+		Base:  "", // Empty base should cause error
+	})
+	if err == nil {
+		t.Error("Expected error for empty base branch")
+	}
+	if !strings.Contains(err.Error(), "base branch cannot be empty") {
+		t.Errorf("Expected 'base branch cannot be empty' error, got: %v", err)
+	}
+
+	// Test head and base are the same
+	err = client.CreatePR(PRInput{
+		Title: "Test PR",
+		Body:  "Test body",
+		Head:  "main",
+		Base:  "main", // Same as head should cause error
+	})
+	if err == nil {
+		t.Error("Expected error for same head and base branches")
+	}
+	if !strings.Contains(err.Error(), "head and base branches cannot be the same") {
+		t.Errorf("Expected 'head and base branches cannot be the same' error, got: %v", err)
+	}
+}
+
+// TestCreatePR_WithLabelsAndAssignees tests CreatePR with labels and assignees
+func TestCreatePR_WithLabelsAndAssignees(t *testing.T) {
+	restClient := &MockRESTClient{
+		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
+			if method == "POST" && strings.Contains(path, "/pulls") {
+				// PR creation request
+				return &http.Response{
+					StatusCode: 201,
+					Body:       io.NopCloser(strings.NewReader(`{"number": 1, "title": "Test PR"}`)),
+				}, nil
+			} else if method == "PATCH" && strings.Contains(path, "/issues/") {
+				// Labels/assignees update request
+				return &http.Response{
+					StatusCode: 200,
+					Body:       io.NopCloser(strings.NewReader(`{"number": 1}`)),
+				}, nil
+			}
+			return &http.Response{
+				StatusCode: 404,
+				Body:       io.NopCloser(strings.NewReader(`{"message": "Not Found"}`)),
+			}, fmt.Errorf("unexpected request")
+		},
+	}
+
+	client := &GHClient{
+		Owner:      "testowner",
+		Repo:       "testrepo",
+		restClient: &RESTClient{client: restClient},
+	}
+
+	err := client.CreatePR(PRInput{
+		Title:     "Test PR",
+		Body:      "Test body",
+		Head:      "feature",
+		Base:      "main",
+		Labels:    []string{"bug", "enhancement"},
+		Assignees: []string{"testuser"},
+	})
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+}
+
+// TestCreatePR_LabelsAssigneesFailure tests CreatePR when labels/assignees update fails
+func TestCreatePR_LabelsAssigneesFailure(t *testing.T) {
+	restClient := &MockRESTClient{
+		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
+			if method == "POST" && strings.Contains(path, "/pulls") {
+				// PR creation request succeeds
+				return &http.Response{
+					StatusCode: 201,
+					Body:       io.NopCloser(strings.NewReader(`{"number": 1, "title": "Test PR"}`)),
+				}, nil
+			} else if method == "PATCH" && strings.Contains(path, "/issues/") {
+				// Labels/assignees update request fails
+				return &http.Response{
+					StatusCode: 404,
+					Body:       io.NopCloser(strings.NewReader(`{"message": "Not Found"}`)),
+				}, fmt.Errorf("failed to update labels/assignees")
+			}
+			return &http.Response{
+				StatusCode: 404,
+				Body:       io.NopCloser(strings.NewReader(`{"message": "Not Found"}`)),
+			}, fmt.Errorf("unexpected request")
+		},
+	}
+
+	client := &GHClient{
+		Owner:      "testowner",
+		Repo:       "testrepo",
+		restClient: &RESTClient{client: restClient},
+	}
+
+	err := client.CreatePR(PRInput{
+		Title:     "Test PR",
+		Body:      "Test body",
+		Head:      "feature",
+		Base:      "main",
+		Labels:    []string{"bug"},
+		Assignees: []string{"testuser"},
+	})
+	if err == nil {
+		t.Error("Expected error when labels/assignees update fails")
+	}
+	if !strings.Contains(err.Error(), "failed to add labels/assignees") {
+		t.Errorf("Expected 'failed to add labels/assignees' error, got: %v", err)
+	}
+}
+
+// TestCreatePR_RequestFailure tests CreatePR when the initial request fails
+func TestCreatePR_RequestFailure(t *testing.T) {
+	restClient := &MockRESTClient{
+		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: 500,
+				Body:       io.NopCloser(strings.NewReader(`{"message": "Internal Server Error"}`)),
+			}, fmt.Errorf("server error")
+		},
+	}
+
+	client := &GHClient{
+		Owner:      "testowner",
+		Repo:       "testrepo",
+		restClient: &RESTClient{client: restClient},
+	}
+
+	err := client.CreatePR(PRInput{
+		Title: "Test PR",
+		Body:  "Test body",
+		Head:  "feature",
+		Base:  "main",
+	})
+	if err == nil {
+		t.Error("Expected error when request fails")
+	}
+	if !strings.Contains(err.Error(), "failed to create pull request") {
+		t.Errorf("Expected 'failed to create pull request' error, got: %v", err)
+	}
+}
