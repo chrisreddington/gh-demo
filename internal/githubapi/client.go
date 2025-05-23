@@ -236,10 +236,11 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 
 	c.debugLog("Creating discussion '%s' in repository %s/%s", disc.Title, c.Owner, c.Repo)
 
-	// First, get the repository ID and category ID
+	// First, get the repository ID and verify discussions are enabled
 	var repoQuery struct {
 		Repository struct {
-			ID         string
+			ID                   string
+			HasDiscussionsEnabled bool
 			Categories struct {
 				Nodes []struct {
 					ID   string
@@ -259,26 +260,48 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 		c.debugLog("Failed to fetch repository info for discussion: %v", err)
 		return fmt.Errorf("failed to fetch repository info: %w", err)
 	}
+	
+	// Check if discussions are enabled for the repository
+	if !repoQuery.Repository.HasDiscussionsEnabled {
+		c.debugLog("Discussions are not enabled for repository %s/%s", c.Owner, c.Repo)
+		return fmt.Errorf("discussions are not enabled for repository %s/%s", c.Owner, c.Repo)
+	}
+
+	// Log available categories for debugging
+	availableCategories := make([]string, 0, len(repoQuery.Repository.Categories.Nodes))
+	for _, cat := range repoQuery.Repository.Categories.Nodes {
+		availableCategories = append(availableCategories, cat.Name)
+	}
+	c.debugLog("Available discussion categories: %v", availableCategories)
 
 	// Find the category ID that matches the requested category name
 	var categoryID string
+	var matchedCategory string
 	for _, category := range repoQuery.Repository.Categories.Nodes {
+		c.debugLog("Comparing category '%s' with requested '%s'", category.Name, disc.Category)
 		if strings.EqualFold(category.Name, disc.Category) {
 			categoryID = category.ID
+			matchedCategory = category.Name
 			break
 		}
 	}
 
 	if categoryID == "" {
-		c.debugLog("Discussion category '%s' not found", disc.Category)
-		return fmt.Errorf("discussion category '%s' not found", disc.Category)
+		c.debugLog("Discussion category '%s' not found in available categories: %v", 
+			disc.Category, availableCategories)
+		return fmt.Errorf("discussion category '%s' not found in available categories: %v", 
+			disc.Category, availableCategories)
 	}
+	
+	c.debugLog("Found matching category ID for '%s': %s (actual: '%s')", 
+		disc.Category, categoryID, matchedCategory)
 
 	// Create the discussion
 	var mutation struct {
 		CreateDiscussion struct {
 			Discussion struct {
-				ID string
+				ID  string
+				URL string
 			}
 		} `graphql:"createDiscussion(input: $input)"`
 	}
@@ -297,9 +320,22 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 		c.debugLog("Failed to create discussion '%s': %v", disc.Title, err)
 		return fmt.Errorf("failed to create discussion: %w", err)
 	}
+	
+	// Verify discussion was created by checking for a valid ID and URL
+	if mutation.CreateDiscussion.Discussion.ID == "" {
+		c.debugLog("Discussion creation for '%s' failed - no Discussion ID returned", disc.Title)
+		return fmt.Errorf("discussion creation for '%s' failed - no Discussion ID returned from GitHub API", disc.Title)
+	}
+	
+	discussionURL := mutation.CreateDiscussion.Discussion.URL
+	c.debugLog("Discussion created with ID: %s, URL: %s", 
+		mutation.CreateDiscussion.Discussion.ID, discussionURL)
 
 	// Add labels if specified
+	labelErrors := []string{}
 	if len(disc.Labels) > 0 && mutation.CreateDiscussion.Discussion.ID != "" {
+		c.debugLog("Adding %d labels to discussion '%s'", len(disc.Labels), disc.Title)
+		
 		// Add labels to the discussion using the discussion ID
 		for _, label := range disc.Labels {
 			var labelMutation struct {
@@ -327,12 +363,16 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 			
 			err = c.gqlClient.Query("GetLabelID", &labelQuery, labelVariables)
 			if err != nil {
-				c.debugLog("Failed to find label '%s' for discussion: %v", label, err)
+				errMsg := fmt.Sprintf("failed to find label '%s' for discussion: %v", label, err)
+				labelErrors = append(labelErrors, errMsg)
+				c.debugLog(errMsg)
 				continue // Skip this label if not found
 			}
 			
 			if labelQuery.Repository.Label.ID == "" {
-				c.debugLog("Label '%s' not found in repository", label)
+				errMsg := fmt.Sprintf("label '%s' not found in repository", label)
+				labelErrors = append(labelErrors, errMsg)
+				c.debugLog(errMsg)
 				continue
 			}
 			
@@ -345,7 +385,9 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 			
 			err = c.gqlClient.Mutate("AddLabelToDiscussion", &labelMutation, labelMutationVariables)
 			if err != nil {
-				c.debugLog("Failed to add label '%s' to discussion: %v", label, err)
+				errMsg := fmt.Sprintf("failed to add label '%s' to discussion: %v", label, err)
+				labelErrors = append(labelErrors, errMsg)
+				c.debugLog(errMsg)
 				// Continue with other labels even if one fails
 			} else {
 				c.debugLog("Successfully added label '%s' to discussion", label)
@@ -353,7 +395,16 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 		}
 	}
 
-	c.debugLog("Successfully created discussion '%s'", disc.Title)
+	// Report success but include any label errors in debug info
+	if len(labelErrors) > 0 {
+		c.debugLog("Created discussion '%s' (URL: %s) with %d label errors: %v", 
+			disc.Title, discussionURL, len(labelErrors), labelErrors)
+	} else {
+		c.debugLog("Successfully created discussion '%s' (URL: %s) with all labels", 
+			disc.Title, discussionURL)
+	}
+	
+	c.debugLog("Discussion URL: %s", discussionURL)
 	return nil
 }
 
