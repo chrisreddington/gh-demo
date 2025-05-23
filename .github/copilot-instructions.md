@@ -6,6 +6,7 @@ This is a GitHub CLI Extension written in Go to automate repository hydration ta
 ## Code Standards
 
 - Please use a test-driven development approach. Start writing tests based on expectation, then write the implementation.
+- Use table-driven tests for unit tests to cover multiple scenarios in a single test function.
 
 ### Required Before Commit
 - All tests must pass: `go test ./...`
