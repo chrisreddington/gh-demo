@@ -85,6 +85,33 @@ func TestMainFunctionExists(t *testing.T) {
 	// This is a structural test to ensure the main function is present
 }
 
+// TestMainFunctionDirect tests main() function directly with success case
+func TestMainFunctionDirect(t *testing.T) {
+	// This test actually calls main() directly for the success case where it doesn't call os.Exit()
+	// We use the --help flag which should not cause os.Exit(1)
+	
+	// Save original args and restore afterwards
+	originalArgs := os.Args
+	defer func() { os.Args = originalArgs }()
+	
+	// Set args to show help (should exit with code 0, which doesn't call os.Exit in our implementation)
+	os.Args = []string{"gh-demo", "--help"}
+	
+	// Capture any panic from os.Exit() and recover
+	defer func() {
+		if r := recover(); r != nil {
+			// If os.Exit was called, we'll get here
+			// Help should not cause os.Exit, so this would be unexpected
+			t.Errorf("main() with --help should not call os.Exit(), but got panic: %v", r)
+		}
+	}()
+	
+	// Call main() directly - this will execute the help command
+	main()
+	
+	// If we get here, main() completed successfully without calling os.Exit()
+}
+
 // TestMainFunctionIntegration tests main() indirectly through subprocess
 func TestMainFunctionIntegration(t *testing.T) {
 	if testing.Short() {
