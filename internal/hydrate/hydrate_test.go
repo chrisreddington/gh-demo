@@ -269,26 +269,26 @@ func TestLoggerDebug(t *testing.T) {
 
 func TestLoggerInfo(t *testing.T) {
 	logger := NewLogger(false)
-	// This should not panic  
+	// This should not panic
 	logger.Info("test info message: %s", "value")
 }
 
 // Test error cases for HydrateFromFiles
 func TestHydrateFromFiles_InvalidJSON(t *testing.T) {
 	tempDir := t.TempDir()
-	
+
 	// Create invalid JSON file
 	invalidPath := filepath.Join(tempDir, "invalid.json")
 	if err := os.WriteFile(invalidPath, []byte("invalid json"), 0644); err != nil {
 		t.Fatalf("failed to write invalid JSON file: %v", err)
 	}
-	
+
 	// Create valid files for other parameters
 	validPath := filepath.Join(tempDir, "valid.json")
 	if err := os.WriteFile(validPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("failed to write valid JSON file: %v", err)
 	}
-	
+
 	_, _, _, err := HydrateFromFiles(invalidPath, validPath, validPath, true, false, false)
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
@@ -313,20 +313,20 @@ func TestCollectLabels_WithLabels(t *testing.T) {
 	issues := []Issue{{Labels: []string{"bug", "enhancement"}}}
 	discussions := []Discussion{{Labels: []string{"question", "bug"}}}
 	prs := []PullRequest{{Labels: []string{"feature", "bug"}}}
-	
+
 	labels := CollectLabels(issues, discussions, prs)
-	
+
 	expectedLabels := map[string]bool{
 		"bug":         true,
 		"enhancement": true,
 		"question":    true,
 		"feature":     true,
 	}
-	
+
 	if len(labels) != len(expectedLabels) {
 		t.Errorf("Expected %d unique labels, got %d", len(expectedLabels), len(labels))
 	}
-	
+
 	for _, label := range labels {
 		if !expectedLabels[label] {
 			t.Errorf("Unexpected label: %s", label)
@@ -339,14 +339,14 @@ func TestFindProjectRoot_NotFound(t *testing.T) {
 	// Save current directory
 	originalWd, _ := os.Getwd()
 	defer os.Chdir(originalWd)
-	
+
 	// Create temporary directory without git
 	tempDir := t.TempDir()
 	os.Chdir(tempDir)
-	
+
 	// Remove any potential .git directory
 	os.RemoveAll(filepath.Join(tempDir, ".git"))
-	
+
 	_, err := FindProjectRoot()
 	if err == nil {
 		// In some environments, FindProjectRoot might still find a parent git repository
@@ -361,7 +361,7 @@ func TestFindProjectRoot_Success(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected to find project root, got error: %v", err)
 	}
-	
+
 	if root == "" {
 		t.Error("Expected non-empty project root")
 	}
@@ -376,15 +376,15 @@ func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 		},
 		CreatedLabels: []string{},
 	}
-	
+
 	// The mock should be configured to fail for "fail" label and succeed for others
 	// Let's test with a successful case first to ensure the basic flow works
 	logger := NewLogger(false)
 	summary := &SectionSummary{}
 	labels := []string{"existing", "new"}
-	
+
 	err := EnsureLabelsExist(client, labels, logger, summary)
-	
+
 	// This should succeed with our mock
 	if err != nil {
 		t.Logf("Note: Test may fail due to mock limitations: %v", err)
@@ -397,14 +397,14 @@ func TestHydrateWithLabels_DebugMode(t *testing.T) {
 		ExistingLabels: map[string]bool{},
 		CreatedLabels:  []string{},
 	}
-	
+
 	tempDir := t.TempDir()
-	
+
 	// Create minimal test files
 	issuesPath := filepath.Join(tempDir, "issues.json")
 	discussionsPath := filepath.Join(tempDir, "discussions.json")
 	prsPath := filepath.Join(tempDir, "prs.json")
-	
+
 	if err := os.WriteFile(issuesPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("failed to write issues file: %v", err)
 	}
@@ -414,7 +414,7 @@ func TestHydrateWithLabels_DebugMode(t *testing.T) {
 	if err := os.WriteFile(prsPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("failed to write prs file: %v", err)
 	}
-	
+
 	// Test with debug mode enabled
 	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, true)
 	if err != nil {
@@ -428,7 +428,7 @@ func TestHydrateWithLabels_FileReadError(t *testing.T) {
 		ExistingLabels: map[string]bool{},
 		CreatedLabels:  []string{},
 	}
-	
+
 	// Use non-existent files
 	err := HydrateWithLabels(client, "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, true, true, false)
 	if err == nil {

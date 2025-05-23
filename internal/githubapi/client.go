@@ -9,24 +9,15 @@ import (
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/api"
-	graphql "github.com/cli/shurcooL-graphql"
 )
 
 // GHClient is the main client for all GitHub API operations
 type GHClient struct {
 	Owner      string
 	Repo       string
-	gqlClient  *GQLClient
+	gqlClient  *api.GraphQLClient
 	restClient *RESTClient
 	logger     Logger
-}
-
-// GQLClient wraps the GraphQL client for testability
-type GQLClient struct {
-	client interface {
-		Query(string, interface{}, map[string]interface{}) error
-		Mutate(string, interface{}, map[string]interface{}) error
-	}
 }
 
 // RESTClient wraps the REST client for testability
@@ -38,17 +29,13 @@ type RESTClient struct {
 
 func NewGHClient(owner, repo string) *GHClient {
 	// Create GraphQL and REST clients using go-gh
-	var gqlClient *GQLClient
-	var restClient *RESTClient
-
-	gqlRawClient, err := api.DefaultGraphQLClient()
-	if err == nil {
-		gqlClient = &GQLClient{client: gqlRawClient}
-	} else {
+	gqlClient, err := api.DefaultGraphQLClient()
+	if err != nil {
 		fmt.Printf("Warning: Failed to initialize GraphQL client: %v\n", err)
 	}
 
 	restRawClient, err := api.DefaultRESTClient()
+	var restClient *RESTClient
 	if err == nil {
 		restClient = &RESTClient{client: restRawClient}
 	} else {
@@ -74,16 +61,6 @@ func (c *GHClient) debugLog(format string, args ...interface{}) {
 	if c.logger != nil {
 		c.logger.Debug(format, args...)
 	}
-}
-
-// Query executes a GraphQL query
-func (c *GQLClient) Query(name string, query interface{}, variables map[string]interface{}) error {
-	return c.client.Query(name, query, variables)
-}
-
-// Mutate executes a GraphQL mutation
-func (c *GQLClient) Mutate(name string, query interface{}, variables map[string]interface{}) error {
-	return c.client.Mutate(name, query, variables)
 }
 
 // Request makes an HTTP request to the REST API
@@ -143,33 +120,49 @@ func (c *GHClient) ListLabels() ([]string, error) {
 
 	c.debugLog("Fetching labels from repository %s/%s", c.Owner, c.Repo)
 
-	var query struct {
+	labelsQuery := `
+		query($owner: String!, $name: String!) {
+			repository(owner: $owner, name: $name) {
+				labels(first: 100) {
+					nodes {
+						name
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}
+	`
+
+	var response struct {
 		Repository struct {
 			Labels struct {
 				Nodes []struct {
-					Name string
-				}
+					Name string `json:"name"`
+				} `json:"nodes"`
 				PageInfo struct {
-					HasNextPage bool
-					EndCursor   string
-				}
-			} `graphql:"labels(first: 100)"`
-		} `graphql:"repository(owner: $owner, name: $name)"`
+					HasNextPage bool   `json:"hasNextPage"`
+					EndCursor   string `json:"endCursor"`
+				} `json:"pageInfo"`
+			} `json:"labels"`
+		} `json:"repository"`
 	}
 
 	variables := map[string]interface{}{
-		"owner": graphql.String(c.Owner),
-		"name":  graphql.String(c.Repo),
+		"owner": c.Owner,
+		"name":  c.Repo,
 	}
 
-	err := c.gqlClient.Query("RepositoryLabels", &query, variables)
+	err := c.gqlClient.Do(labelsQuery, variables, &response)
 	if err != nil {
 		c.debugLog("Failed to fetch labels: %v", err)
 		return nil, fmt.Errorf("failed to fetch labels: %w", err)
 	}
 
-	labels := make([]string, 0, len(query.Repository.Labels.Nodes))
-	for _, label := range query.Repository.Labels.Nodes {
+	labels := make([]string, 0, len(response.Repository.Labels.Nodes))
+	for _, label := range response.Repository.Labels.Nodes {
 		labels = append(labels, label.Name)
 	}
 
@@ -188,7 +181,7 @@ func (c *GHClient) CreateLabel(label string) error {
 	path := fmt.Sprintf("repos/%s/%s/labels", c.Owner, c.Repo)
 	payload := map[string]interface{}{
 		"name":        label,
-		"description": fmt.Sprintf("Label created by gh-demo hydration tool"),
+		"description": "Label created by gh-demo hydration tool",
 		"color":       "ededed", // Light gray color as default
 	}
 
@@ -236,40 +229,47 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 
 	c.debugLog("Creating discussion '%s' in repository %s/%s", disc.Title, c.Owner, c.Repo)
 
-	// First, get the repository ID and verify discussions are enabled
-	var repoQuery struct {
+	// First, get the repository ID and discussion categories
+	repoQuery := `
+		query($owner: String!, $name: String!) {
+			repository(owner: $owner, name: $name) {
+				id
+				discussionCategories(first: 50) {
+					nodes {
+						id
+						name
+					}
+				}
+			}
+		}
+	`
+
+	var repoResponse struct {
 		Repository struct {
-			ID                   string
-			HasDiscussionsEnabled bool
+			ID         string `json:"id"`
 			Categories struct {
 				Nodes []struct {
-					ID   string
-					Name string
-				}
-			} `graphql:"discussionCategories(first: 50)"`
-		} `graphql:"repository(owner: $owner, name: $name)"`
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"nodes"`
+			} `json:"discussionCategories"`
+		} `json:"repository"`
 	}
 
 	repoVariables := map[string]interface{}{
-		"owner": graphql.String(c.Owner),
-		"name":  graphql.String(c.Repo),
+		"owner": c.Owner,
+		"name":  c.Repo,
 	}
 
-	err := c.gqlClient.Query("RepositoryInfo", &repoQuery, repoVariables)
+	err := c.gqlClient.Do(repoQuery, repoVariables, &repoResponse)
 	if err != nil {
 		c.debugLog("Failed to fetch repository info for discussion: %v", err)
 		return fmt.Errorf("failed to fetch repository info: %w", err)
 	}
-	
-	// Check if discussions are enabled for the repository
-	if !repoQuery.Repository.HasDiscussionsEnabled {
-		c.debugLog("Discussions are not enabled for repository %s/%s", c.Owner, c.Repo)
-		return fmt.Errorf("discussions are not enabled for repository %s/%s", c.Owner, c.Repo)
-	}
 
-	// Log available categories for debugging
-	availableCategories := make([]string, 0, len(repoQuery.Repository.Categories.Nodes))
-	for _, cat := range repoQuery.Repository.Categories.Nodes {
+	// Get available categories for debugging
+	availableCategories := make([]string, 0, len(repoResponse.Repository.Categories.Nodes))
+	for _, cat := range repoResponse.Repository.Categories.Nodes {
 		availableCategories = append(availableCategories, cat.Name)
 	}
 	c.debugLog("Available discussion categories: %v", availableCategories)
@@ -277,7 +277,7 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 	// Find the category ID that matches the requested category name
 	var categoryID string
 	var matchedCategory string
-	for _, category := range repoQuery.Repository.Categories.Nodes {
+	for _, category := range repoResponse.Repository.Categories.Nodes {
 		c.debugLog("Comparing category '%s' with requested '%s'", category.Name, disc.Category)
 		if strings.EqualFold(category.Name, disc.Category) {
 			categoryID = category.ID
@@ -297,97 +297,75 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 		disc.Category, categoryID, matchedCategory)
 
 	// Create the discussion
-	var mutation struct {
+	createMutation := `
+		mutation($input: CreateDiscussionInput!) {
+			createDiscussion(input: $input) {
+				discussion {
+					id
+					number
+					title
+					url
+				}
+			}
+		}
+	`
+
+	var mutationResponse struct {
 		CreateDiscussion struct {
 			Discussion struct {
-				ID  string
-				URL string
-			}
-		} `graphql:"createDiscussion(input: $input)"`
+				ID     string `json:"id"`
+				Number int    `json:"number"`
+				Title  string `json:"title"`
+				URL    string `json:"url"`
+			} `json:"discussion"`
+		} `json:"createDiscussion"`
 	}
 
 	mutationVariables := map[string]interface{}{
 		"input": map[string]interface{}{
-			"repositoryId": repoQuery.Repository.ID,
+			"repositoryId": repoResponse.Repository.ID,
 			"categoryId":   categoryID,
 			"title":        disc.Title,
 			"body":         disc.Body,
 		},
 	}
 
-	err = c.gqlClient.Mutate("CreateDiscussion", &mutation, mutationVariables)
+	// Debug: Log the exact variables being sent to GitHub
+	inputData, _ := json.MarshalIndent(mutationVariables, "", "  ")
+	c.debugLog("Mutation input: %s", string(inputData))
+
+	err = c.gqlClient.Do(createMutation, mutationVariables, &mutationResponse)
 	if err != nil {
 		c.debugLog("Failed to create discussion '%s': %v", disc.Title, err)
 		return fmt.Errorf("failed to create discussion: %w", err)
 	}
 	
+	// Debug: Log what we got back from GitHub
+	c.debugLog("GitHub response - Discussion.ID: '%s', Number: %d, Title: '%s', URL: '%s'",
+		mutationResponse.CreateDiscussion.Discussion.ID,
+		mutationResponse.CreateDiscussion.Discussion.Number,
+		mutationResponse.CreateDiscussion.Discussion.Title,
+		mutationResponse.CreateDiscussion.Discussion.URL)
+	
 	// Verify discussion was created by checking for a valid ID and URL
-	if mutation.CreateDiscussion.Discussion.ID == "" {
+	if mutationResponse.CreateDiscussion.Discussion.ID == "" {
 		c.debugLog("Discussion creation for '%s' failed - no Discussion ID returned", disc.Title)
 		return fmt.Errorf("discussion creation for '%s' failed - no Discussion ID returned from GitHub API", disc.Title)
 	}
 	
-	discussionURL := mutation.CreateDiscussion.Discussion.URL
-	c.debugLog("Discussion created with ID: %s, URL: %s", 
-		mutation.CreateDiscussion.Discussion.ID, discussionURL)
+	discussionID := mutationResponse.CreateDiscussion.Discussion.ID
+	discussionURL := mutationResponse.CreateDiscussion.Discussion.URL
+	c.debugLog("Discussion created with ID: %s, URL: %s", discussionID, discussionURL)
 
 	// Add labels if specified
-	labelErrors := []string{}
-	if len(disc.Labels) > 0 && mutation.CreateDiscussion.Discussion.ID != "" {
+	if len(disc.Labels) > 0 && mutationResponse.CreateDiscussion.Discussion.ID != "" {
 		c.debugLog("Adding %d labels to discussion '%s'", len(disc.Labels), disc.Title)
-		
+
 		// Add labels to the discussion using the discussion ID
 		for _, label := range disc.Labels {
-			var labelMutation struct {
-				AddLabelsToLabelable struct {
-					Labelable struct {
-						ID string
-					}
-				} `graphql:"addLabelsToLabelable(input: $input)"`
-			}
-			
-			// First, we need to find the label ID for the label name
-			var labelQuery struct {
-				Repository struct {
-					Label struct {
-						ID string
-					} `graphql:"label(name: $name)"`
-				} `graphql:"repository(owner: $owner, name: $repo)"`
-			}
-			
-			labelVariables := map[string]interface{}{
-				"owner": graphql.String(c.Owner),
-				"repo":  graphql.String(c.Repo),
-				"name":  graphql.String(label),
-			}
-			
-			err = c.gqlClient.Query("GetLabelID", &labelQuery, labelVariables)
+			err := c.addLabelToDiscussion(mutationResponse.CreateDiscussion.Discussion.ID, label)
 			if err != nil {
-				errMsg := fmt.Sprintf("failed to find label '%s' for discussion: %v", label, err)
-				labelErrors = append(labelErrors, errMsg)
-				c.debugLog(errMsg)
-				continue // Skip this label if not found
-			}
-			
-			if labelQuery.Repository.Label.ID == "" {
-				errMsg := fmt.Sprintf("label '%s' not found in repository", label)
-				labelErrors = append(labelErrors, errMsg)
-				c.debugLog(errMsg)
-				continue
-			}
-			
-			labelMutationVariables := map[string]interface{}{
-				"input": map[string]interface{}{
-					"labelableId": mutation.CreateDiscussion.Discussion.ID,
-					"labelIds":    []string{labelQuery.Repository.Label.ID},
-				},
-			}
-			
-			err = c.gqlClient.Mutate("AddLabelToDiscussion", &labelMutation, labelMutationVariables)
-			if err != nil {
-				errMsg := fmt.Sprintf("failed to add label '%s' to discussion: %v", label, err)
-				labelErrors = append(labelErrors, errMsg)
-				c.debugLog(errMsg)
+				c.debugLog("Failed to add label '%s' to discussion: %v", label, err)
 				// Continue with other labels even if one fails
 			} else {
 				c.debugLog("Successfully added label '%s' to discussion", label)
@@ -395,16 +373,73 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 		}
 	}
 
-	// Report success but include any label errors in debug info
-	if len(labelErrors) > 0 {
-		c.debugLog("Created discussion '%s' (URL: %s) with %d label errors: %v", 
-			disc.Title, discussionURL, len(labelErrors), labelErrors)
-	} else {
-		c.debugLog("Successfully created discussion '%s' (URL: %s) with all labels", 
-			disc.Title, discussionURL)
+	c.debugLog("Successfully created discussion '%s' (URL: %s)", disc.Title, discussionURL)
+	return nil
+}
+
+// addLabelToDiscussion is a helper method to add a label to a discussion
+func (c *GHClient) addLabelToDiscussion(discussionID, labelName string) error {
+	// First, find the label ID for the label name
+	labelQuery := `
+		query($owner: String!, $repo: String!, $name: String!) {
+			repository(owner: $owner, name: $repo) {
+				label(name: $name) {
+					id
+				}
+			}
+		}
+	`
+
+	var labelResponse struct {
+		Repository struct {
+			Label struct {
+				ID string `json:"id"`
+			} `json:"label"`
+		} `json:"repository"`
 	}
-	
-	c.debugLog("Discussion URL: %s", discussionURL)
+
+	labelVariables := map[string]interface{}{
+		"owner": c.Owner,
+		"repo":  c.Repo,
+		"name":  labelName,
+	}
+
+	err := c.gqlClient.Do(labelQuery, labelVariables, &labelResponse)
+	if err != nil {
+		return fmt.Errorf("failed to find label '%s': %w", labelName, err)
+	}
+
+	if labelResponse.Repository.Label.ID == "" {
+		return fmt.Errorf("label '%s' not found in repository", labelName)
+	}
+
+	// Add the label to the discussion
+	addLabelMutation := `
+		mutation($input: AddLabelsToLabelableInput!) {
+			addLabelsToLabelable(input: $input) {
+				clientMutationId
+			}
+		}
+	`
+
+	var labelMutationResponse struct {
+		AddLabelsToLabelable struct {
+			ClientMutationID string `json:"clientMutationId"`
+		} `json:"addLabelsToLabelable"`
+	}
+
+	labelMutationVariables := map[string]interface{}{
+		"input": map[string]interface{}{
+			"labelableId": discussionID,
+			"labelIds":    []string{labelResponse.Repository.Label.ID},
+		},
+	}
+
+	err = c.gqlClient.Do(addLabelMutation, labelMutationVariables, &labelMutationResponse)
+	if err != nil {
+		return fmt.Errorf("failed to add label '%s' to discussion: %w", labelName, err)
+	}
+
 	return nil
 }
 
