@@ -72,8 +72,8 @@ func TestLayeredError_WithContext(t *testing.T) {
 	err := NewLayeredError("file", "read_config", "file not found", nil)
 
 	// Add context
-	err.WithContext("path", "/path/to/config.json")
-	err.WithContext("expected_format", "JSON")
+	err = err.WithContext("path", "/path/to/config.json")
+	err = err.WithContext("expected_format", "JSON")
 
 	if err.Context["path"] != "/path/to/config.json" {
 		t.Errorf("Expected context path = '/path/to/config.json', got %q", err.Context["path"])
