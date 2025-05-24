@@ -9,10 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/config"
+	"github.com/chrisreddington/gh-demo/internal/errors"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
@@ -35,14 +35,14 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 
 	issues, discussions, pullRequests, err := HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath, includeIssues, includeDiscussions, includePullRequests)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load configuration files: %w", err)
 	}
 
 	// Try to read explicit label definitions from labels.json
 	labelsPath := filepath.Join(filepath.Dir(issuesPath), "labels.json")
 	explicitLabels, err := ReadLabelsJSON(labelsPath)
 	if err != nil {
-		return fmt.Errorf("failed to read labels configuration: %w", err)
+		return fmt.Errorf("failed to read labels configuration from %s: %w", labelsPath, err)
 	}
 
 	// Collect label names referenced in content
@@ -151,7 +151,7 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 
 	// If any errors occurred, return them as a combined error but don't fail completely
 	if len(allErrors) > 0 {
-		return fmt.Errorf("some items failed to create:\n  - %s", strings.Join(allErrors, "\n  - "))
+		return errors.NewPartialFailureError(allErrors)
 	}
 
 	return nil
@@ -210,30 +210,30 @@ func HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath string, incl
 	if includeIssues {
 		data, err := os.ReadFile(issuesPath)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, fmt.Errorf("failed to read issues file '%s': %w", issuesPath, err)
 		}
 		if err := json.Unmarshal(data, &issues); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, fmt.Errorf("failed to parse issues file '%s': %w", issuesPath, err)
 		}
 	}
 
 	if includeDiscussions {
 		data, err := os.ReadFile(discussionsPath)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, fmt.Errorf("failed to read discussions file '%s': %w", discussionsPath, err)
 		}
 		if err := json.Unmarshal(data, &discussions); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, fmt.Errorf("failed to parse discussions file '%s': %w", discussionsPath, err)
 		}
 	}
 
 	if includePullRequests {
 		data, err := os.ReadFile(pullRequestsPath)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, fmt.Errorf("failed to read pull requests file '%s': %w", pullRequestsPath, err)
 		}
 		if err := json.Unmarshal(data, &pullRequests); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, fmt.Errorf("failed to parse pull requests file '%s': %w", pullRequestsPath, err)
 		}
 	}
 
