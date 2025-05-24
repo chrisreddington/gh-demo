@@ -11,11 +11,17 @@ gh extension install chrisreddington/gh-demo
 ## Usage
 
 ```bash
-# Hydrate a repository with demo content
+# Hydrate a repository with demo content (uses default .github/demos directory)
 gh demo hydrate --owner myuser --repo myrepo
+
+# Hydrate with custom configuration directory
+gh demo hydrate --owner myuser --repo myrepo --config-path custom/config/path
 
 # Hydrate only with issues
 gh demo hydrate --issues --no-discussions --no-prs
+
+# Enable debug mode for detailed logging
+gh demo hydrate --owner myuser --repo myrepo --debug
 
 # Get help
 gh demo hydrate --help
@@ -94,11 +100,25 @@ Example:
 
 ## File Structure
 
-The hydration tool expects JSON files in the `.github/demos/` directory:
+The hydration tool expects JSON files in the configuration directory. By default, this is the `.github/demos/` directory, but it can be customized using the `--config-path` flag:
 
-- `.github/demos/issues.json`: Array of issue objects
-- `.github/demos/discussions.json`: Array of discussion objects
-- `.github/demos/prs.json`: Array of pull request objects
+- `<config-path>/issues.json`: Array of issue objects
+- `<config-path>/discussions.json`: Array of discussion objects
+- `<config-path>/prs.json`: Array of pull request objects
+
+### Default Configuration Directory
+
+```bash
+gh demo hydrate --owner myorg --repo myrepo
+# Uses .github/demos/ directory by default
+```
+
+### Custom Configuration Directory
+
+```bash
+gh demo hydrate --owner myorg --repo myrepo --config-path custom/config/path
+# Uses custom/config/path/ directory relative to project root
+```
 
 ## Contributing
 

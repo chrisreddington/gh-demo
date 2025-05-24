@@ -58,6 +58,16 @@ func TestNewHydrateCmd(t *testing.T) {
 	if debugFlag == nil {
 		t.Error("Expected debug flag to be defined")
 	}
+
+	configPathFlag := cmd.Flags().Lookup("config-path")
+	if configPathFlag == nil {
+		t.Error("Expected config-path flag to be defined")
+	} else {
+		// Test default value for config-path
+		if configPathFlag.DefValue != ".github/demos" {
+			t.Errorf("Expected config-path default value to be '.github/demos', got %s", configPathFlag.DefValue)
+		}
+	}
 }
 
 func TestHydrateCmd_MissingRequiredParams(t *testing.T) {
@@ -474,6 +484,69 @@ func TestNewHydrateCmd_ErrorHandling(t *testing.T) {
 			err := cmd.ParseFlags(scenario)
 			if err != nil {
 				t.Errorf("Flag parsing should not fail, actual execution would fail: %v", err)
+			}
+		})
+	}
+}
+
+// TestNewHydrateCmd_ConfigPath tests that the config-path parameter works correctly
+func TestNewHydrateCmd_ConfigPath(t *testing.T) {
+	tests := []struct {
+		name         string
+		configPath   string
+		expectedPath string
+	}{
+		{
+			name:         "default config path",
+			configPath:   "",
+			expectedPath: ".github/demos",
+		},
+		{
+			name:         "custom config path",
+			configPath:   "custom/config/path",
+			expectedPath: "custom/config/path",
+		},
+		{
+			name:         "absolute path",
+			configPath:   "/absolute/path/config",
+			expectedPath: "/absolute/path/config",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := NewHydrateCmd()
+
+			// Set up the command with test arguments
+			args := []string{"--owner", "testowner", "--repo", "testrepo"}
+			if tt.configPath != "" {
+				args = append(args, "--config-path", tt.configPath)
+			}
+			cmd.SetArgs(args)
+
+			// Parse flags to ensure the config-path value is set correctly
+			err := cmd.Flags().Parse(args)
+			if err != nil {
+				t.Fatalf("Failed to parse flags: %v", err)
+			}
+
+			configPathFlag := cmd.Flags().Lookup("config-path")
+			if configPathFlag == nil {
+				t.Fatal("config-path flag should be defined")
+			}
+
+			expectedValue := tt.expectedPath
+			if tt.configPath == "" {
+				expectedValue = configPathFlag.DefValue
+			}
+
+			actualValue, err := cmd.Flags().GetString("config-path")
+			if err != nil {
+				t.Fatalf("Failed to get config-path value: %v", err)
+			}
+
+			if actualValue != expectedValue {
+				t.Errorf("Expected config-path to be %s, got %s", expectedValue, actualValue)
 			}
 		})
 	}

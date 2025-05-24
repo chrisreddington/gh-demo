@@ -14,7 +14,7 @@ import (
 )
 
 // executeHydrate contains the core hydration logic separated from CLI concerns
-func executeHydrate(owner, repo string, issues, discussions, prs, debug bool) error {
+func executeHydrate(owner, repo, configPath string, issues, discussions, prs, debug bool) error {
 	resolvedOwner := strings.TrimSpace(owner)
 	resolvedRepo := strings.TrimSpace(repo)
 	if resolvedOwner == "" || resolvedRepo == "" {
@@ -37,9 +37,9 @@ func executeHydrate(owner, repo string, issues, discussions, prs, debug bool) er
 	if err != nil {
 		return fmt.Errorf("could not find project root: %v", err)
 	}
-	issuesPath := filepath.Join(root, ".github", "demos", "issues.json")
-	discussionsPath := filepath.Join(root, ".github", "demos", "discussions.json")
-	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
+	issuesPath := filepath.Join(root, configPath, "issues.json")
+	discussionsPath := filepath.Join(root, configPath, "discussions.json")
+	prsPath := filepath.Join(root, configPath, "prs.json")
 
 	client, err := githubapi.NewGHClient(resolvedOwner, resolvedRepo)
 	if err != nil {
@@ -68,7 +68,7 @@ func executeHydrate(owner, repo string, issues, discussions, prs, debug bool) er
 
 // NewHydrateCmd returns the Cobra command for repository hydration
 func NewHydrateCmd() *cobra.Command {
-	var owner, repo string
+	var owner, repo, configPath string
 	var issues, discussions, prs bool
 	var debug bool
 
@@ -76,7 +76,7 @@ func NewHydrateCmd() *cobra.Command {
 		Use:   "hydrate",
 		Short: "Hydrate a repository with demo issues, discussions, and pull requests",
 		Run: func(cmd *cobra.Command, args []string) {
-			err := executeHydrate(owner, repo, issues, discussions, prs, debug)
+			err := executeHydrate(owner, repo, configPath, issues, discussions, prs, debug)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -86,6 +86,7 @@ func NewHydrateCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&owner, "owner", "", "GitHub repository owner (required)")
 	cmd.Flags().StringVar(&repo, "repo", "", "GitHub repository name (required)")
+	cmd.Flags().StringVar(&configPath, "config-path", ".github/demos", "Path to configuration files relative to project root")
 	cmd.Flags().BoolVar(&issues, "issues", true, "Include issues")
 	cmd.Flags().BoolVar(&discussions, "discussions", true, "Include discussions")
 	cmd.Flags().BoolVar(&prs, "prs", true, "Include pull requests")

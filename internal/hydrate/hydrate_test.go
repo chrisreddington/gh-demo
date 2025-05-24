@@ -37,11 +37,14 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 
 // MockGitHubClient is a mock for label operations
 type MockGitHubClient struct {
-	ExistingLabels map[string]bool
-	CreatedLabels  []string
-	FailPRs        bool // If true, CreatePR will fail
-	FailIssues     bool // If true, CreateIssue will fail
-	FailListLabels bool // If true, ListLabels will fail
+	ExistingLabels     map[string]bool
+	CreatedLabels      []string
+	FailPRs            bool // If true, CreatePR will fail
+	FailIssues         bool // If true, CreateIssue will fail
+	FailListLabels     bool // If true, ListLabels will fail
+	CreatedIssues      []Issue
+	CreatedDiscussions []Discussion
+	CreatedPRs         []PullRequest
 }
 
 // Add stubs for the rest of the interface
@@ -49,15 +52,20 @@ func (m *MockGitHubClient) CreateIssue(issue githubapi.IssueInput) error {
 	if m.FailIssues {
 		return fmt.Errorf("simulated issue creation failure for: %s", issue.Title)
 	}
+	m.CreatedIssues = append(m.CreatedIssues, Issue{Title: issue.Title, Body: issue.Body, Labels: issue.Labels, Assignees: issue.Assignees})
 	return nil
 }
 
-func (m *MockGitHubClient) CreateDiscussion(d githubapi.DiscussionInput) error { return nil }
+func (m *MockGitHubClient) CreateDiscussion(d githubapi.DiscussionInput) error {
+	m.CreatedDiscussions = append(m.CreatedDiscussions, Discussion{Title: d.Title, Body: d.Body, Category: d.Category, Labels: d.Labels})
+	return nil
+}
 
 func (m *MockGitHubClient) CreatePR(pr githubapi.PRInput) error {
 	if m.FailPRs {
 		return fmt.Errorf("simulated PR creation failure for: %s (head: %s, base: %s)", pr.Title, pr.Head, pr.Base)
 	}
+	m.CreatedPRs = append(m.CreatedPRs, PullRequest{Title: pr.Title, Body: pr.Body, Head: pr.Head, Base: pr.Base, Labels: pr.Labels, Assignees: pr.Assignees})
 	return nil
 }
 
@@ -653,5 +661,60 @@ func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "some items failed to create") {
 		t.Errorf("Expected 'some items failed to create' error, got: %v", err)
+	}
+}
+
+// TestConfigurablePaths tests that different configuration paths work correctly
+func TestConfigurablePaths(t *testing.T) {
+	// Create temporary project root
+	tempRoot := t.TempDir()
+
+	// Test with custom config path
+	configPath := "custom/config/path"
+	configDir := filepath.Join(tempRoot, configPath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config directory: %v", err)
+	}
+
+	// Setup basic test files
+	issuesPath := filepath.Join(configDir, "issues.json")
+	issuesJSON := `[{"title": "Test Issue", "body": "Test body", "labels": ["bug"], "assignees": []}]`
+	if err := os.WriteFile(issuesPath, []byte(issuesJSON), 0644); err != nil {
+		t.Fatalf("Failed to create issues.json: %v", err)
+	}
+
+	discussionsPath := filepath.Join(configDir, "discussions.json")
+	discussionsJSON := `[{"title": "Test Discussion", "body": "Test body", "category": "General", "labels": ["question"]}]`
+	if err := os.WriteFile(discussionsPath, []byte(discussionsJSON), 0644); err != nil {
+		t.Fatalf("Failed to create discussions.json: %v", err)
+	}
+
+	prsPath := filepath.Join(configDir, "prs.json")
+	prsJSON := `[{"title": "Test PR", "body": "Test body", "head": "feature", "base": "main", "labels": ["enhancement"], "assignees": []}]`
+	if err := os.WriteFile(prsPath, []byte(prsJSON), 0644); err != nil {
+		t.Fatalf("Failed to create prs.json: %v", err)
+	}
+
+	// Create mock client
+	client := &MockGitHubClient{
+		ExistingLabels: map[string]bool{},
+		CreatedLabels:  []string{},
+	}
+
+	// Test hydration with the custom paths
+	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	if err != nil {
+		t.Errorf("HydrateWithLabels failed with custom config path: %v", err)
+	}
+
+	// Verify that the mock client was called correctly
+	if len(client.CreatedIssues) == 0 {
+		t.Error("Expected at least one issue to be created")
+	}
+	if len(client.CreatedDiscussions) == 0 {
+		t.Error("Expected at least one discussion to be created")
+	}
+	if len(client.CreatedPRs) == 0 {
+		t.Error("Expected at least one PR to be created")
 	}
 }
