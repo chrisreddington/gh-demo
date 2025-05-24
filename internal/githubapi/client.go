@@ -1,3 +1,20 @@
+/*
+Package githubapi provides GitHub API client functionality for the gh-demo CLI extension.
+
+This package implements two patterns for client creation:
+1. NewGHClient() - Creates a real GitHub client using go-gh authentication
+2. NewGHClientWithClients() - Accepts injected clients for testing with mocks
+
+The dependency injection pattern allows for comprehensive unit testing without requiring
+GitHub authentication, while still maintaining integration test capabilities when
+credentials are available.
+
+Testing Strategy:
+- Unit tests use NewGHClientWithClients() with mock clients
+- Integration tests use NewGHClient() and skip when authentication is unavailable
+- CI runs tests in short mode to skip integration tests by default
+*/
+
 package githubapi
 
 import (
@@ -60,6 +77,26 @@ func NewGHClient(owner, repo string) (*GHClient, error) {
 	}
 
 	restClient := &RESTClient{client: restRawClient}
+
+	return &GHClient{
+		Owner:      strings.TrimSpace(owner),
+		Repo:       strings.TrimSpace(repo),
+		gqlClient:  gqlClient,
+		restClient: restClient,
+		logger:     nil, // Will be set when SetLogger is called
+	}, nil
+}
+
+// NewGHClientWithClients creates a new GitHub API client with provided clients for testing.
+// This constructor allows dependency injection of mock clients for unit testing while
+// maintaining the same validation and initialization logic as NewGHClient.
+func NewGHClientWithClients(owner, repo string, gqlClient GraphQLClient, restClient *RESTClient) (*GHClient, error) {
+	if strings.TrimSpace(owner) == "" {
+		return nil, fmt.Errorf("owner cannot be empty")
+	}
+	if strings.TrimSpace(repo) == "" {
+		return nil, fmt.Errorf("repo cannot be empty")
+	}
 
 	return &GHClient{
 		Owner:      strings.TrimSpace(owner),

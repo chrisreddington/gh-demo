@@ -38,8 +38,11 @@ func (m *MockRESTClient) Request(method string, path string, body io.Reader) (*h
 }
 
 // Tests for GHClient
-func TestNewGHClient(t *testing.T) {
-	client, err := NewGHClient("testowner", "testrepo")
+func TestNewGHClientWithClients(t *testing.T) {
+	mockGQL := &MockGraphQLClient{}
+	mockREST := &RESTClient{client: &MockRESTClient{}}
+
+	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -51,7 +54,10 @@ func TestNewGHClient(t *testing.T) {
 	}
 }
 
-func TestNewGHClient_ValidationErrors(t *testing.T) {
+func TestNewGHClientWithClients_ValidationErrors(t *testing.T) {
+	mockGQL := &MockGraphQLClient{}
+	mockREST := &RESTClient{client: &MockRESTClient{}}
+
 	tests := []struct {
 		name        string
 		owner       string
@@ -97,7 +103,7 @@ func TestNewGHClient_ValidationErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := NewGHClient(tt.owner, tt.repo)
+			client, err := NewGHClientWithClients(tt.owner, tt.repo, mockGQL, mockREST)
 
 			if tt.expectError {
 				if err == nil {
@@ -504,7 +510,10 @@ func TestCreatePRValidation(t *testing.T) {
 }
 
 func TestSetLogger(t *testing.T) {
-	client, err := NewGHClient("testowner", "testrepo")
+	mockGQL := &MockGraphQLClient{}
+	mockREST := &RESTClient{client: &MockRESTClient{}}
+	
+	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -529,7 +538,10 @@ func (m *MockLogger) Info(format string, args ...interface{}) {
 }
 
 func TestDebugLog(t *testing.T) {
-	client, err := NewGHClient("testowner", "testrepo")
+	mockGQL := &MockGraphQLClient{}
+	mockREST := &RESTClient{client: &MockRESTClient{}}
+	
+	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -984,5 +996,29 @@ func TestCreatePR_RequestFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to create pull request") {
 		t.Errorf("Expected 'failed to create pull request' error, got: %v", err)
+	}
+}
+
+// TestNewGHClient_Integration tests the real GitHub client creation
+// This test requires authentication and should be skipped in CI without credentials
+func TestNewGHClient_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// This test will only pass if GitHub credentials are available
+	client, err := NewGHClient("testowner", "testrepo")
+	if err != nil {
+		// If error contains authentication message, skip the test
+		if strings.Contains(err.Error(), "authentication token not found") {
+			t.Skip("Skipping integration test: GitHub authentication not available")
+		}
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	if client.Owner != "testowner" {
+		t.Errorf("Expected owner to be 'testowner', got '%s'", client.Owner)
+	}
+	if client.Repo != "testrepo" {
+		t.Errorf("Expected repo to be 'testrepo', got '%s'", client.Repo)
 	}
 }

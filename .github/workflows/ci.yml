@@ -31,4 +31,6 @@ jobs:
           version: latest
 
       - name: Run tests
-        run: go test -v ./...
+        run: go test -short -v ./...
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

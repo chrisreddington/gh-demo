@@ -140,10 +140,42 @@ gh demo hydrate --owner myorg --repo myrepo --config-path custom/config/path
 # Uses custom/config/path/ directory relative to project root
 ```
 
-## Contributing
+## Testing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+This project follows a test-driven development approach with comprehensive test coverage.
 
-## License
+### Test Types
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+1. **Unit Tests**: Use mocked dependencies for fast, isolated testing
+2. **Integration Tests**: Test real GitHub API interactions (skipped in CI without auth)
+
+### Running Tests
+
+```bash
+# Run all tests
+go test ./...
+
+# Run tests in short mode (skips integration tests)
+go test -short ./...
+
+# Run tests with verbose output
+go test -v ./...
+
+# Run specific package tests
+go test ./internal/githubapi/...
+```
+
+### Testing Strategy
+
+- **GitHub API Client**: Uses dependency injection with `NewGHClientWithClients()` for unit tests and `NewGHClient()` for integration tests
+- **Authentication**: Unit tests use mocks and don't require GitHub credentials
+- **CI/CD**: Runs tests in short mode to skip integration tests that require authentication
+- **Coverage**: All business logic is covered by unit tests using table-driven test patterns
+
+### Test Environment
+
+Tests run against mock implementations by default. Integration tests that require GitHub authentication will:
+- Skip automatically if no credentials are available
+- Run in short mode during CI/CD to avoid authentication issues
+- Can be enabled locally when GitHub CLI authentication is configured
+````
