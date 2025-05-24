@@ -5,26 +5,13 @@ This project (gh-demo) is a GitHub CLI Extension written in Go to automate repos
 
 ## Code Quality Standards
 
-### Context Management
-- **ALL** functions that perform I/O operations MUST accept `context.Context` as the first parameter
-- Pass context through the entire call chain: CLI → business logic → API clients
-- Use `context.WithTimeout()` for all external API calls to prevent hanging
-
-### Error Handling
-- Use typed errors from `/internal/errors` package, never string-based error matching
-- Wrap ALL errors with meaningful context using `fmt.Errorf("operation failed: %w", err)`
-- Every error must be handled. When fixing errcheck linting errors, you may not ignore them.
-  ```
-
-### Structured Logging
-- Replace ALL `fmt.Printf` statements with structured logger calls
-- Use the logger from `/internal/common/logger.go`
-- Include request IDs for tracing API operations
-- Log levels: Debug (internal state), Info (user actions), Error (failures)
-- Example:
-  ```go
-  logger.Info("creating issue", "title", issue.Title, "labels", len(issue.Labels))
-  ```
+### Go Language Standards
+- Follow standard Go idioms and best practices
+- Use comprehensive GoDoc comments for all exported symbols
+- Keep functions small and focused on a single responsibility
+- All method and variable names should be descriptive and follow Go naming conventions. No abbreviations unless they are well-known (e.g., `URL`, `ID`). Even pr should be pullRequest, as an example.
+- Prefer strongly typed interfaces over `interface{}`
+- Separate interface definitions from implementations
 
 ### Testing Requirements
 - Achieve minimum 80% test coverage for all packages
@@ -32,14 +19,6 @@ This project (gh-demo) is a GitHub CLI Extension written in Go to automate repos
 - Mock ALL external dependencies (GitHub API, file system operations)
 - Test error paths, not just happy paths
 - Write tests before implementation (TDD approach)
-
-### Go Language Standards
-- Follow standard Go idioms and best practices
-- Use comprehensive GoDoc comments for all exported symbols
-- Keep functions small and focused on a single responsibility
-- Use meaningful, consistent naming (no arbitrary abbreviations)
-- Prefer strongly typed interfaces over `interface{}`
-- Separate interface definitions from implementations
 
 ### Pre-Commit Requirements
 - The code must build: `go build .`
@@ -88,10 +67,10 @@ main.go         - Application entry point
 - Ensure output works for both human reading and script parsing
 - Maintain consistency in command naming and option structure
 
-### File and Path Handling
-- Always use paths relative to project root (see `findProjectRoot` utility)
-- Never hardcode absolute paths
-- Handle file operations gracefully with proper error context
+### Context Management
+- **ALL** functions that perform I/O operations MUST accept `context.Context` as the first parameter
+- Pass context through the entire call chain: CLI → business logic → API clients
+- Use `context.WithTimeout()` for all external API calls to prevent hanging
 
 ### Documentation Standards
 - Update `README.md` for new features
@@ -99,3 +78,24 @@ main.go         - Application entry point
 - Include usage examples for complex operations
 - Document design decisions and architectural choices
 - Maintain accurate API documentation for internal packages
+
+### Error Handling
+- Use typed errors from `/internal/errors` package, never string-based error matching
+- Wrap ALL errors with meaningful context using `fmt.Errorf("operation failed: %w", err)`
+- Every error must be handled. When fixing errcheck linting errors, you may not ignore them.
+  ```
+
+### File and Path Handling
+- Always use paths relative to project root (see `findProjectRoot` utility)
+- Never hardcode absolute paths
+- Handle file operations gracefully with proper error context
+
+### Structured Logging
+- Replace ALL `fmt.Printf` statements with structured logger calls
+- Use the logger from `/internal/common/logger.go`
+- Include request IDs for tracing API operations
+- Log levels: Debug (internal state), Info (user actions), Error (failures)
+- Example:
+  ```go
+  logger.Info("creating issue", "title", issue.Title, "labels", len(issue.Labels))
+  ```
