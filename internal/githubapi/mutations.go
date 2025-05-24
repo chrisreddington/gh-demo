@@ -81,24 +81,6 @@ const getLabelIdQuery = `
 	}
 `
 
-// addLabelsAndAssigneesToPR adds labels and assignees to an existing pull request
-const addLabelsAndAssigneesToPRMutation = `
-	mutation AddLabelsAndAssignees($issueId: ID!, $labelIds: [ID!], $assigneeIds: [ID!]) {
-		addLabelsToLabelable(input: {
-			labelableId: $issueId
-			labelIds: $labelIds
-		}) {
-			clientMutationId
-		}
-		addAssigneesToAssignable(input: {
-			assignableId: $issueId
-			assigneeIds: $assigneeIds
-		}) {
-			clientMutationId
-		}
-	}
-`
-
 // getUserIdQuery gets user ID by login for assignee operations
 const getUserIdQuery = `
 	query GetUserId($login: String!) {
