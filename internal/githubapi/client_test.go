@@ -2,6 +2,7 @@ package githubapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -1135,4 +1136,47 @@ func TestCreateIssue_ContextTimeout(t *testing.T) {
 	if !strings.Contains(errStr, "timed out") && !strings.Contains(errStr, "cancelled") {
 		t.Errorf("Expected user-friendly timeout message, got: %v", err)
 	}
+}
+
+// TestGraphQLClientWrapper_ContextCancellation tests that long-running operations can be cancelled
+func TestGraphQLClientWrapper_ContextCancellation(t *testing.T) {
+	// Create a mock underlying client that doesn't support context (like go-gh)
+	slowUnderlyingClient := &slowClient{}
+
+	// Wrap it with our graphQLClientWrapper
+	wrapper := &graphQLClientWrapper{client: slowUnderlyingClient}
+
+	// Create context that will cancel after 100ms
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := wrapper.Do(ctx, "test query", nil, nil)
+	duration := time.Since(start)
+
+	// Should return an error due to context timeout
+	if err == nil {
+		t.Error("Expected context timeout error, got nil")
+		return
+	}
+
+	// Should complete quickly (around 100ms), not after 2 seconds
+	// This will fail with current implementation since it can't cancel the underlying call
+	if duration > 500*time.Millisecond {
+		t.Errorf("Operation took too long (%v), context cancellation may not be working", duration)
+	}
+
+	// Should be a context error
+	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context error, got: %v", err)
+	}
+}
+
+// slowClient simulates the go-gh client that doesn't support context
+type slowClient struct{}
+
+func (s *slowClient) Do(query string, variables map[string]interface{}, response interface{}) error {
+	// Simulate a long operation that can't be cancelled (like go-gh client)
+	time.Sleep(2 * time.Second)
+	return nil
 }
