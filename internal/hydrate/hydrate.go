@@ -211,30 +211,36 @@ func HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath string, incl
 	if includeIssues {
 		data, err := os.ReadFile(issuesPath)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to read issues file '%s': %w", issuesPath, err)
+			layeredErr := errors.NewLayeredError("file", "read_issues", "failed to read issues file", err)
+			return nil, nil, nil, layeredErr.WithContext("path", issuesPath)
 		}
 		if err := json.Unmarshal(data, &issues); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to parse issues file '%s': %w", issuesPath, err)
+			layeredErr := errors.NewLayeredError("file", "parse_issues", "failed to parse issues file", err)
+			return nil, nil, nil, layeredErr.WithContext("path", issuesPath)
 		}
 	}
 
 	if includeDiscussions {
 		data, err := os.ReadFile(discussionsPath)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to read discussions file '%s': %w", discussionsPath, err)
+			layeredErr := errors.NewLayeredError("file", "read_discussions", "failed to read discussions file", err)
+			return nil, nil, nil, layeredErr.WithContext("path", discussionsPath)
 		}
 		if err := json.Unmarshal(data, &discussions); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to parse discussions file '%s': %w", discussionsPath, err)
+			layeredErr := errors.NewLayeredError("file", "parse_discussions", "failed to parse discussions file", err)
+			return nil, nil, nil, layeredErr.WithContext("path", discussionsPath)
 		}
 	}
 
 	if includePullRequests {
 		data, err := os.ReadFile(pullRequestsPath)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to read pull requests file '%s': %w", pullRequestsPath, err)
+			layeredErr := errors.NewLayeredError("file", "read_pull_requests", "failed to read pull requests file", err)
+			return nil, nil, nil, layeredErr.WithContext("path", pullRequestsPath)
 		}
 		if err := json.Unmarshal(data, &pullRequests); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to parse pull requests file '%s': %w", pullRequestsPath, err)
+			layeredErr := errors.NewLayeredError("file", "parse_pull_requests", "failed to parse pull requests file", err)
+			return nil, nil, nil, layeredErr.WithContext("path", pullRequestsPath)
 		}
 	}
 
