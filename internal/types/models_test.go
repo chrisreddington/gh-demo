@@ -71,3 +71,22 @@ func TestPullRequestTypeStructure(t *testing.T) {
 		t.Errorf("Expected 1 assignee, got %d", len(pr.Assignees))
 	}
 }
+
+// TestLabelTypeStructure tests that the Label type has the expected fields
+func TestLabelTypeStructure(t *testing.T) {
+	label := Label{
+		Name:        "bug",
+		Description: "Something isn't working",
+		Color:       "d73a4a",
+	}
+
+	if label.Name != "bug" {
+		t.Errorf("Expected Name to be 'bug', got %s", label.Name)
+	}
+	if label.Description != "Something isn't working" {
+		t.Errorf("Expected Description to be 'Something isn't working', got %s", label.Description)
+	}
+	if label.Color != "d73a4a" {
+		t.Errorf("Expected Color to be 'd73a4a', got %s", label.Color)
+	}
+}

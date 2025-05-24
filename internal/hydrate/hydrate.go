@@ -27,6 +27,7 @@ type SectionSummary struct {
 }
 
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
+// It supports both explicit label definitions from labels.json and auto-generated labels with defaults.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
 func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
 	logger := common.NewLogger(debug)
@@ -36,13 +37,49 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 		return err
 	}
 
-	// Collect and ensure all labels exist before creating content
-	labels := CollectLabels(issues, discussions, pullRequests)
-	labelSummary := &SectionSummary{Name: "Labels", Total: len(labels)}
+	// Try to read explicit label definitions from labels.json
+	labelsPath := filepath.Join(filepath.Dir(issuesPath), "labels.json")
+	explicitLabels, err := ReadLabelsJSON(labelsPath)
+	if err != nil {
+		return fmt.Errorf("failed to read labels configuration: %w", err)
+	}
 
-	logger.Debug("Found %d unique labels to ensure exist: %v", len(labels), labels)
+	// Collect label names referenced in content
+	referencedLabelNames := CollectLabels(issues, discussions, pullRequests)
 
-	if err := EnsureLabelsExist(client, labels, logger, labelSummary); err != nil {
+	// Create a map of explicit labels by name for quick lookup
+	explicitLabelMap := make(map[string]types.Label)
+	for _, label := range explicitLabels {
+		explicitLabelMap[label.Name] = label
+	}
+
+	// Build final list of labels to ensure exist
+	var labelsToEnsure []types.Label
+
+	// Add all explicit labels from labels.json
+	labelsToEnsure = append(labelsToEnsure, explicitLabels...)
+
+	// Add any referenced labels that aren't explicitly defined (with defaults)
+	for _, labelName := range referencedLabelNames {
+		if _, exists := explicitLabelMap[labelName]; !exists {
+			// Create a default label for any referenced label not explicitly defined
+			defaultLabel := types.Label{
+				Name:        labelName,
+				Description: "Label created by gh-demo hydration tool",
+				Color:       "ededed", // Light gray default color
+			}
+			labelsToEnsure = append(labelsToEnsure, defaultLabel)
+		}
+	}
+
+	labelSummary := &SectionSummary{Name: "Labels", Total: len(labelsToEnsure)}
+
+	if len(explicitLabels) > 0 {
+		logger.Debug("Found %d explicit label definitions from %s", len(explicitLabels), labelsPath)
+	}
+	logger.Debug("Found %d total labels to ensure exist", len(labelsToEnsure))
+
+	if err := EnsureDefinedLabelsExist(client, labelsToEnsure, logger, labelSummary); err != nil {
 		return fmt.Errorf("failed to ensure labels exist: %w", err)
 	}
 
@@ -119,8 +156,10 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 	return nil
 }
 
-// EnsureLabelsExist checks if each label exists in the repo, and creates it if not.
-func EnsureLabelsExist(client githubapi.GitHubClient, labels []string, logger common.Logger, summary *SectionSummary) error {
+// EnsureDefinedLabelsExist creates any missing labels in the repository.
+// It checks which labels already exist and only creates those that are missing.
+// This function works with full Label objects that include color and description.
+func EnsureDefinedLabelsExist(client githubapi.GitHubClient, labels []types.Label, logger common.Logger, summary *SectionSummary) error {
 	if len(labels) == 0 {
 		return nil
 	}
@@ -138,21 +177,22 @@ func EnsureLabelsExist(client githubapi.GitHubClient, labels []string, logger co
 
 	logger.Debug("Found %d existing labels in repository", len(existing))
 
-	for _, l := range labels {
-		if _, ok := existSet[l]; !ok {
-			logger.Debug("Creating missing label '%s'", l)
-			if err := client.CreateLabel(l); err != nil {
-				errorMsg := fmt.Sprintf("Label '%s': %v", l, err)
+	for _, label := range labels {
+		if _, ok := existSet[label.Name]; !ok {
+			logger.Debug("Creating missing label '%s' (color: %s)", label.Name, label.Color)
+
+			if err := client.CreateLabel(label); err != nil {
+				errorMsg := fmt.Sprintf("Label '%s': %v", label.Name, err)
 				summary.Errors = append(summary.Errors, errorMsg)
 				summary.Failures++
-				logger.Debug("Failed to create label '%s': %v", l, err)
+				logger.Debug("Failed to create label '%s': %v", label.Name, err)
 			} else {
 				summary.Success++
-				logger.Debug("Successfully created label '%s'", l)
+				logger.Debug("Successfully created label '%s' with color '%s'", label.Name, label.Color)
 			}
 		} else {
 			summary.Success++
-			logger.Debug("Label '%s' already exists", l)
+			logger.Debug("Label '%s' already exists", label.Name)
 		}
 	}
 
@@ -223,6 +263,28 @@ func CollectLabels(issues []types.Issue, discussions []types.Discussion, pullReq
 		labels = append(labels, label)
 	}
 	return labels
+}
+
+// ReadLabelsJSON reads label definitions from a JSON file.
+// This allows users to define labels with specific colors and descriptions.
+// Returns an empty slice if the file doesn't exist (not an error condition).
+func ReadLabelsJSON(labelsPath string) ([]types.Label, error) {
+	if _, err := os.Stat(labelsPath); os.IsNotExist(err) {
+		// File doesn't exist, return empty slice (not an error)
+		return []types.Label{}, nil
+	}
+
+	content, err := os.ReadFile(labelsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read labels file '%s': %w", labelsPath, err)
+	}
+
+	var labels []types.Label
+	if err := json.Unmarshal(content, &labels); err != nil {
+		return nil, fmt.Errorf("failed to parse labels JSON from '%s': %w", labelsPath, err)
+	}
+
+	return labels, nil
 }
 
 // FindProjectRoot traverses up from the current file to find the directory containing go.mod

@@ -1,0 +1,42 @@
+[
+  {
+    "name": "bug",
+    "description": "Something isn't working",
+    "color": "d73a4a"
+  },
+  {
+    "name": "enhancement",
+    "description": "New feature or request",
+    "color": "a2eeef"
+  },
+  {
+    "name": "documentation",
+    "description": "Improvements or additions to documentation",
+    "color": "0075ca"
+  },
+  {
+    "name": "good first issue",
+    "description": "Good for newcomers",
+    "color": "7057ff"
+  },
+  {
+    "name": "help wanted",
+    "description": "Extra attention is needed",
+    "color": "008672"
+  },
+  {
+    "name": "question",
+    "description": "Further information is requested",
+    "color": "d876e3"
+  },
+  {
+    "name": "priority-high",
+    "description": "High priority item",
+    "color": "ff6b6b"
+  },
+  {
+    "name": "priority-low",
+    "description": "Low priority item",
+    "color": "95a5a6"
+  }
+]

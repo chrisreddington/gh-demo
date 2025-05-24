@@ -1,8 +1,8 @@
 package githubapi
 
 import (
-"github.com/chrisreddington/gh-demo/internal/common"
-"github.com/chrisreddington/gh-demo/internal/types"
+	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
 // GitHubClient defines the interface for all GitHub API operations needed by the hydration process.
@@ -11,8 +11,8 @@ import (
 type GitHubClient interface {
 	// ListLabels retrieves all existing labels from the repository
 	ListLabels() ([]string, error)
-	// CreateLabel creates a new label in the repository with the given name
-	CreateLabel(label string) error
+	// CreateLabel creates a new label in the repository using the provided label data
+	CreateLabel(label types.Label) error
 	// CreateIssue creates a new issue in the repository using the provided issue data
 	CreateIssue(issue types.Issue) error
 	// CreateDiscussion creates a new discussion in the repository using the provided discussion data

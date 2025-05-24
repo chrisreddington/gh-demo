@@ -153,7 +153,11 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	// Test CreateLabel
-	err := client.CreateLabel("test-label")
+	err := client.CreateLabel(types.Label{
+		Name:        "test-label",
+		Description: "A test label",
+		Color:       "ff0000",
+	})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -547,7 +551,10 @@ func TestCreateLabelError(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreateLabel("test-label")
+	err := client.CreateLabel(types.Label{
+		Name:  "test-label",
+		Color: "ff0000",
+	})
 	if err == nil {
 		t.Error("Expected an error when REST client is nil")
 	}

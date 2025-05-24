@@ -195,28 +195,35 @@ func (c *GHClient) ListLabels() ([]string, error) {
 	return labels, nil
 }
 
-func (c *GHClient) CreateLabel(label string) error {
+// CreateLabel creates a new label in the repository using the provided label data.
+// It validates that the REST client is initialized and creates the label with
+// the specified name, description, and color.
+func (c *GHClient) CreateLabel(label types.Label) error {
 	if c.restClient == nil {
 		return fmt.Errorf("REST client is not initialized")
 	}
 
-	c.debugLog("Creating label '%s' in repository %s/%s", label, c.Owner, c.Repo)
+	c.debugLog("Creating label '%s' (color: %s) in repository %s/%s", label.Name, label.Color, c.Owner, c.Repo)
 
 	// Using the REST API for label creation as it's simpler than GraphQL for this case
 	path := fmt.Sprintf("repos/%s/%s/labels", c.Owner, c.Repo)
 	payload := map[string]interface{}{
-		"name":        label,
-		"description": "Label created by gh-demo hydration tool",
-		"color":       "ededed", // Light gray color as default
+		"name":  label.Name,
+		"color": label.Color,
+	}
+
+	// Add description if provided
+	if label.Description != "" {
+		payload["description"] = label.Description
 	}
 
 	err := c.restClient.Request("POST", path, payload, nil)
 	if err != nil {
-		c.debugLog("Failed to create label '%s': %v", label, err)
+		c.debugLog("Failed to create label '%s': %v", label.Name, err)
 		return err
 	}
 
-	c.debugLog("Successfully created label '%s'", label)
+	c.debugLog("Successfully created label '%s' with color '%s'", label.Name, label.Color)
 	return nil
 }
 

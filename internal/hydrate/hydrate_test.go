@@ -81,9 +81,9 @@ func (m *MockGitHubClient) ListLabels() ([]string, error) {
 	return labels, nil
 }
 
-func (m *MockGitHubClient) CreateLabel(label string) error {
-	m.CreatedLabels = append(m.CreatedLabels, label)
-	m.ExistingLabels[label] = true
+func (m *MockGitHubClient) CreateLabel(label types.Label) error {
+	m.CreatedLabels = append(m.CreatedLabels, label.Name)
+	m.ExistingLabels[label.Name] = true
 	return nil
 }
 
@@ -481,9 +481,12 @@ func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 	// Let's test with a successful case first to ensure the basic flow works
 	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
-	labels := []string{"existing", "new"}
+	labels := []types.Label{
+		{Name: "existing", Color: "ff0000"},
+		{Name: "new", Color: "00ff00"},
+	}
 
-	err := EnsureLabelsExist(client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(client, labels, logger, summary)
 
 	// This should succeed with our mock
 	if err != nil {
@@ -502,9 +505,9 @@ func TestEnsureLabelsExist_ListLabelsError(t *testing.T) {
 
 	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
-	labels := []string{"test-label"}
+	labels := []types.Label{{Name: "test-label", Color: "ff0000"}}
 
-	err := EnsureLabelsExist(client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(client, labels, logger, summary)
 
 	// This should return an error due to ListLabels failing
 	if err == nil {
@@ -526,9 +529,9 @@ func TestEnsureLabelsExist_EmptyLabels(t *testing.T) {
 
 	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
-	labels := []string{} // Empty labels slice
+	labels := []types.Label{} // Empty labels slice
 
-	err := EnsureLabelsExist(client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(client, labels, logger, summary)
 
 	// This should return nil without calling any client methods
 	if err != nil {
@@ -716,4 +719,83 @@ func TestConfigurablePaths(t *testing.T) {
 	if len(client.CreatedPRs) == 0 {
 		t.Error("Expected at least one PR to be created")
 	}
+}
+
+func TestReadLabelsJSON(t *testing.T) {
+	// Create a temporary directory for this test
+	tmpDir, err := os.MkdirTemp("", "gh-demo-labels-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	t.Run("ValidLabelsFile", func(t *testing.T) {
+		labelsPath := filepath.Join(tmpDir, "labels.json")
+		expectedLabels := []types.Label{
+			{Name: "bug", Description: "Something isn't working", Color: "d73a4a"},
+			{Name: "enhancement", Description: "New feature or request", Color: "a2eeef"},
+			{Name: "documentation", Description: "Improvements or additions to documentation", Color: "0075ca"},
+		}
+
+		// Write test labels file
+		labelsJSON, err := json.Marshal(expectedLabels)
+		if err != nil {
+			t.Fatalf("Failed to marshal labels: %v", err)
+		}
+		if err := os.WriteFile(labelsPath, labelsJSON, 0644); err != nil {
+			t.Fatalf("Failed to write labels file: %v", err)
+		}
+
+		// Read labels
+		labels, err := ReadLabelsJSON(labelsPath)
+		if err != nil {
+			t.Errorf("ReadLabelsJSON failed: %v", err)
+		}
+
+		if len(labels) != len(expectedLabels) {
+			t.Errorf("Expected %d labels, got %d", len(expectedLabels), len(labels))
+		}
+
+		for i, label := range labels {
+			if label.Name != expectedLabels[i].Name {
+				t.Errorf("Expected label name '%s', got '%s'", expectedLabels[i].Name, label.Name)
+			}
+			if label.Description != expectedLabels[i].Description {
+				t.Errorf("Expected label description '%s', got '%s'", expectedLabels[i].Description, label.Description)
+			}
+			if label.Color != expectedLabels[i].Color {
+				t.Errorf("Expected label color '%s', got '%s'", expectedLabels[i].Color, label.Color)
+			}
+		}
+	})
+
+	t.Run("NonExistentFile", func(t *testing.T) {
+		labelsPath := filepath.Join(tmpDir, "nonexistent.json")
+
+		// Read labels from non-existent file (should return empty slice, no error)
+		labels, err := ReadLabelsJSON(labelsPath)
+		if err != nil {
+			t.Errorf("ReadLabelsJSON should not fail for non-existent file: %v", err)
+		}
+
+		if len(labels) != 0 {
+			t.Errorf("Expected empty slice for non-existent file, got %d labels", len(labels))
+		}
+	})
+
+	t.Run("InvalidJSON", func(t *testing.T) {
+		labelsPath := filepath.Join(tmpDir, "invalid.json")
+
+		// Write invalid JSON
+		err := os.WriteFile(labelsPath, []byte(`{"invalid": json}`), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write invalid JSON: %v", err)
+		}
+
+		// Read labels from invalid file (should return error)
+		_, err = ReadLabelsJSON(labelsPath)
+		if err == nil {
+			t.Error("ReadLabelsJSON should fail for invalid JSON")
+		}
+	})
 }

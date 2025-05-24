@@ -30,3 +30,14 @@ type PullRequest struct {
 	Labels    []string `json:"labels"`
 	Assignees []string `json:"assignees"`
 }
+
+// Label represents a label that can be created in a GitHub repository.
+// It contains all the fields that can be specified when creating a label via the GitHub API.
+type Label struct {
+	// Name is the display name for the label
+	Name string `json:"name"`
+	// Description is an optional description for the label
+	Description string `json:"description,omitempty"`
+	// Color is the hexadecimal color code for the label (without the # prefix)
+	Color string `json:"color"`
+}

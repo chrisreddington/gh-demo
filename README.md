@@ -98,6 +98,25 @@ Example:
 }
 ```
 
+### Label Schema
+
+Labels can be explicitly defined with custom colors and descriptions. Labels referenced in issues, discussions, or pull requests that aren't explicitly defined will be auto-created with default styling.
+
+| Field       | Type   | Description                                    | Required |
+|-------------|--------|------------------------------------------------|----------|
+| name        | string | Name of the label                              | Yes      |
+| description | string | Description of what the label represents       | No       |
+| color       | string | Hexadecimal color code (without # prefix)     | Yes      |
+
+Example:
+```json
+{
+  "name": "bug",
+  "description": "Something isn't working",
+  "color": "d73a4a"
+}
+```
+
 ## File Structure
 
 The hydration tool expects JSON files in the configuration directory. By default, this is the `.github/demos/` directory, but it can be customized using the `--config-path` flag:
@@ -105,6 +124,7 @@ The hydration tool expects JSON files in the configuration directory. By default
 - `<config-path>/issues.json`: Array of issue objects
 - `<config-path>/discussions.json`: Array of discussion objects
 - `<config-path>/prs.json`: Array of pull request objects
+- `<config-path>/labels.json`: Array of label objects (optional - labels referenced in other files will be auto-created with defaults)
 
 ### Default Configuration Directory
 
