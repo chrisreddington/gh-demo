@@ -18,8 +18,8 @@ type StandardLogger struct {
 
 // GenerateRequestID generates a simple request ID for operation tracing.
 func GenerateRequestID() string {
-	rand.Seed(time.Now().UnixNano())
-	return fmt.Sprintf("req_%d", rand.Intn(100000))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return fmt.Sprintf("req_%d", r.Intn(100000))
 }
 
 // NewLogger creates a new logger with the specified debug mode.
