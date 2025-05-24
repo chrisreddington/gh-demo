@@ -8,13 +8,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 )
 
 func TestHydrateWithRealGHClient(t *testing.T) {
 	t.Skip("Skipping test that requires real GitHub credentials")
 	// This test uses the real (stubbed) GHClient to ensure wiring is correct.
-	client := githubapi.NewGHClient("octocat", "demo-repo")
+	client, err := githubapi.NewGHClient("octocat", "demo-repo")
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
 
 	root, err := FindProjectRoot()
 	if err != nil {
@@ -74,7 +78,7 @@ func (m *MockGitHubClient) CreateLabel(label string) error {
 	return nil
 }
 
-func (m *MockGitHubClient) SetLogger(logger githubapi.Logger) {
+func (m *MockGitHubClient) SetLogger(logger common.Logger) {
 	// Mock implementation - does nothing
 }
 
@@ -259,20 +263,20 @@ func TestReadPRsJSON(t *testing.T) {
 
 // Test Logger functionality
 func TestNewLogger(t *testing.T) {
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	if logger == nil {
 		t.Error("Expected logger to be created")
 	}
 }
 
 func TestLoggerDebug(t *testing.T) {
-	logger := NewLogger(true)
+	logger := common.NewLogger(true)
 	// This should not panic
 	logger.Debug("test debug message: %s", "value")
 }
 
 func TestLoggerInfo(t *testing.T) {
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	// This should not panic
 	logger.Info("test info message: %s", "value")
 }
@@ -468,7 +472,7 @@ func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 
 	// The mock should be configured to fail for "fail" label and succeed for others
 	// Let's test with a successful case first to ensure the basic flow works
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
 	labels := []string{"existing", "new"}
 
@@ -489,7 +493,7 @@ func TestEnsureLabelsExist_ListLabelsError(t *testing.T) {
 		CreatedLabels:  []string{},
 	}
 
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
 	labels := []string{"test-label"}
 
@@ -513,7 +517,7 @@ func TestEnsureLabelsExist_EmptyLabels(t *testing.T) {
 		CreatedLabels:  []string{},
 	}
 
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
 	labels := []string{} // Empty labels slice
 

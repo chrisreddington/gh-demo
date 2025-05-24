@@ -37,12 +37,92 @@ func (m *MockRESTClient) Request(method string, path string, body io.Reader) (*h
 
 // Tests for GHClient
 func TestNewGHClient(t *testing.T) {
-	client := NewGHClient("testowner", "testrepo")
+	client, err := NewGHClient("testowner", "testrepo")
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
 	if client.Owner != "testowner" {
 		t.Errorf("Expected owner to be 'testowner', got '%s'", client.Owner)
 	}
 	if client.Repo != "testrepo" {
 		t.Errorf("Expected repo to be 'testrepo', got '%s'", client.Repo)
+	}
+}
+
+func TestNewGHClient_ValidationErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		owner       string
+		repo        string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "empty owner",
+			owner:       "",
+			repo:        "testrepo",
+			expectError: true,
+			errorMsg:    "owner cannot be empty",
+		},
+		{
+			name:        "whitespace only owner",
+			owner:       "   ",
+			repo:        "testrepo",
+			expectError: true,
+			errorMsg:    "owner cannot be empty",
+		},
+		{
+			name:        "empty repo",
+			owner:       "testowner",
+			repo:        "",
+			expectError: true,
+			errorMsg:    "repo cannot be empty",
+		},
+		{
+			name:        "whitespace only repo",
+			owner:       "testowner",
+			repo:        "   ",
+			expectError: true,
+			errorMsg:    "repo cannot be empty",
+		},
+		{
+			name:        "valid trimmed parameters",
+			owner:       "  testowner  ",
+			repo:        "  testrepo  ",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewGHClient(tt.owner, tt.repo)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+					return
+				}
+				if client == nil {
+					t.Error("Expected client to be created")
+					return
+				}
+				// Check that parameters are properly trimmed
+				if client.Owner != strings.TrimSpace(tt.owner) {
+					t.Errorf("Expected owner to be trimmed to '%s', got '%s'", strings.TrimSpace(tt.owner), client.Owner)
+				}
+				if client.Repo != strings.TrimSpace(tt.repo) {
+					t.Errorf("Expected repo to be trimmed to '%s', got '%s'", strings.TrimSpace(tt.repo), client.Repo)
+				}
+			}
+		})
 	}
 }
 
@@ -418,7 +498,10 @@ func TestCreatePRValidation(t *testing.T) {
 }
 
 func TestSetLogger(t *testing.T) {
-	client := NewGHClient("testowner", "testrepo")
+	client, err := NewGHClient("testowner", "testrepo")
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
 	logger := &MockLogger{}
 	client.SetLogger(logger)
 
@@ -440,7 +523,10 @@ func (m *MockLogger) Info(format string, args ...interface{}) {
 }
 
 func TestDebugLog(t *testing.T) {
-	client := NewGHClient("testowner", "testrepo")
+	client, err := NewGHClient("testowner", "testrepo")
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
 	mockLogger := &MockLogger{}
 	client.SetLogger(mockLogger)
 

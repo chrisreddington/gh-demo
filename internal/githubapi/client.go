@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/cli/go-gh/v2/pkg/api"
 )
 
@@ -23,7 +24,7 @@ type GHClient struct {
 	Repo       string
 	gqlClient  GraphQLClient
 	restClient *RESTClient
-	logger     Logger
+	logger     common.Logger
 }
 
 // RESTClient wraps the REST client for testability
@@ -33,32 +34,39 @@ type RESTClient struct {
 	}
 }
 
-func NewGHClient(owner, repo string) *GHClient {
-	// Create GraphQL and REST clients using go-gh
+func NewGHClient(owner, repo string) (*GHClient, error) {
+	if strings.TrimSpace(owner) == "" {
+		return nil, fmt.Errorf("owner cannot be empty")
+	}
+	if strings.TrimSpace(repo) == "" {
+		return nil, fmt.Errorf("repo cannot be empty")
+	}
+
+	// Create GraphQL client using go-gh
 	gqlClient, err := api.DefaultGraphQLClient()
 	if err != nil {
-		fmt.Printf("Warning: Failed to initialize GraphQL client: %v\n", err)
+		return nil, fmt.Errorf("failed to initialize GraphQL client: %w", err)
 	}
 
+	// Create REST client using go-gh
 	restRawClient, err := api.DefaultRESTClient()
-	var restClient *RESTClient
-	if err == nil {
-		restClient = &RESTClient{client: restRawClient}
-	} else {
-		fmt.Printf("Warning: Failed to initialize REST client: %v\n", err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize REST client: %w", err)
 	}
+
+	restClient := &RESTClient{client: restRawClient}
 
 	return &GHClient{
-		Owner:      owner,
-		Repo:       repo,
+		Owner:      strings.TrimSpace(owner),
+		Repo:       strings.TrimSpace(repo),
 		gqlClient:  gqlClient,
 		restClient: restClient,
 		logger:     nil, // Will be set when SetLogger is called
-	}
+	}, nil
 }
 
 // SetLogger sets the logger for debug output
-func (c *GHClient) SetLogger(logger Logger) {
+func (c *GHClient) SetLogger(logger common.Logger) {
 	c.logger = logger
 }
 

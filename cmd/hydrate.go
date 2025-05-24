@@ -6,22 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 	"github.com/chrisreddington/gh-demo/internal/hydrate"
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/spf13/cobra"
 )
-
-// DebugLogger implements the Logger interface for debug output
-type DebugLogger struct{}
-
-func (l *DebugLogger) Debug(format string, args ...interface{}) {
-	fmt.Printf("[DEBUG] "+format+"\n", args...)
-}
-
-func (l *DebugLogger) Info(format string, args ...interface{}) {
-	fmt.Printf(format+"\n", args...)
-}
 
 // executeHydrate contains the core hydration logic separated from CLI concerns
 func executeHydrate(owner, repo string, issues, discussions, prs, debug bool) error {
@@ -51,10 +41,13 @@ func executeHydrate(owner, repo string, issues, discussions, prs, debug bool) er
 	discussionsPath := filepath.Join(root, ".github", "demos", "discussions.json")
 	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
-	client := githubapi.NewGHClient(resolvedOwner, resolvedRepo)
+	client, err := githubapi.NewGHClient(resolvedOwner, resolvedRepo)
+	if err != nil {
+		return fmt.Errorf("failed to create GitHub client: %w", err)
+	}
 	// Set logger for debug mode
 	if debug {
-		client.SetLogger(&DebugLogger{})
+		client.SetLogger(common.NewLogger(debug))
 	}
 	err = hydrate.HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, issues, discussions, prs, debug)
 	if err != nil {

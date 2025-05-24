@@ -8,30 +8,9 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 )
-
-// Logger handles debug and info logging
-type Logger struct {
-	debug bool
-}
-
-// NewLogger creates a new logger with the specified debug mode
-func NewLogger(debug bool) *Logger {
-	return &Logger{debug: debug}
-}
-
-// Debug logs a message only when debug mode is enabled
-func (l *Logger) Debug(format string, args ...interface{}) {
-	if l.debug {
-		fmt.Printf("[DEBUG] "+format+"\n", args...)
-	}
-}
-
-// Info logs a message always
-func (l *Logger) Info(format string, args ...interface{}) {
-	fmt.Printf(format+"\n", args...)
-}
 
 // SectionSummary holds statistics for a section
 type SectionSummary struct {
@@ -45,7 +24,7 @@ type SectionSummary struct {
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
 func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs, debug bool) error {
-	logger := NewLogger(debug)
+	logger := common.NewLogger(debug)
 
 	issues, discussions, prs, err := HydrateFromFiles(issuesPath, discussionsPath, prsPath, includeIssues, includeDiscussions, includePRs)
 	if err != nil {
@@ -182,7 +161,7 @@ type PullRequest struct {
 }
 
 // EnsureLabelsExist checks if each label exists in the repo, and creates it if not.
-func EnsureLabelsExist(client githubapi.GitHubClient, labels []string, logger *Logger, summary *SectionSummary) error {
+func EnsureLabelsExist(client githubapi.GitHubClient, labels []string, logger common.Logger, summary *SectionSummary) error {
 	if len(labels) == 0 {
 		return nil
 	}

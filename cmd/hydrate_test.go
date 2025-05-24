@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"testing"
+
+	"github.com/chrisreddington/gh-demo/internal/common"
 )
 
 func TestDebugLogger(t *testing.T) {
-	logger := &DebugLogger{}
+	logger := common.NewLogger(true)
 
 	// Test Debug method
 	logger.Debug("test debug message: %s", "value")
@@ -339,32 +341,32 @@ func TestExecuteHydrate_SuccessCase(t *testing.T) {
 func TestExecuteHydrate_DebugMode(t *testing.T) {
 	// This test verifies that debug mode can be enabled and the function structures work correctly
 	// We test the command structure and flag parsing without making actual API calls
-	
+
 	// Test that debug mode flag parsing works
 	cmd := NewHydrateCmd()
 	cmd.SetArgs([]string{"--owner", "test-owner", "--repo", "test-repo", "--debug", "true"})
-	
+
 	err := cmd.ParseFlags([]string{"--owner", "test-owner", "--repo", "test-repo", "--debug", "true"})
 	if err != nil {
 		t.Fatalf("Failed to parse flags with debug mode: %v", err)
 	}
-	
+
 	// Verify debug flag is accessible and set correctly
 	debugFlag := cmd.Flag("debug")
 	if debugFlag == nil {
 		t.Error("Debug flag should be accessible")
 		return
 	}
-	
+
 	// Test that the debug flag value can be retrieved
 	debugValue := debugFlag.Value.String()
 	if debugValue != "true" {
 		t.Errorf("Expected debug flag to be 'true', got: %s", debugValue)
 	}
-	
+
 	// Test debug logger creation and functionality
-	logger := &DebugLogger{}
-	
+	logger := common.NewLogger(true)
+
 	// Test that debug logger methods exist and don't panic
 	logger.Debug("Test debug message in debug mode")
 	logger.Info("Test info message in debug mode")
@@ -393,7 +395,7 @@ func TestExecuteHydrate_ValidatesParameters(t *testing.T) {
 	// Since executeHydrate is designed to fall back to git context when parameters are missing,
 	// and we're running in a git repository, we can't easily test the "missing parameters" case.
 	// Instead, test that the function works correctly with explicit parameters.
-	
+
 	// Skip this test as it conflicts with the git context fallback design
 	// The function is working as intended - it uses git context when parameters are missing
 	t.Skip("Skipping parameter validation test - function correctly uses git context fallback when available")

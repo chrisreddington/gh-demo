@@ -121,7 +121,7 @@ func TestMainFunctionIntegration(t *testing.T) {
 	// Test main() function by running the program as a subprocess with --help
 	cmd := exec.Command("go", "run", "main.go", "--help")
 	// Use current working directory instead of hard-coded GitHub Actions path
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Errorf("main() execution with --help failed: %v\nOutput: %s", err, output)
