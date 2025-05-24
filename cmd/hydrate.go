@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/config"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 	"github.com/chrisreddington/gh-demo/internal/hydrate"
 	"github.com/cli/go-gh/v2/pkg/repository"
@@ -88,7 +89,7 @@ func NewHydrateCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&owner, "owner", "", "GitHub repository owner (required)")
 	cmd.Flags().StringVar(&repo, "repo", "", "GitHub repository name (required)")
-	cmd.Flags().StringVar(&configPath, "config-path", ".github/demos", "Path to configuration files relative to project root")
+	cmd.Flags().StringVar(&configPath, "config-path", config.DefaultConfigPath, "Path to configuration files relative to project root")
 	cmd.Flags().BoolVar(&issues, "issues", true, "Include issues")
 	cmd.Flags().BoolVar(&discussions, "discussions", true, "Include discussions")
 	cmd.Flags().BoolVar(&pullRequests, "prs", true, "Include pull requests")

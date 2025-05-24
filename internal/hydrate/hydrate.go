@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/config"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
@@ -66,7 +67,7 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 			defaultLabel := types.Label{
 				Name:        labelName,
 				Description: "Label created by gh-demo hydration tool",
-				Color:       "ededed", // Light gray default color
+				Color:       config.DefaultLabelColor, // Light gray default color
 			}
 			labelsToEnsure = append(labelsToEnsure, defaultLabel)
 		}

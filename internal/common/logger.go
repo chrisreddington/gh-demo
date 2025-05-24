@@ -4,6 +4,7 @@ package common
 
 import (
 	"fmt"
+	"os"
 )
 
 // StandardLogger is a concrete implementation of the Logger interface.
@@ -22,7 +23,7 @@ func NewLogger(debug bool) *StandardLogger {
 // Debug logs a message only when debug mode is enabled
 func (l *StandardLogger) Debug(format string, args ...interface{}) {
 	if l.debug {
-		fmt.Printf("[DEBUG] "+format+"\n", args...)
+		fmt.Fprintf(os.Stderr, "[DEBUG] "+format+"\n", args...)
 	}
 }
 
