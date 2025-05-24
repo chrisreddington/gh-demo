@@ -565,8 +565,6 @@ func TestSetLogger(t *testing.T) {
 	}
 }
 
-
-
 func TestDebugLog(t *testing.T) {
 	mockGQL := &MockGraphQLClient{}
 

@@ -7,18 +7,18 @@ import (
 // TestNewLogger tests logger constructor with different configurations
 func TestNewLogger(t *testing.T) {
 	tests := []struct {
-		name        string
-		debugMode   bool
+		name          string
+		debugMode     bool
 		expectedDebug bool
 	}{
 		{
-			name:        "debug mode enabled",
-			debugMode:   true,
+			name:          "debug mode enabled",
+			debugMode:     true,
 			expectedDebug: true,
 		},
 		{
-			name:        "debug mode disabled", 
-			debugMode:   false,
+			name:          "debug mode disabled",
+			debugMode:     false,
 			expectedDebug: false,
 		},
 	}

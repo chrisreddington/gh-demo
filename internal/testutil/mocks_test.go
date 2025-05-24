@@ -55,12 +55,12 @@ func TestMockGitHubClient(t *testing.T) {
 				if err != nil {
 					t.Errorf("Expected no error, got %v", err)
 				}
-				
+
 				labels, err := client.ListLabels(context.Background())
 				if err != nil {
 					t.Errorf("Expected no error, got %v", err)
 				}
-				
+
 				if len(labels) != 1 || labels[0] != "test" {
 					t.Errorf("Expected [test], got %v", labels)
 				}
@@ -78,7 +78,7 @@ func TestMockGitHubClient(t *testing.T) {
 
 func TestMockGraphQLClient(t *testing.T) {
 	client := &MockGraphQLClient{}
-	
+
 	// Test that it doesn't panic with any GraphQL operation
 	err := client.Do(context.Background(), "query { repository(owner: \"test\", name: \"test\") { id } }", nil, &struct{}{})
 	if err != nil {
@@ -88,7 +88,7 @@ func TestMockGraphQLClient(t *testing.T) {
 
 func TestMockLogger(t *testing.T) {
 	logger := &MockLogger{}
-	
+
 	logger.Debug("test debug: %s", "value")
 	if logger.LastMessage != "test debug: value" {
 		t.Errorf("Expected 'test debug: value', got '%s'", logger.LastMessage)
@@ -96,8 +96,8 @@ func TestMockLogger(t *testing.T) {
 	if !logger.DebugCalled {
 		t.Error("Expected DebugCalled to be true")
 	}
-	
-	logger.Info("test info: %s", "value") 
+
+	logger.Info("test info: %s", "value")
 	if logger.LastMessage != "test info: value" {
 		t.Errorf("Expected 'test info: value', got '%s'", logger.LastMessage)
 	}
