@@ -446,79 +446,140 @@ func TestHydrateFromFiles_InvalidPRsJSON(t *testing.T) {
 	}
 }
 
-func TestCollectLabels_EmptySlices(t *testing.T) {
-	labels := CollectLabels([]types.Issue{}, []types.Discussion{}, []types.PullRequest{})
-	if len(labels) != 0 {
-		t.Errorf("Expected empty labels slice, got %v", labels)
+// TestCollectLabels tests label collection from different input scenarios
+func TestCollectLabels(t *testing.T) {
+	tests := []struct {
+		name        string
+		issues      []types.Issue
+		discussions []types.Discussion
+		prs         []types.PullRequest
+		expected    map[string]bool
+	}{
+		{
+			name:        "empty slices",
+			issues:      []types.Issue{},
+			discussions: []types.Discussion{},
+			prs:         []types.PullRequest{},
+			expected:    map[string]bool{},
+		},
+		{
+			name:        "with labels from all sources",
+			issues:      []types.Issue{{Labels: []string{"bug", "enhancement"}}},
+			discussions: []types.Discussion{{Labels: []string{"question", "bug"}}},
+			prs:         []types.PullRequest{{Labels: []string{"feature", "bug"}}},
+			expected: map[string]bool{
+				"bug":         true,
+				"enhancement": true,
+				"question":    true,
+				"feature":     true,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			labels := CollectLabels(tt.issues, tt.discussions, tt.prs)
+
+			if len(labels) != len(tt.expected) {
+				t.Errorf("Expected %d unique labels, got %d", len(tt.expected), len(labels))
+			}
+
+			// Convert labels slice to map for easier comparison
+			labelMap := make(map[string]bool)
+			for _, label := range labels {
+				labelMap[label] = true
+			}
+
+			for expectedLabel := range tt.expected {
+				if !labelMap[expectedLabel] {
+					t.Errorf("Expected label %s not found in results", expectedLabel)
+				}
+			}
+
+			for _, label := range labels {
+				if !tt.expected[label] {
+					t.Errorf("Unexpected label: %s", label)
+				}
+			}
+		})
 	}
 }
 
-func TestCollectLabels_WithLabels(t *testing.T) {
-	issues := []types.Issue{{Labels: []string{"bug", "enhancement"}}}
-	discussions := []types.Discussion{{Labels: []string{"question", "bug"}}}
-	prs := []types.PullRequest{{Labels: []string{"feature", "bug"}}}
+// TestFindProjectRoot tests project root detection in different scenarios  
+func TestFindProjectRoot(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupFunc   func(t *testing.T) (cleanup func())
+		expectError bool
+		description string
+	}{
+		{
+			name: "success case in current directory",
+			setupFunc: func(t *testing.T) func() {
+				// No setup needed, test in current directory which should have .git
+				return func() {}
+			},
+			expectError: false,
+			description: "Should find project root in current git repository",
+		},
+		{
+			name: "not found in temporary directory",
+			setupFunc: func(t *testing.T) func() {
+				// Save current directory
+				originalWd, err := os.Getwd()
+				if err != nil {
+					t.Fatalf("Failed to get current working directory: %v", err)
+				}
 
-	labels := CollectLabels(issues, discussions, prs)
+				// Create temporary directory without git
+				tempDir := t.TempDir()
+				if chErr := os.Chdir(tempDir); chErr != nil {
+					t.Fatalf("Failed to change to temp directory: %v", chErr)
+				}
 
-	expectedLabels := map[string]bool{
-		"bug":         true,
-		"enhancement": true,
-		"question":    true,
-		"feature":     true,
+				// Remove any potential .git directory
+				if rmErr := os.RemoveAll(filepath.Join(tempDir, ".git")); rmErr != nil {
+					t.Logf("Warning: failed to remove .git directory: %v", rmErr)
+				}
+
+				return func() {
+					if chErr := os.Chdir(originalWd); chErr != nil {
+						t.Errorf("Failed to restore original working directory: %v", chErr)
+					}
+				}
+			},
+			expectError: true, // May not error in some environments due to parent git repos
+			description: "Should handle case where no git repository is found",
+		},
 	}
 
-	if len(labels) != len(expectedLabels) {
-		t.Errorf("Expected %d unique labels, got %d", len(expectedLabels), len(labels))
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := tt.setupFunc(t)
+			defer cleanup()
 
-	for _, label := range labels {
-		if !expectedLabels[label] {
-			t.Errorf("Unexpected label: %s", label)
-		}
-	}
-}
+			root, err := FindProjectRoot(context.Background())
 
-// Test FindProjectRoot error cases
-func TestFindProjectRoot_NotFound(t *testing.T) {
-	// Save current directory
-	originalWd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current working directory: %v", err)
-	}
-	defer func() {
-		if chErr := os.Chdir(originalWd); chErr != nil {
-			t.Errorf("Failed to restore original working directory: %v", chErr)
-		}
-	}()
+			if tt.name == "not found in temporary directory" {
+				// Special handling for this case due to environment variability
+				if err == nil {
+					t.Logf("FindProjectRoot succeeded even in temp directory - may have found parent git repo")
+				}
+				return
+			}
 
-	// Create temporary directory without git
-	tempDir := t.TempDir()
-	if chErr := os.Chdir(tempDir); chErr != nil {
-		t.Fatalf("Failed to change to temp directory: %v", chErr)
-	}
+			if tt.expectError && err == nil {
+				t.Errorf("%s: expected error but got none", tt.description)
+			}
 
-	// Remove any potential .git directory
-	if rmErr := os.RemoveAll(filepath.Join(tempDir, ".git")); rmErr != nil {
-		t.Logf("Warning: failed to remove .git directory: %v", rmErr)
-	}
+			if !tt.expectError && err != nil {
+				t.Errorf("%s: expected no error but got: %v", tt.description, err)
+			}
 
-	_, findErr := FindProjectRoot(context.Background())
-	if findErr == nil {
-		// In some environments, FindProjectRoot might still find a parent git repository
-		// So we'll allow this test to pass if it succeeds, but expect error in isolated environments
-		t.Logf("FindProjectRoot succeeded even in temp directory - may have found parent git repo")
-	}
-}
-
-func TestFindProjectRoot_Success(t *testing.T) {
-	// This should work in the current directory
-	root, err := FindProjectRoot(context.Background())
-	if err != nil {
-		t.Errorf("Expected to find project root, got error: %v", err)
-	}
-
-	if root == "" {
-		t.Error("Expected non-empty project root")
+			if !tt.expectError && root == "" {
+				t.Errorf("%s: expected non-empty project root", tt.description)
+			}
+		})
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/spf13/cobra"
 )
 
 func TestDebugLogger(t *testing.T) {
@@ -17,56 +18,125 @@ func TestDebugLogger(t *testing.T) {
 	logger.Info("test info message: %s", "value")
 }
 
-func TestNewHydrateCmd(t *testing.T) {
+// TestHydrateCmd_FlagProperties tests that all flags are properly configured
+func TestHydrateCmd_FlagProperties(t *testing.T) {
+	tests := []struct {
+		name         string
+		flagName     string
+		shouldExist  bool
+		expectedDefault string
+		shouldHaveUsage bool
+	}{
+		{
+			name:         "owner flag exists",
+			flagName:     "owner",
+			shouldExist:  true,
+			expectedDefault: "",
+			shouldHaveUsage: true,
+		},
+		{
+			name:         "repo flag exists",
+			flagName:     "repo", 
+			shouldExist:  true,
+			expectedDefault: "",
+			shouldHaveUsage: true,
+		},
+		{
+			name:         "issues flag exists with default true",
+			flagName:     "issues",
+			shouldExist:  true,
+			expectedDefault: "true",
+			shouldHaveUsage: true,
+		},
+		{
+			name:         "discussions flag exists with default true",
+			flagName:     "discussions",
+			shouldExist:  true,
+			expectedDefault: "true", 
+			shouldHaveUsage: true,
+		},
+		{
+			name:         "prs flag exists with default true",
+			flagName:     "prs",
+			shouldExist:  true,
+			expectedDefault: "true",
+			shouldHaveUsage: true,
+		},
+		{
+			name:         "debug flag exists with default false",
+			flagName:     "debug",
+			shouldExist:  true,
+			expectedDefault: "false",
+			shouldHaveUsage: true,
+		},
+		{
+			name:         "config-path flag exists with custom default",
+			flagName:     "config-path",
+			shouldExist:  true,
+			expectedDefault: ".github/demos",
+			shouldHaveUsage: true,
+		},
+	}
+
 	cmd := NewHydrateCmd()
+	flags := cmd.Flags()
 
-	if cmd.Use != "hydrate" {
-		t.Errorf("Expected Use to be 'hydrate', got %s", cmd.Use)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flag := flags.Lookup(tt.flagName)
+			
+			if tt.shouldExist && flag == nil {
+				t.Errorf("Expected flag %s to be defined", tt.flagName)
+				return
+			}
+			
+			if !tt.shouldExist && flag != nil {
+				t.Errorf("Expected flag %s to not be defined", tt.flagName)
+				return
+			}
+
+			if tt.shouldExist && flag != nil {
+				if flag.DefValue != tt.expectedDefault {
+					t.Errorf("Expected flag %s default value to be %q, got %q", tt.flagName, tt.expectedDefault, flag.DefValue)
+				}
+				
+				if tt.shouldHaveUsage && flag.Usage == "" {
+					t.Errorf("Expected flag %s to have usage description", tt.flagName)
+				}
+			}
+		})
+	}
+}
+
+// TestHydrateCmd_CommandProperties tests command structure properties
+func TestHydrateCmd_CommandProperties(t *testing.T) {
+	tests := []struct {
+		name     string
+		testFunc func(t *testing.T, cmd *cobra.Command)
+	}{
+		{
+			name: "command use property",
+			testFunc: func(t *testing.T, cmd *cobra.Command) {
+				if cmd.Use != "hydrate" {
+					t.Errorf("Expected Use to be 'hydrate', got %s", cmd.Use)
+				}
+			},
+		},
+		{
+			name: "command has short description",
+			testFunc: func(t *testing.T, cmd *cobra.Command) {
+				if cmd.Short == "" {
+					t.Error("Expected Short description to be set")
+				}
+			},
+		},
 	}
 
-	if cmd.Short == "" {
-		t.Error("Expected Short description to be set")
-	}
-
-	// Test flags are set correctly
-	ownerFlag := cmd.Flags().Lookup("owner")
-	if ownerFlag == nil {
-		t.Error("Expected owner flag to be defined")
-	}
-
-	repoFlag := cmd.Flags().Lookup("repo")
-	if repoFlag == nil {
-		t.Error("Expected repo flag to be defined")
-	}
-
-	issuesFlag := cmd.Flags().Lookup("issues")
-	if issuesFlag == nil {
-		t.Error("Expected issues flag to be defined")
-	}
-
-	discussionsFlag := cmd.Flags().Lookup("discussions")
-	if discussionsFlag == nil {
-		t.Error("Expected discussions flag to be defined")
-	}
-
-	pullRequestsFlag := cmd.Flags().Lookup("prs")
-	if pullRequestsFlag == nil {
-		t.Error("Expected prs flag to be defined")
-	}
-
-	debugFlag := cmd.Flags().Lookup("debug")
-	if debugFlag == nil {
-		t.Error("Expected debug flag to be defined")
-	}
-
-	configPathFlag := cmd.Flags().Lookup("config-path")
-	if configPathFlag == nil {
-		t.Error("Expected config-path flag to be defined")
-	} else {
-		// Test default value for config-path
-		if configPathFlag.DefValue != ".github/demos" {
-			t.Errorf("Expected config-path default value to be '.github/demos', got %s", configPathFlag.DefValue)
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := NewHydrateCmd()
+			tt.testFunc(t, cmd)
+		})
 	}
 }
 
@@ -136,44 +206,7 @@ func TestHydrateCmdRun_InvalidProjectRoot(t *testing.T) {
 	}
 }
 
-func TestHydrateCmd_WithValidParams(t *testing.T) {
-	cmd := NewHydrateCmd()
 
-	// Test that command is properly structured for valid execution
-	// We can't test actual execution due to GitHub API dependency
-
-	// Check that all flags are properly defined
-	flags := cmd.Flags()
-
-	requiredFlags := []string{"owner", "repo", "issues", "discussions", "prs", "debug"}
-	for _, flagName := range requiredFlags {
-		flag := flags.Lookup(flagName)
-		if flag == nil {
-			t.Errorf("Expected flag %s to be defined", flagName)
-		}
-	}
-
-	// Verify default values
-	issuesFlag := flags.Lookup("issues")
-	if issuesFlag != nil && issuesFlag.DefValue != "true" {
-		t.Error("Issues flag should default to true")
-	}
-
-	discussionsFlag := flags.Lookup("discussions")
-	if discussionsFlag != nil && discussionsFlag.DefValue != "true" {
-		t.Error("Discussions flag should default to true")
-	}
-
-	pullRequestsFlag := flags.Lookup("prs")
-	if pullRequestsFlag != nil && pullRequestsFlag.DefValue != "true" {
-		t.Error("PRs flag should default to true")
-	}
-
-	debugFlag := flags.Lookup("debug")
-	if debugFlag != nil && debugFlag.DefValue != "false" {
-		t.Error("Debug flag should default to false")
-	}
-}
 
 // TestHydrateCmdExecution tests the command execution with mocked environment
 func TestHydrateCmdExecution(t *testing.T) {
@@ -230,36 +263,6 @@ func TestHydrateCmdFlags(t *testing.T) {
 				t.Errorf("Failed to parse flags for %s: %v", tc.name, err)
 			}
 		})
-	}
-}
-
-// Test command short and usage descriptions
-func TestHydrateCmdDescription(t *testing.T) {
-	cmd := NewHydrateCmd()
-
-	if cmd.Short == "" {
-		t.Error("Command should have a short description")
-	}
-
-	if cmd.Use != "hydrate" {
-		t.Errorf("Expected Use to be 'hydrate', got %s", cmd.Use)
-	}
-
-	// Test that flags have usage descriptions
-	flags := cmd.Flags()
-
-	requiredFlags := []string{"owner", "repo", "issues", "discussions", "prs", "debug"}
-
-	for _, flagName := range requiredFlags {
-		flag := flags.Lookup(flagName)
-		if flag == nil {
-			t.Errorf("Flag %s should be defined", flagName)
-			continue
-		}
-
-		if flag.Usage == "" {
-			t.Errorf("Flag %s should have usage description", flagName)
-		}
 	}
 }
 
