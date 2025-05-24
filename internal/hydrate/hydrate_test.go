@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/config"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
@@ -31,13 +32,13 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 	// Should not error with stubbed methods
-	err = HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err = HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels with real GHClient failed: %v", err)
 	}
 }
 
-func TestHydrateWithLabels(t *testing.T) {
+func TestHydrateWithLabelsFromPaths(t *testing.T) {
 	// Setup mock client with only "bug" and "demo" existing
 	client := NewSuccessfulMockGitHubClient("bug", "demo")
 
@@ -51,7 +52,7 @@ func TestHydrateWithLabels(t *testing.T) {
 	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 	// Hydrate and ensure labels
-	err = HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err = HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels failed: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestHydrateOperations(t *testing.T) {
 
 			issuesPath, discussionsPath, prsPath := tt.setupFiles(tempDir)
 
-			err := HydrateWithLabels(context.Background(), client,
+			err := HydrateWithLabelsFromPaths(context.Background(), client,
 				issuesPath, discussionsPath, prsPath,
 				issuesPath != "", discussionsPath != "", prsPath != "", false)
 
@@ -259,7 +260,7 @@ func TestGracefulErrorHandling(t *testing.T) {
 	}
 
 	// Test that the function continues processing despite PR failure
-	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, false, true, false)
+	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, false, true, false)
 
 	// Should return error mentioning the PR failure, but should have succeeded with issues
 	if err == nil {
@@ -306,7 +307,7 @@ func TestPRValidation(t *testing.T) {
 	client := NewSuccessfulMockGitHubClient()
 
 	// Should fail gracefully with validation error
-	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, false, false, true, false)
+	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, false, false, true, false)
 
 	if err == nil {
 		// The MockGitHubClient doesn't implement validation, so this test won't work as expected
@@ -446,7 +447,7 @@ func TestHydrateWithLabels_ContextCancellation(t *testing.T) {
 		t.Fatalf("Failed to create issues file: %v", err)
 	}
 
-	err := HydrateWithLabels(ctx, client, issuesPath, "", "", true, false, false, false)
+	err := HydrateWithLabelsFromPaths(ctx, client, issuesPath, "", "", true, false, false, false)
 	if err == nil {
 		t.Error("Expected context cancellation error")
 		return
@@ -730,7 +731,7 @@ func TestHydrateWithLabels_DebugMode(t *testing.T) {
 	}
 
 	// Test with debug mode enabled
-	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, true)
+	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, true)
 	if err != nil {
 		t.Errorf("Expected no error with debug mode, got: %v", err)
 	}
@@ -741,7 +742,7 @@ func TestHydrateWithLabels_FileReadError(t *testing.T) {
 	client := NewSuccessfulMockGitHubClient()
 
 	// Use non-existent files
-	err := HydrateWithLabels(context.Background(), client, "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, true, true, false)
+	err := HydrateWithLabelsFromPaths(context.Background(), client, "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, true, true, false)
 	if err == nil {
 		t.Error("Expected error when files don't exist")
 	}
@@ -774,7 +775,7 @@ func TestHydrateWithLabels_EnsureLabelsExistError(t *testing.T) {
 		t.Fatalf("Failed to create prs file: %v", err)
 	}
 
-	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, false, false, false)
+	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, false, false, false)
 
 	if err == nil {
 		t.Error("Expected error when EnsureLabelsExist fails")
@@ -815,7 +816,7 @@ func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
 		t.Fatalf("Failed to create prs file: %v", err)
 	}
 
-	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 
 	// Should return aggregated errors
 	if err == nil {
@@ -862,7 +863,7 @@ func TestConfigurablePaths(t *testing.T) {
 	client := NewSuccessfulMockGitHubClient()
 
 	// Test hydration with the custom paths
-	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 	if err != nil {
 		t.Errorf("HydrateWithLabels failed with custom config path: %v", err)
 	}
@@ -960,4 +961,56 @@ func TestReadLabelsJSON(t *testing.T) {
 			t.Error("ReadLabelsJSON should fail for invalid JSON")
 		}
 	})
+}
+
+// TestHydrateWithConfiguration tests the new Configuration-based approach
+func TestHydrateWithConfiguration(t *testing.T) {
+	// Create temporary project root
+	tempRoot := t.TempDir()
+
+	// Test with custom config path
+	configPath := "custom/config/path"
+	configDir := filepath.Join(tempRoot, configPath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config directory: %v", err)
+	}
+
+	// Setup basic test files
+	issuesJSON := `[{"title": "Test Issue", "body": "Test body", "labels": ["bug"], "assignees": []}]`
+	if err := os.WriteFile(filepath.Join(configDir, "issues.json"), []byte(issuesJSON), 0644); err != nil {
+		t.Fatalf("Failed to create issues.json: %v", err)
+	}
+
+	discussionsJSON := `[{"title": "Test Discussion", "body": "Test body", "category": "General", "labels": ["question"]}]`
+	if err := os.WriteFile(filepath.Join(configDir, "discussions.json"), []byte(discussionsJSON), 0644); err != nil {
+		t.Fatalf("Failed to create discussions.json: %v", err)
+	}
+
+	prsJSON := `[{"title": "Test PR", "body": "Test body", "head": "feature", "base": "main", "labels": ["enhancement"], "assignees": []}]`
+	if err := os.WriteFile(filepath.Join(configDir, "prs.json"), []byte(prsJSON), 0644); err != nil {
+		t.Fatalf("Failed to create prs.json: %v", err)
+	}
+
+	// Create configuration object
+	cfg := config.NewConfigurationWithRoot(context.Background(), tempRoot, configPath)
+
+	// Create mock client
+	client := NewSuccessfulMockGitHubClient()
+
+	// Test hydration with the new Configuration approach
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, false)
+	if err != nil {
+		t.Errorf("HydrateWithLabels failed with Configuration: %v", err)
+	}
+
+	// Verify that the mock client was called correctly
+	if len(client.CreatedIssues) == 0 {
+		t.Error("Expected at least one issue to be created")
+	}
+	if len(client.CreatedDiscussions) == 0 {
+		t.Error("Expected at least one discussion to be created")
+	}
+	if len(client.CreatedPRs) == 0 {
+		t.Error("Expected at least one PR to be created")
+	}
 }
