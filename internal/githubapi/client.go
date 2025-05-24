@@ -852,3 +852,84 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 	c.debugLog("Successfully created pull request '%s'", pullRequest.Title)
 	return nil
 }
+
+// Listing operations for cleanup
+
+// ListIssues retrieves all existing issues from the repository
+func (c *GHClient) ListIssues(ctx context.Context) ([]types.Issue, error) {
+	if c.gqlClient == nil {
+		return nil, errors.ValidationError("list_issues", "GraphQL client is not initialized")
+	}
+
+	// TODO: Implement GraphQL query to list issues
+	c.debugLog("ListIssues not yet implemented")
+	return []types.Issue{}, nil
+}
+
+// ListDiscussions retrieves all existing discussions from the repository
+func (c *GHClient) ListDiscussions(ctx context.Context) ([]types.Discussion, error) {
+	if c.gqlClient == nil {
+		return nil, errors.ValidationError("list_discussions", "GraphQL client is not initialized")
+	}
+
+	// TODO: Implement GraphQL query to list discussions
+	c.debugLog("ListDiscussions not yet implemented")
+	return []types.Discussion{}, nil
+}
+
+// ListPRs retrieves all existing pull requests from the repository
+func (c *GHClient) ListPRs(ctx context.Context) ([]types.PullRequest, error) {
+	if c.gqlClient == nil {
+		return nil, errors.ValidationError("list_prs", "GraphQL client is not initialized")
+	}
+
+	// TODO: Implement GraphQL query to list PRs
+	c.debugLog("ListPRs not yet implemented")
+	return []types.PullRequest{}, nil
+}
+
+// Deletion operations for cleanup
+
+// DeleteIssue deletes an issue by its node ID
+func (c *GHClient) DeleteIssue(ctx context.Context, nodeID string) error {
+	if c.gqlClient == nil {
+		return errors.ValidationError("delete_issue", "GraphQL client is not initialized")
+	}
+
+	// TODO: Implement GraphQL mutation to delete issue
+	c.debugLog("DeleteIssue not yet implemented for nodeID: %s", nodeID)
+	return nil
+}
+
+// DeleteDiscussion deletes a discussion by its node ID
+func (c *GHClient) DeleteDiscussion(ctx context.Context, nodeID string) error {
+	if c.gqlClient == nil {
+		return errors.ValidationError("delete_discussion", "GraphQL client is not initialized")
+	}
+
+	// TODO: Implement GraphQL mutation to delete discussion
+	c.debugLog("DeleteDiscussion not yet implemented for nodeID: %s", nodeID)
+	return nil
+}
+
+// DeletePR deletes a pull request by its node ID
+func (c *GHClient) DeletePR(ctx context.Context, nodeID string) error {
+	if c.gqlClient == nil {
+		return errors.ValidationError("delete_pr", "GraphQL client is not initialized")
+	}
+
+	// TODO: Implement GraphQL mutation to delete PR
+	c.debugLog("DeletePR not yet implemented for nodeID: %s", nodeID)
+	return nil
+}
+
+// DeleteLabel deletes a label by its name
+func (c *GHClient) DeleteLabel(ctx context.Context, name string) error {
+	if c.gqlClient == nil {
+		return errors.ValidationError("delete_label", "GraphQL client is not initialized")
+	}
+
+	// TODO: Implement GraphQL mutation to delete label
+	c.debugLog("DeleteLabel not yet implemented for name: %s", name)
+	return nil
+}

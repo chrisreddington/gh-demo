@@ -5,6 +5,8 @@ package types
 // Issue represents an issue that can be created in a GitHub repository.
 // It contains all the fields that can be specified when creating an issue via the GitHub API.
 type Issue struct {
+	NodeID    string   `json:"node_id,omitempty"`    // GitHub node ID for deletion operations
+	Number    int      `json:"number,omitempty"`     // Issue number for identification
 	Title     string   `json:"title"`
 	Body      string   `json:"body"`
 	Labels    []string `json:"labels"`
@@ -14,6 +16,8 @@ type Issue struct {
 // Discussion represents a discussion that can be created in a GitHub repository.
 // It contains all the fields that can be specified when creating a discussion via the GitHub API.
 type Discussion struct {
+	NodeID   string   `json:"node_id,omitempty"`   // GitHub node ID for deletion operations
+	Number   int      `json:"number,omitempty"`    // Discussion number for identification
 	Title    string   `json:"title"`
 	Body     string   `json:"body"`
 	Category string   `json:"category"`
@@ -23,6 +27,8 @@ type Discussion struct {
 // PullRequest represents a pull request that can be created in a GitHub repository.
 // It contains all the fields that can be specified when creating a pull request via the GitHub API.
 type PullRequest struct {
+	NodeID    string   `json:"node_id,omitempty"`   // GitHub node ID for deletion operations
+	Number    int      `json:"number,omitempty"`    // Pull request number for identification
 	Title     string   `json:"title"`
 	Body      string   `json:"body"`
 	Head      string   `json:"head"`
