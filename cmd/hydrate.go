@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/config"
@@ -129,7 +131,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	}
 
 	// Perform hydration
-	err = hydrate.HydrateWithLabels(client, paths.Issues, paths.Discussions, paths.PullRequests, issues, discussions, pullRequests, debug)
+	err = hydrate.HydrateWithLabels(ctx, client, paths.Issues, paths.Discussions, paths.PullRequests, issues, discussions, pullRequests, debug)
 
 	// Handle the result
 	return handleHydrationResult(err)
@@ -145,7 +147,10 @@ func NewHydrateCmd() *cobra.Command {
 		Use:   "hydrate",
 		Short: "Hydrate a repository with demo issues, discussions, and pull requests",
 		Run: func(cmd *cobra.Command, args []string) {
-			ctx := cmd.Context()
+			// Create context with cancellation for Ctrl+C
+			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+			defer cancel()
+
 			err := executeHydrate(ctx, owner, repo, configPath, issues, discussions, pullRequests, debug)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)

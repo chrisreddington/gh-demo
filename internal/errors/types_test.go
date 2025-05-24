@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -269,5 +270,115 @@ func TestPartialFailureError_Compatibility(t *testing.T) {
 		if !strings.Contains(errMsg, errStr) {
 			t.Errorf("PartialFailureError should contain error: %s", errStr)
 		}
+	}
+}
+
+// TestIsContextError tests context error detection
+func TestIsContextError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "context canceled",
+			err:      context.Canceled,
+			expected: true,
+		},
+		{
+			name:     "context deadline exceeded",
+			err:      context.DeadlineExceeded,
+			expected: true,
+		},
+		{
+			name:     "regular error",
+			err:      fmt.Errorf("regular error"),
+			expected: false,
+		},
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsContextError(tt.err)
+			if result != tt.expected {
+				t.Errorf("IsContextError() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestContextError tests context error wrapping
+func TestContextError(t *testing.T) {
+	tests := []struct {
+		name           string
+		operation      string
+		cause          error
+		expectedLayer  string
+		expectedOp     string
+		expectedMsg    string
+	}{
+		{
+			name:          "context canceled",
+			operation:     "create_issue",
+			cause:         context.Canceled,
+			expectedLayer: "context",
+			expectedOp:    "create_issue",
+			expectedMsg:   "operation was cancelled (interrupted by user)",
+		},
+		{
+			name:          "context deadline exceeded",
+			operation:     "fetch_labels",
+			cause:         context.DeadlineExceeded,
+			expectedLayer: "context",
+			expectedOp:    "fetch_labels",
+			expectedMsg:   "operation timed out (exceeded 30 second limit)",
+		},
+		{
+			name:      "non-context error",
+			operation: "test_op",
+			cause:     fmt.Errorf("regular error"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ContextError(tt.operation, tt.cause)
+
+			if tt.expectedLayer == "" {
+				// Non-context error should be returned as-is
+				if result != tt.cause {
+					t.Errorf("ContextError() should return original error for non-context errors, got %v", result)
+				}
+				return
+			}
+
+			// Context error should be wrapped in LayeredError
+			layeredErr, ok := IsLayeredError(result)
+			if !ok {
+				t.Errorf("ContextError() should return LayeredError for context errors, got %T", result)
+				return
+			}
+
+			if layeredErr.Layer != tt.expectedLayer {
+				t.Errorf("ContextError() layer = %v, want %v", layeredErr.Layer, tt.expectedLayer)
+			}
+
+			if layeredErr.Operation != tt.expectedOp {
+				t.Errorf("ContextError() operation = %v, want %v", layeredErr.Operation, tt.expectedOp)
+			}
+
+			if layeredErr.Message != tt.expectedMsg {
+				t.Errorf("ContextError() message = %v, want %v", layeredErr.Message, tt.expectedMsg)
+			}
+
+			if layeredErr.Cause != tt.cause {
+				t.Errorf("ContextError() cause = %v, want %v", layeredErr.Cause, tt.cause)
+			}
+		})
 	}
 }

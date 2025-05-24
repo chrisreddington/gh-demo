@@ -1,7 +1,9 @@
 package hydrate
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,7 +32,7 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 	// Should not error with stubbed methods
-	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err = HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels with real GHClient failed: %v", err)
 	}
@@ -49,7 +51,7 @@ type MockGitHubClient struct {
 }
 
 // Add stubs for the rest of the interface
-func (m *MockGitHubClient) CreateIssue(issue types.Issue) error {
+func (m *MockGitHubClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 	if m.FailIssues {
 		return fmt.Errorf("simulated issue creation failure for: %s", issue.Title)
 	}
@@ -57,12 +59,12 @@ func (m *MockGitHubClient) CreateIssue(issue types.Issue) error {
 	return nil
 }
 
-func (m *MockGitHubClient) CreateDiscussion(discussion types.Discussion) error {
+func (m *MockGitHubClient) CreateDiscussion(ctx context.Context, discussion types.Discussion) error {
 	m.CreatedDiscussions = append(m.CreatedDiscussions, discussion)
 	return nil
 }
 
-func (m *MockGitHubClient) CreatePR(pullRequest types.PullRequest) error {
+func (m *MockGitHubClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) error {
 	if m.FailPRs {
 		return fmt.Errorf("simulated PR creation failure for: %s (head: %s, base: %s)", pullRequest.Title, pullRequest.Head, pullRequest.Base)
 	}
@@ -70,7 +72,7 @@ func (m *MockGitHubClient) CreatePR(pullRequest types.PullRequest) error {
 	return nil
 }
 
-func (m *MockGitHubClient) ListLabels() ([]string, error) {
+func (m *MockGitHubClient) ListLabels(ctx context.Context) ([]string, error) {
 	if m.FailListLabels {
 		return nil, fmt.Errorf("simulated list labels failure")
 	}
@@ -81,7 +83,7 @@ func (m *MockGitHubClient) ListLabels() ([]string, error) {
 	return labels, nil
 }
 
-func (m *MockGitHubClient) CreateLabel(label types.Label) error {
+func (m *MockGitHubClient) CreateLabel(ctx context.Context, label types.Label) error {
 	m.CreatedLabels = append(m.CreatedLabels, label.Name)
 	m.ExistingLabels[label.Name] = true
 	return nil
@@ -105,7 +107,7 @@ func TestHydrateWithLabels(t *testing.T) {
 	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 	// Hydrate and ensure labels
-	err = HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err = HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels failed: %v", err)
 	}
@@ -191,7 +193,7 @@ func TestGracefulErrorHandling(t *testing.T) {
 	}
 
 	// Test that the function continues processing despite PR failure
-	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, false, true, false)
+	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, false, true, false)
 
 	// Should return error mentioning the PR failure, but should have succeeded with issues
 	if err == nil {
@@ -240,7 +242,7 @@ func TestPRValidation(t *testing.T) {
 	}
 
 	// Should fail gracefully with validation error
-	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, false, false, true, false)
+	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, false, false, true, false)
 
 	if err == nil {
 		// The MockGitHubClient doesn't implement validation, so this test won't work as expected
@@ -304,7 +306,7 @@ func TestHydrateFromFiles_InvalidJSON(t *testing.T) {
 		t.Fatalf("failed to write valid JSON file: %v", err)
 	}
 
-	_, _, _, err := HydrateFromFiles(invalidPath, validPath, validPath, true, false, false)
+	_, _, _, err := HydrateFromFiles(context.Background(), invalidPath, validPath, validPath, true, false, false)
 	if err == nil {
 		t.Error("Expected error for invalid JSON")
 	}
@@ -312,7 +314,7 @@ func TestHydrateFromFiles_InvalidJSON(t *testing.T) {
 
 func TestHydrateFromFiles_NonExistentFile(t *testing.T) {
 	// Test with non-existent issues file
-	_, _, _, err := HydrateFromFiles("/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, false, false)
+	_, _, _, err := HydrateFromFiles(context.Background(), "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, false, false)
 	if err == nil {
 		t.Error("Expected error for non-existent issues file")
 	}
@@ -324,7 +326,7 @@ func TestHydrateFromFiles_NonExistentFile(t *testing.T) {
 		t.Fatalf("Failed to create issues file: %v", err)
 	}
 
-	_, _, _, err = HydrateFromFiles(validIssuesPath, "/non/existent/discussions.json", "/non/existent/prs.json", true, true, false)
+	_, _, _, err = HydrateFromFiles(context.Background(), validIssuesPath, "/non/existent/discussions.json", "/non/existent/prs.json", true, true, false)
 	if err == nil {
 		t.Error("Expected error for non-existent discussions file")
 	}
@@ -335,9 +337,62 @@ func TestHydrateFromFiles_NonExistentFile(t *testing.T) {
 		t.Fatalf("Failed to create discussions file: %v", err)
 	}
 
-	_, _, _, err = HydrateFromFiles(validIssuesPath, validDiscussionsPath, "/non/existent/prs.json", true, true, true)
+	_, _, _, err = HydrateFromFiles(context.Background(), validIssuesPath, validDiscussionsPath, "/non/existent/prs.json", true, true, true)
 	if err == nil {
 		t.Error("Expected error for non-existent prs file")
+	}
+}
+
+// TestHydrateFromFiles_ContextCancellation tests that file operations respect context cancellation
+func TestHydrateFromFiles_ContextCancellation(t *testing.T) {
+	// Create a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	tempDir := t.TempDir()
+	issuesPath := filepath.Join(tempDir, "issues.json")
+	if err := os.WriteFile(issuesPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create issues file: %v", err)
+	}
+
+	_, _, _, err := HydrateFromFiles(ctx, issuesPath, "", "", true, false, false)
+	if err == nil {
+		t.Error("Expected context cancellation error")
+		return
+	}
+
+	// Should return context.Canceled error
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context.Canceled, got: %v", err)
+	}
+}
+
+// TestHydrateWithLabels_ContextCancellation tests that hydration respects context cancellation
+func TestHydrateWithLabels_ContextCancellation(t *testing.T) {
+	// Create a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	client := &MockGitHubClient{
+		ExistingLabels: map[string]bool{},
+	}
+
+	// Use temporary files
+	tempDir := t.TempDir()
+	issuesPath := filepath.Join(tempDir, "issues.json")
+	if err := os.WriteFile(issuesPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create issues file: %v", err)
+	}
+
+	err := HydrateWithLabels(ctx, client, issuesPath, "", "", true, false, false, false)
+	if err == nil {
+		t.Error("Expected context cancellation error")
+		return
+	}
+
+	// Should return context.Canceled error
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context.Canceled, got: %v", err)
 	}
 }
 
@@ -360,7 +415,7 @@ func TestHydrateFromFiles_InvalidDiscussionsJSON(t *testing.T) {
 		t.Fatalf("Failed to create prs file: %v", err)
 	}
 
-	_, _, _, err := HydrateFromFiles(validIssuesPath, invalidDiscussionsPath, validPRsPath, true, true, false)
+	_, _, _, err := HydrateFromFiles(context.Background(), validIssuesPath, invalidDiscussionsPath, validPRsPath, true, true, false)
 	if err == nil {
 		t.Error("Expected error for invalid discussions JSON")
 	}
@@ -385,7 +440,7 @@ func TestHydrateFromFiles_InvalidPRsJSON(t *testing.T) {
 		t.Fatalf("Failed to create invalid prs file: %v", err)
 	}
 
-	_, _, _, err := HydrateFromFiles(validIssuesPath, validDiscussionsPath, invalidPRsPath, true, true, true)
+	_, _, _, err := HydrateFromFiles(context.Background(), validIssuesPath, validDiscussionsPath, invalidPRsPath, true, true, true)
 	if err == nil {
 		t.Error("Expected error for invalid PRs JSON")
 	}
@@ -486,7 +541,7 @@ func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 		{Name: "new", Color: "00ff00"},
 	}
 
-	err := EnsureDefinedLabelsExist(client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(context.Background(), client, labels, logger, summary)
 
 	// This should succeed with our mock
 	if err != nil {
@@ -507,7 +562,7 @@ func TestEnsureLabelsExist_ListLabelsError(t *testing.T) {
 	summary := &SectionSummary{}
 	labels := []types.Label{{Name: "test-label", Color: "ff0000"}}
 
-	err := EnsureDefinedLabelsExist(client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(context.Background(), client, labels, logger, summary)
 
 	// This should return an error due to ListLabels failing
 	if err == nil {
@@ -531,7 +586,7 @@ func TestEnsureLabelsExist_EmptyLabels(t *testing.T) {
 	summary := &SectionSummary{}
 	labels := []types.Label{} // Empty labels slice
 
-	err := EnsureDefinedLabelsExist(client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(context.Background(), client, labels, logger, summary)
 
 	// This should return nil without calling any client methods
 	if err != nil {
@@ -564,7 +619,7 @@ func TestHydrateWithLabels_DebugMode(t *testing.T) {
 	}
 
 	// Test with debug mode enabled
-	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, true)
+	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, true)
 	if err != nil {
 		t.Errorf("Expected no error with debug mode, got: %v", err)
 	}
@@ -578,7 +633,7 @@ func TestHydrateWithLabels_FileReadError(t *testing.T) {
 	}
 
 	// Use non-existent files
-	err := HydrateWithLabels(client, "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, true, true, false)
+	err := HydrateWithLabels(context.Background(), client, "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, true, true, false)
 	if err == nil {
 		t.Error("Expected error when files don't exist")
 	}
@@ -612,7 +667,7 @@ func TestHydrateWithLabels_EnsureLabelsExistError(t *testing.T) {
 		t.Fatalf("Failed to create prs file: %v", err)
 	}
 
-	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, false, false, false)
+	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, false, false, false)
 
 	if err == nil {
 		t.Error("Expected error when EnsureLabelsExist fails")
@@ -654,7 +709,7 @@ func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
 		t.Fatalf("Failed to create prs file: %v", err)
 	}
 
-	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 
 	// Should return aggregated errors
 	if err == nil {
@@ -704,7 +759,7 @@ func TestConfigurablePaths(t *testing.T) {
 	}
 
 	// Test hydration with the custom paths
-	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
 	if err != nil {
 		t.Errorf("HydrateWithLabels failed with custom config path: %v", err)
 	}
