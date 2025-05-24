@@ -37,7 +37,6 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 	}
 }
 
-
 func TestHydrateWithLabels(t *testing.T) {
 	// Setup mock client with only "bug" and "demo" existing
 	client := NewSuccessfulMockGitHubClient("bug", "demo")
@@ -87,11 +86,11 @@ func TestHydrateOperations(t *testing.T) {
 				issues := `[{"title": "Test Issue", "body": "Test", "labels": ["bug"], "assignees": []}]`
 				discussions := `[{"title": "Test Discussion", "body": "Test", "category": "General", "labels": []}]`
 				prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
-				
+
 				issuesPath := filepath.Join(tempDir, "issues.json")
 				discussionsPath := filepath.Join(tempDir, "discussions.json")
 				prsPath := filepath.Join(tempDir, "prs.json")
-				
+
 				if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
 					t.Fatalf("Failed to write issues file: %v", err)
 				}
@@ -101,7 +100,7 @@ func TestHydrateOperations(t *testing.T) {
 				if err := os.WriteFile(prsPath, []byte(prs), 0644); err != nil {
 					t.Fatalf("Failed to write PRs file: %v", err)
 				}
-				
+
 				return issuesPath, discussionsPath, prsPath
 			},
 			expectError: false,
@@ -110,7 +109,7 @@ func TestHydrateOperations(t *testing.T) {
 			name: "issue creation failure",
 			setupClient: func() *ConfigurableMockGitHubClient {
 				return NewFailingMockGitHubClient(MockConfig{
-					FailIssues: true,
+					FailIssues:    true,
 					IssueErrorMsg: "failed to create issue",
 				})
 			},
@@ -129,7 +128,7 @@ func TestHydrateOperations(t *testing.T) {
 			name: "PR creation failure",
 			setupClient: func() *ConfigurableMockGitHubClient {
 				return NewFailingMockGitHubClient(MockConfig{
-					FailPRs: true,
+					FailPRs:    true,
 					PRErrorMsg: "failed to create PR",
 				})
 			},
@@ -148,7 +147,7 @@ func TestHydrateOperations(t *testing.T) {
 			name: "label listing failure",
 			setupClient: func() *ConfigurableMockGitHubClient {
 				return NewFailingMockGitHubClient(MockConfig{
-					FailListLabels: true,
+					FailListLabels:     true,
 					ListLabelsErrorMsg: "failed to list labels",
 				})
 			},
@@ -169,11 +168,11 @@ func TestHydrateOperations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := tt.setupClient()
 			tempDir := t.TempDir()
-			
+
 			issuesPath, discussionsPath, prsPath := tt.setupFiles(tempDir)
-			
-			err := HydrateWithLabels(context.Background(), client, 
-				issuesPath, discussionsPath, prsPath, 
+
+			err := HydrateWithLabels(context.Background(), client,
+				issuesPath, discussionsPath, prsPath,
 				issuesPath != "", discussionsPath != "", prsPath != "", false)
 
 			if tt.expectError && err == nil {

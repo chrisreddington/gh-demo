@@ -89,3 +89,93 @@ const getUserIdQuery = `
 		}
 	}
 `
+
+// listLabelsQuery lists all labels in a repository with pagination support
+const listLabelsQuery = `
+	query($owner: String!, $name: String!) {
+		repository(owner: $owner, name: $name) {
+			labels(first: 100) {
+				nodes {
+					name
+				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
+			}
+		}
+	}
+`
+
+// repositoryWithDiscussionCategoriesQuery gets repository ID and discussion categories
+const repositoryWithDiscussionCategoriesQuery = `
+	query($owner: String!, $name: String!) {
+		repository(owner: $owner, name: $name) {
+			id
+			discussionCategories(first: 50) {
+				nodes {
+					id
+					name
+				}
+			}
+		}
+	}
+`
+
+// createDiscussionMutation creates a new discussion in a repository
+const createDiscussionMutation = `
+	mutation($input: CreateDiscussionInput!) {
+		createDiscussion(input: $input) {
+			discussion {
+				id
+				number
+				title
+				url
+			}
+		}
+	}
+`
+
+// labelByNameQuery gets label ID by name for discussion/labelable operations
+const labelByNameQuery = `
+	query($owner: String!, $repo: String!, $name: String!) {
+		repository(owner: $owner, name: $repo) {
+			label(name: $name) {
+				id
+			}
+		}
+	}
+`
+
+// addLabelsToLabelableMutation adds labels to any labelable object (issues, PRs, discussions)
+const addLabelsToLabelableMutation = `
+	mutation($input: AddLabelsToLabelableInput!) {
+		addLabelsToLabelable(input: $input) {
+			clientMutationId
+		}
+	}
+`
+
+// addLabelsToLabelableMutationWithParams adds labels to labelable with explicit parameters
+const addLabelsToLabelableMutationWithParams = `
+	mutation AddLabelsToPR($labelableId: ID!, $labelIds: [ID!]!) {
+		addLabelsToLabelable(input: {
+			labelableId: $labelableId
+			labelIds: $labelIds
+		}) {
+			clientMutationId
+		}
+	}
+`
+
+// addAssigneesToAssignableMutation adds assignees to any assignable object (issues, PRs)
+const addAssigneesToAssignableMutation = `
+	mutation AddAssigneesToPR($assignableId: ID!, $assigneeIds: [ID!]!) {
+		addAssigneesToAssignable(input: {
+			assignableId: $assignableId
+			assigneeIds: $assigneeIds
+		}) {
+			clientMutationId
+		}
+	}
+`
