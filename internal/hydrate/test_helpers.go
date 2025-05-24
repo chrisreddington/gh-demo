@@ -104,6 +104,70 @@ func (m *ConfigurableMockGitHubClient) SetLogger(logger common.Logger) {
 	m.logger = logger
 }
 
+// Listing operations for cleanup
+func (m *ConfigurableMockGitHubClient) ListIssues(ctx context.Context) ([]types.Issue, error) {
+	// For testing, return created issues
+	return m.CreatedIssues, nil
+}
+
+func (m *ConfigurableMockGitHubClient) ListDiscussions(ctx context.Context) ([]types.Discussion, error) {
+	// For testing, return created discussions
+	return m.CreatedDiscussions, nil
+}
+
+func (m *ConfigurableMockGitHubClient) ListPRs(ctx context.Context) ([]types.PullRequest, error) {
+	// For testing, return created PRs
+	return m.CreatedPRs, nil
+}
+
+// Deletion operations for cleanup
+func (m *ConfigurableMockGitHubClient) DeleteIssue(ctx context.Context, nodeID string) error {
+	// For testing, just remove from created issues if found
+	for i, issue := range m.CreatedIssues {
+		if issue.NodeID == nodeID {
+			m.CreatedIssues = append(m.CreatedIssues[:i], m.CreatedIssues[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *ConfigurableMockGitHubClient) DeleteDiscussion(ctx context.Context, nodeID string) error {
+	// For testing, just remove from created discussions if found
+	for i, discussion := range m.CreatedDiscussions {
+		if discussion.NodeID == nodeID {
+			m.CreatedDiscussions = append(m.CreatedDiscussions[:i], m.CreatedDiscussions[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *ConfigurableMockGitHubClient) DeletePR(ctx context.Context, nodeID string) error {
+	// For testing, just remove from created PRs if found
+	for i, pullRequest := range m.CreatedPRs {
+		if pullRequest.NodeID == nodeID {
+			m.CreatedPRs = append(m.CreatedPRs[:i], m.CreatedPRs[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (m *ConfigurableMockGitHubClient) DeleteLabel(ctx context.Context, name string) error {
+	// For testing, just remove from existing labels
+	if m.Config.ExistingLabels != nil {
+		delete(m.Config.ExistingLabels, name)
+	}
+	for i, label := range m.CreatedLabels {
+		if label == name {
+			m.CreatedLabels = append(m.CreatedLabels[:i], m.CreatedLabels[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
 // Helper functions to create common mock configurations
 
 // NewSuccessfulMockGitHubClient creates a mock that succeeds for all operations

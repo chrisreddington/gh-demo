@@ -55,7 +55,7 @@ func TestTypeStructures(t *testing.T) {
 		{
 			name: "PullRequest type structure",
 			testFunc: func(t *testing.T) {
-				pr := PullRequest{
+				pullRequest := PullRequest{
 					Title:     "Test PR",
 					Body:      "Test Body",
 					Head:      "feature-branch",
@@ -64,20 +64,20 @@ func TestTypeStructures(t *testing.T) {
 					Assignees: []string{"reviewer1"},
 				}
 
-				if pr.Title != "Test PR" {
-					t.Errorf("Expected Title to be 'Test PR', got %s", pr.Title)
+				if pullRequest.Title != "Test PR" {
+					t.Errorf("Expected Title to be 'Test PR', got %s", pullRequest.Title)
 				}
-				if pr.Head != "feature-branch" {
-					t.Errorf("Expected Head to be 'feature-branch', got %s", pr.Head)
+				if pullRequest.Head != "feature-branch" {
+					t.Errorf("Expected Head to be 'feature-branch', got %s", pullRequest.Head)
 				}
-				if pr.Base != "main" {
-					t.Errorf("Expected Base to be 'main', got %s", pr.Base)
+				if pullRequest.Base != "main" {
+					t.Errorf("Expected Base to be 'main', got %s", pullRequest.Base)
 				}
-				if len(pr.Labels) != 1 {
-					t.Errorf("Expected 1 label, got %d", len(pr.Labels))
+				if len(pullRequest.Labels) != 1 {
+					t.Errorf("Expected 1 label, got %d", len(pullRequest.Labels))
 				}
-				if len(pr.Assignees) != 1 {
-					t.Errorf("Expected 1 assignee, got %d", len(pr.Assignees))
+				if len(pullRequest.Assignees) != 1 {
+					t.Errorf("Expected 1 assignee, got %d", len(pullRequest.Assignees))
 				}
 			},
 		},

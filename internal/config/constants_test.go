@@ -33,6 +33,11 @@ func TestNewConfiguration(t *testing.T) {
 	if config.LabelsPath != expectedLabelsPath {
 		t.Errorf("Expected LabelsPath %s, got %s", expectedLabelsPath, config.LabelsPath)
 	}
+
+	expectedPreservePath := filepath.Join(basePath, PreserveFilename)
+	if config.PreservePath != expectedPreservePath {
+		t.Errorf("Expected PreservePath %s, got %s", expectedPreservePath, config.PreservePath)
+	}
 }
 
 func TestNewConfigurationWithRoot(t *testing.T) {
@@ -50,6 +55,11 @@ func TestNewConfigurationWithRoot(t *testing.T) {
 	if config.IssuesPath != expectedIssuesPath {
 		t.Errorf("Expected IssuesPath %s, got %s", expectedIssuesPath, config.IssuesPath)
 	}
+
+	expectedPreservePath := filepath.Join(expectedBasePath, PreserveFilename)
+	if config.PreservePath != expectedPreservePath {
+		t.Errorf("Expected PreservePath %s, got %s", expectedPreservePath, config.PreservePath)
+	}
 }
 
 func TestConfigurationConstants(t *testing.T) {
@@ -65,5 +75,8 @@ func TestConfigurationConstants(t *testing.T) {
 	}
 	if LabelsFilename != "labels.json" {
 		t.Errorf("Expected LabelsFilename 'labels.json', got %s", LabelsFilename)
+	}
+	if PreserveFilename != "preserve.json" {
+		t.Errorf("Expected PreserveFilename 'preserve.json', got %s", PreserveFilename)
 	}
 }

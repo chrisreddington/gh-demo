@@ -179,3 +179,128 @@ const addAssigneesToAssignableMutation = `
 		}
 	}
 `
+
+// listIssuesQuery lists all issues in a repository with pagination support
+const listIssuesQuery = `
+	query($owner: String!, $name: String!, $first: Int!, $after: String) {
+		repository(owner: $owner, name: $name) {
+			issues(first: $first, after: $after, states: [OPEN]) {
+				nodes {
+					id
+					number
+					title
+					body
+					labels(first: 20) {
+						nodes {
+							name
+						}
+					}
+				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
+			}
+		}
+	}
+`
+
+// listDiscussionsQuery lists all discussions in a repository with pagination support
+const listDiscussionsQuery = `
+	query($owner: String!, $name: String!, $first: Int!, $after: String) {
+		repository(owner: $owner, name: $name) {
+			discussions(first: $first, after: $after) {
+				nodes {
+					id
+					number
+					title
+					body
+					category {
+						name
+					}
+				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
+			}
+		}
+	}
+`
+
+// listPullRequestsQuery lists all pull requests in a repository with pagination support
+const listPullRequestsQuery = `
+	query($owner: String!, $name: String!, $first: Int!, $after: String) {
+		repository(owner: $owner, name: $name) {
+			pullRequests(first: $first, after: $after, states: [OPEN]) {
+				nodes {
+					id
+					number
+					title
+					body
+					headRefName
+					baseRefName
+					labels(first: 20) {
+						nodes {
+							name
+						}
+					}
+				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
+			}
+		}
+	}
+`
+
+// deleteIssueMutation deletes an issue by closing it (GitHub doesn't allow permanent deletion)
+const deleteIssueMutation = `
+	mutation DeleteIssue($issueId: ID!) {
+		closeIssue(input: {
+			issueId: $issueId
+		}) {
+			issue {
+				id
+				state
+			}
+		}
+	}
+`
+
+// deletePullRequestMutation deletes a pull request by closing it
+const deletePullRequestMutation = `
+	mutation DeletePullRequest($pullRequestId: ID!) {
+		closePullRequest(input: {
+			pullRequestId: $pullRequestId
+		}) {
+			pullRequest {
+				id
+				state
+			}
+		}
+	}
+`
+
+// deleteLabelMutation deletes a label by name
+const deleteLabelMutation = `
+	mutation DeleteLabel($labelId: ID!) {
+		deleteLabel(input: {
+			id: $labelId
+		}) {
+			clientMutationId
+		}
+	}
+`
+
+// getLabelByNameQuery gets a label ID by name for deletion
+const getLabelByNameQuery = `
+	query($owner: String!, $name: String!, $labelName: String!) {
+		repository(owner: $owner, name: $name) {
+			label(name: $labelName) {
+				id
+			}
+		}
+	}
+`

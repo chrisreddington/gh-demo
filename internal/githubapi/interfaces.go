@@ -11,6 +11,7 @@ import (
 // This interface enables easy mocking for tests and ensures consistent API across different implementations.
 // All methods should return appropriate errors when operations fail.
 type GitHubClient interface {
+	// Creation operations
 	// ListLabels retrieves all existing labels from the repository
 	ListLabels(ctx context.Context) ([]string, error)
 	// CreateLabel creates a new label in the repository using the provided label data
@@ -21,6 +22,25 @@ type GitHubClient interface {
 	CreateDiscussion(ctx context.Context, discussion types.Discussion) error
 	// CreatePR creates a new pull request in the repository using the provided pull request data
 	CreatePR(ctx context.Context, pullRequest types.PullRequest) error
+
+	// Listing operations for cleanup
+	// ListIssues retrieves all existing issues from the repository
+	ListIssues(ctx context.Context) ([]types.Issue, error)
+	// ListDiscussions retrieves all existing discussions from the repository
+	ListDiscussions(ctx context.Context) ([]types.Discussion, error)
+	// ListPRs retrieves all existing pull requests from the repository
+	ListPRs(ctx context.Context) ([]types.PullRequest, error)
+
+	// Deletion operations for cleanup
+	// DeleteIssue deletes an issue by its node ID
+	DeleteIssue(ctx context.Context, nodeID string) error
+	// DeleteDiscussion deletes a discussion by its node ID
+	DeleteDiscussion(ctx context.Context, nodeID string) error
+	// DeletePR deletes a pull request by its node ID
+	DeletePR(ctx context.Context, nodeID string) error
+	// DeleteLabel deletes a label by its name
+	DeleteLabel(ctx context.Context, name string) error
+
 	// SetLogger sets the logger for debug output during API operations
 	SetLogger(logger common.Logger)
 }
