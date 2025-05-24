@@ -117,7 +117,9 @@ func TestHydrateOperations(t *testing.T) {
 			setupFiles: func(tempDir string) (string, string, string) {
 				issues := `[{"title": "Test Issue", "body": "Test", "labels": [], "assignees": []}]`
 				issuesPath := filepath.Join(tempDir, "issues.json")
-				os.WriteFile(issuesPath, []byte(issues), 0644)
+				if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
+					t.Fatalf("Failed to write issues file: %v", err)
+				}
 				return issuesPath, "", ""
 			},
 			expectError: true,
@@ -134,7 +136,9 @@ func TestHydrateOperations(t *testing.T) {
 			setupFiles: func(tempDir string) (string, string, string) {
 				prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
 				prsPath := filepath.Join(tempDir, "prs.json")
-				os.WriteFile(prsPath, []byte(prs), 0644)
+				if err := os.WriteFile(prsPath, []byte(prs), 0644); err != nil {
+					t.Fatalf("Failed to write PRs file: %v", err)
+				}
 				return "", "", prsPath
 			},
 			expectError: true,
@@ -151,7 +155,9 @@ func TestHydrateOperations(t *testing.T) {
 			setupFiles: func(tempDir string) (string, string, string) {
 				issues := `[{"title": "Test Issue", "body": "Test", "labels": ["new-label"], "assignees": []}]`
 				issuesPath := filepath.Join(tempDir, "issues.json")
-				os.WriteFile(issuesPath, []byte(issues), 0644)
+				if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
+					t.Fatalf("Failed to write issues file: %v", err)
+				}
 				return issuesPath, "", ""
 			},
 			expectError: true,
