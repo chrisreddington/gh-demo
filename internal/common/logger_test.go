@@ -7,18 +7,12 @@ import (
 func TestNewLogger(t *testing.T) {
 	// Test debug mode enabled
 	debugLogger := NewLogger(true)
-	if debugLogger == nil {
-		t.Error("Expected logger to be created")
-	}
 	if !debugLogger.debug {
 		t.Error("Expected debug mode to be enabled")
 	}
 
 	// Test debug mode disabled
 	infoLogger := NewLogger(false)
-	if infoLogger == nil {
-		t.Error("Expected logger to be created")
-	}
 	if infoLogger.debug {
 		t.Error("Expected debug mode to be disabled")
 	}
@@ -47,10 +41,7 @@ func TestStandardLogger_Info(t *testing.T) {
 func TestStandardLogger_Interface(t *testing.T) {
 	// Test that StandardLogger implements the Logger interface
 	var logger Logger = NewLogger(true)
-	if logger == nil {
-		t.Error("Expected logger to implement Logger interface")
-	}
-
+	
 	// Test that we can call interface methods
 	logger.Debug("debug test")
 	logger.Info("info test")

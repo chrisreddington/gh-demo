@@ -727,7 +727,11 @@ func TestReadLabelsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	t.Run("ValidLabelsFile", func(t *testing.T) {
 		labelsPath := filepath.Join(tmpDir, "labels.json")
