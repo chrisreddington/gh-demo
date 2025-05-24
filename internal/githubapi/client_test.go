@@ -1098,7 +1098,7 @@ func TestCreateIssue_ContextTimeout(t *testing.T) {
 	// Create a context that times out immediately
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
-	
+
 	// Wait for context to timeout
 	time.Sleep(2 * time.Millisecond)
 

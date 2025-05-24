@@ -1,18 +1,27 @@
 /*
 Package githubapi provides GitHub API client functionality for the gh-demo CLI extension.
 
-This package implements two patterns for client creation:
-1. NewGHClient() - Creates a real GitHub client using go-gh authentication
-2. NewGHClientWithClients() - Accepts injected clients for testing with mocks
+This package implements GraphQL-only operations for interacting with the GitHub API, providing
+efficient and type-safe access to GitHub resources.
 
-The dependency injection pattern allows for comprehensive unit testing without requiring
-GitHub authentication, while still maintaining integration test capabilities when
-credentials are available.
+Client Creation Patterns:
+1. NewGHClient() - Creates a real GitHub client using go-gh authentication
+2. NewGHClientWithClients() - Accepts injected GraphQL clients for testing with mocks
+
+All GitHub operations (creating issues, discussions, pull requests, and managing labels) use
+GraphQL mutations and queries for consistent performance and functionality.
 
 Testing Strategy:
-- Unit tests use NewGHClientWithClients() with mock clients
+- Unit tests use NewGHClientWithClients() with mock GraphQL clients
 - Integration tests use NewGHClient() and skip when authentication is unavailable
 - CI runs tests in short mode to skip integration tests by default
+
+GraphQL Operations:
+- CreateLabel: Uses createLabel mutation
+- CreateIssue: Uses createIssue mutation with labels and assignees
+- CreatePR: Uses createPullRequest mutation with labels and assignees
+- ListLabels: Uses GraphQL query for efficient label retrieval
+- CreateDiscussion: Uses GraphQL for discussions and label management
 */
 
 package githubapi
@@ -63,8 +72,8 @@ type GHClient struct {
 
 // NewGHClient creates a new GitHub API client for the specified owner and repository.
 // It initializes the GraphQL client using the go-gh library and validates that
-// the owner and repo parameters are not empty. The client is ready to perform operations
-// like creating issues, discussions, pull requests, and managing labels.
+// the owner and repo parameters are not empty. The client uses GraphQL exclusively
+// for all GitHub operations including creating issues, discussions, pull requests, and managing labels.
 func NewGHClient(owner, repo string) (*GHClient, error) {
 	if strings.TrimSpace(owner) == "" {
 		return nil, errors.ValidationError("validate_client_params", "owner cannot be empty")
@@ -87,8 +96,8 @@ func NewGHClient(owner, repo string) (*GHClient, error) {
 	}, nil
 }
 
-// NewGHClientWithClients creates a new GitHub API client with provided clients for testing.
-// This constructor allows dependency injection of mock clients for unit testing while
+// NewGHClientWithClients creates a new GitHub API client with provided GraphQL client for testing.
+// This constructor allows dependency injection of mock GraphQL clients for unit testing while
 // maintaining the same validation and initialization logic as NewGHClient.
 func NewGHClientWithClients(owner, repo string, gqlClient GraphQLClient) (*GHClient, error) {
 	if strings.TrimSpace(owner) == "" {
@@ -273,7 +282,7 @@ func (c *GHClient) resolveLabelIDs(ctx context.Context, labelNames []string) ([]
 	}
 
 	labelIDs := make([]string, 0, len(labelNames))
-	
+
 	for _, labelName := range labelNames {
 		var labelResponse struct {
 			Repository struct {
@@ -318,7 +327,7 @@ func (c *GHClient) resolveUserIDs(ctx context.Context, userLogins []string) ([]s
 	}
 
 	userIDs := make([]string, 0, len(userLogins))
-	
+
 	for _, login := range userLogins {
 		var userResponse struct {
 			User struct {
@@ -446,7 +455,7 @@ func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 		return layeredErr.(*errors.LayeredError).WithContext("title", issue.Title)
 	}
 
-	c.debugLog("Successfully created issue '%s' (Number: %d, URL: %s)", 
+	c.debugLog("Successfully created issue '%s' (Number: %d, URL: %s)",
 		issue.Title, mutationResponse.CreateIssue.Issue.Number, mutationResponse.CreateIssue.Issue.URL)
 	return nil
 }
@@ -884,7 +893,7 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 	}
 
 	prID := mutationResponse.CreatePullRequest.PullRequest.ID
-	c.debugLog("Successfully created pull request '%s' (Number: %d, URL: %s)", 
+	c.debugLog("Successfully created pull request '%s' (Number: %d, URL: %s)",
 		pullRequest.Title, mutationResponse.CreatePullRequest.PullRequest.Number, mutationResponse.CreatePullRequest.PullRequest.URL)
 
 	// Add labels and assignees if specified

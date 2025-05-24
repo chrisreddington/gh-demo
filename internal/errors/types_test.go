@@ -315,12 +315,12 @@ func TestIsContextError(t *testing.T) {
 // TestContextError tests context error wrapping
 func TestContextError(t *testing.T) {
 	tests := []struct {
-		name           string
-		operation      string
-		cause          error
-		expectedLayer  string
-		expectedOp     string
-		expectedMsg    string
+		name          string
+		operation     string
+		cause         error
+		expectedLayer string
+		expectedOp    string
+		expectedMsg   string
 	}{
 		{
 			name:          "context canceled",
