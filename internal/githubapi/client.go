@@ -57,9 +57,28 @@ func (w *graphQLClientWrapper) Do(ctx context.Context, query string, variables m
 		return err
 	}
 
-	// Note: go-gh GraphQL client doesn't support context directly
-	// In a real implementation, we would need to handle context timeout/cancellation at a higher level
-	return w.client.Do(query, variables, response)
+	// Since go-gh GraphQL client doesn't support context directly,
+	// we implement context handling by running the operation in a goroutine
+	// and using select to handle cancellation/timeout
+	type result struct {
+		err error
+	}
+
+	resultChan := make(chan result, 1)
+
+	go func() {
+		err := w.client.Do(query, variables, response)
+		resultChan <- result{err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		// Context was cancelled or timed out
+		return ctx.Err()
+	case res := <-resultChan:
+		// Operation completed
+		return res.err
+	}
 }
 
 // GHClient is the main client for all GitHub API operations
