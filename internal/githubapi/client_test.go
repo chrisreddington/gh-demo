@@ -350,6 +350,146 @@ func TestCreatePR(t *testing.T) {
 	}
 }
 
+// TestGHClient_GraphQLOperations provides comprehensive testing of GraphQL operations with table-driven approach
+func TestGHClient_GraphQLOperations(t *testing.T) {
+	tests := []struct {
+		name        string
+		operation   string
+		setupMock   func() *ConfigurableMockGraphQLClient
+		testFunc    func(*GHClient) error
+		expectError bool
+	}{
+		{
+			name:      "CreateLabel success",
+			operation: "createLabel",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreateLabel(context.Background(), types.Label{
+					Name:        "feature",
+					Description: "New feature",
+					Color:       "00ff00",
+				})
+			},
+			expectError: false,
+		},
+		{
+			name:      "CreateIssue success",
+			operation: "createIssue",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreateIssue(context.Background(), types.Issue{
+					Title:     "Test Issue",
+					Body:      "Test description",
+					Labels:    []string{"bug"},
+					Assignees: []string{"testuser"},
+				})
+			},
+			expectError: false,
+		},
+		{
+			name:      "CreatePR success",
+			operation: "createPR",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreatePR(context.Background(), types.PullRequest{
+					Title:     "Test PR",
+					Body:      "Test description",
+					Head:      "feature-branch",
+					Base:      "main",
+					Labels:    []string{"enhancement"},
+					Assignees: []string{"testuser"},
+				})
+			},
+			expectError: false,
+		},
+		{
+			name:      "CreateDiscussion success",
+			operation: "createDiscussion",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreateDiscussion(context.Background(), types.Discussion{
+					Title:    "Test Discussion",
+					Body:     "Test body",
+					Category: "General",
+					Labels:   []string{"question"},
+				})
+			},
+			expectError: false,
+		},
+		{
+			name:      "ListLabels success",
+			operation: "listLabels",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				labels, err := client.ListLabels(context.Background())
+				if err != nil {
+					return err
+				}
+				if len(labels) != 3 {
+					return fmt.Errorf("expected 3 labels, got %d", len(labels))
+				}
+				return nil
+			},
+			expectError: false,
+		},
+		{
+			name:      "CreateLabel error",
+			operation: "createLabel",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewErrorMockGraphQL(map[string]string{
+					"createLabel": "label creation failed",
+				})
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreateLabel(context.Background(), types.Label{
+					Name: "test",
+				})
+			},
+			expectError: true,
+		},
+		{
+			name:      "ListLabels error",
+			operation: "listLabels",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewErrorMockGraphQL(map[string]string{
+					"labels": "access denied",
+				})
+			},
+			testFunc: func(client *GHClient) error {
+				_, err := client.ListLabels(context.Background())
+				return err
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := tt.setupMock()
+			client := CreateTestClient(mockClient)
+
+			err := tt.testFunc(client)
+
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error for %s but got none", tt.name)
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error for %s: %v", tt.name, err)
+			}
+		})
+	}
+}
+
 func TestSetLogger(t *testing.T) {
 	mockGQL := &MockGraphQLClient{}
 

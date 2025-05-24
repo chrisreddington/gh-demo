@@ -69,6 +69,116 @@ func TestHydrateWithLabels(t *testing.T) {
 	}
 }
 
+// TestHydrateOperations provides comprehensive testing of hydrate operations with table-driven approach
+func TestHydrateOperations(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupClient func() *ConfigurableMockGitHubClient
+		setupFiles  func(tempDir string) (issues, discussions, prs string)
+		expectError bool
+		errorText   string
+	}{
+		{
+			name: "successful hydration",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				return NewSuccessfulMockGitHubClient("existing")
+			},
+			setupFiles: func(tempDir string) (string, string, string) {
+				issues := `[{"title": "Test Issue", "body": "Test", "labels": ["bug"], "assignees": []}]`
+				discussions := `[{"title": "Test Discussion", "body": "Test", "category": "General", "labels": []}]`
+				prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
+				
+				issuesPath := filepath.Join(tempDir, "issues.json")
+				discussionsPath := filepath.Join(tempDir, "discussions.json")
+				prsPath := filepath.Join(tempDir, "prs.json")
+				
+				os.WriteFile(issuesPath, []byte(issues), 0644)
+				os.WriteFile(discussionsPath, []byte(discussions), 0644)
+				os.WriteFile(prsPath, []byte(prs), 0644)
+				
+				return issuesPath, discussionsPath, prsPath
+			},
+			expectError: false,
+		},
+		{
+			name: "issue creation failure",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				return NewFailingMockGitHubClient(MockConfig{
+					FailIssues: true,
+					IssueErrorMsg: "failed to create issue",
+				})
+			},
+			setupFiles: func(tempDir string) (string, string, string) {
+				issues := `[{"title": "Test Issue", "body": "Test", "labels": [], "assignees": []}]`
+				issuesPath := filepath.Join(tempDir, "issues.json")
+				os.WriteFile(issuesPath, []byte(issues), 0644)
+				return issuesPath, "", ""
+			},
+			expectError: true,
+			errorText:   "some items failed to create",
+		},
+		{
+			name: "PR creation failure",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				return NewFailingMockGitHubClient(MockConfig{
+					FailPRs: true,
+					PRErrorMsg: "failed to create PR",
+				})
+			},
+			setupFiles: func(tempDir string) (string, string, string) {
+				prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
+				prsPath := filepath.Join(tempDir, "prs.json")
+				os.WriteFile(prsPath, []byte(prs), 0644)
+				return "", "", prsPath
+			},
+			expectError: true,
+			errorText:   "some items failed to create",
+		},
+		{
+			name: "label listing failure",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				return NewFailingMockGitHubClient(MockConfig{
+					FailListLabels: true,
+					ListLabelsErrorMsg: "failed to list labels",
+				})
+			},
+			setupFiles: func(tempDir string) (string, string, string) {
+				issues := `[{"title": "Test Issue", "body": "Test", "labels": ["new-label"], "assignees": []}]`
+				issuesPath := filepath.Join(tempDir, "issues.json")
+				os.WriteFile(issuesPath, []byte(issues), 0644)
+				return issuesPath, "", ""
+			},
+			expectError: true,
+			errorText:   "failed to list labels",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := tt.setupClient()
+			tempDir := t.TempDir()
+			
+			issuesPath, discussionsPath, prsPath := tt.setupFiles(tempDir)
+			
+			err := HydrateWithLabels(context.Background(), client, 
+				issuesPath, discussionsPath, prsPath, 
+				issuesPath != "", discussionsPath != "", prsPath != "", false)
+
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error for %s but got none", tt.name)
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error for %s: %v", tt.name, err)
+			}
+			if tt.expectError && err != nil && tt.errorText != "" {
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain '%s', got: %v", tt.errorText, err)
+				}
+			}
+		})
+	}
+}
+
 func TestReadIssuesJSON(t *testing.T) {
 	root, err := FindProjectRoot(context.Background())
 	if err != nil {
