@@ -53,16 +53,14 @@ func resolveRepositoryInfo(owner, repo string) (*repositoryInfo, error) {
 }
 
 // createGitHubClient creates and configures a GitHub API client.
-func createGitHubClient(repoInfo *repositoryInfo, debug bool) (githubapi.GitHubClient, error) {
+func createGitHubClient(repoInfo *repositoryInfo, logger common.Logger) (githubapi.GitHubClient, error) {
 	client, err := githubapi.NewGHClient(repoInfo.Owner, repoInfo.Repo)
 	if err != nil {
 		return nil, errors.APIError("create_client", "failed to create GitHub client", err)
 	}
 
-	// Set logger for debug mode
-	if debug {
-		client.SetLogger(common.NewLogger(debug))
-	}
+	// Set logger for debug output
+	client.SetLogger(logger)
 
 	return client, nil
 }
@@ -120,7 +118,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	cfg := config.NewConfigurationWithRoot(ctx, root, configPath)
 
 	// Create and configure GitHub client
-	client, err := createGitHubClient(repoInfo, debug)
+	client, err := createGitHubClient(repoInfo, logger)
 	if err != nil {
 		return err
 	}
@@ -135,7 +133,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	}
 
 	// Perform hydration
-	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, debug)
+	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, logger)
 
 	// Handle the result
 	return handleHydrationResult(err, logger)
