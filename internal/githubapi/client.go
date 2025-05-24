@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/errors"
 	"github.com/chrisreddington/gh-demo/internal/types"
 	"github.com/cli/go-gh/v2/pkg/api"
 )
@@ -58,22 +59,22 @@ type RESTClient struct {
 // like creating issues, discussions, pull requests, and managing labels.
 func NewGHClient(owner, repo string) (*GHClient, error) {
 	if strings.TrimSpace(owner) == "" {
-		return nil, fmt.Errorf("owner cannot be empty")
+		return nil, errors.ValidationError("validate_client_params", "owner cannot be empty")
 	}
 	if strings.TrimSpace(repo) == "" {
-		return nil, fmt.Errorf("repo cannot be empty")
+		return nil, errors.ValidationError("validate_client_params", "repo cannot be empty")
 	}
 
 	// Create GraphQL client using go-gh
 	gqlClient, err := api.DefaultGraphQLClient()
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize GraphQL client: %w", err)
+		return nil, errors.APIError("create_graphql_client", "failed to initialize GraphQL client", err)
 	}
 
 	// Create REST client using go-gh
 	restRawClient, err := api.DefaultRESTClient()
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize REST client: %w", err)
+		return nil, errors.APIError("create_rest_client", "failed to initialize REST client", err)
 	}
 
 	restClient := &RESTClient{client: restRawClient}
@@ -92,10 +93,10 @@ func NewGHClient(owner, repo string) (*GHClient, error) {
 // maintaining the same validation and initialization logic as NewGHClient.
 func NewGHClientWithClients(owner, repo string, gqlClient GraphQLClient, restClient *RESTClient) (*GHClient, error) {
 	if strings.TrimSpace(owner) == "" {
-		return nil, fmt.Errorf("owner cannot be empty")
+		return nil, errors.ValidationError("validate_client_params", "owner cannot be empty")
 	}
 	if strings.TrimSpace(repo) == "" {
-		return nil, fmt.Errorf("repo cannot be empty")
+		return nil, errors.ValidationError("validate_client_params", "repo cannot be empty")
 	}
 
 	return &GHClient{
@@ -220,7 +221,7 @@ func (c *GHClient) ListLabels() ([]string, error) {
 	err := c.gqlClient.Do(labelsQuery, variables, &response)
 	if err != nil {
 		c.debugLog("Failed to fetch labels: %v", err)
-		return nil, fmt.Errorf("failed to fetch labels: %w", err)
+		return nil, errors.APIError("list_labels", "failed to fetch labels", err)
 	}
 
 	labels := make([]string, 0, len(response.Repository.Labels.Nodes))
@@ -237,7 +238,7 @@ func (c *GHClient) ListLabels() ([]string, error) {
 // the specified name, description, and color.
 func (c *GHClient) CreateLabel(label types.Label) error {
 	if c.restClient == nil {
-		return fmt.Errorf("REST client is not initialized")
+		return errors.ValidationError("create_label", "REST client is not initialized")
 	}
 
 	c.debugLog("Creating label '%s' (color: %s) in repository %s/%s", label.Name, label.Color, c.Owner, c.Repo)
@@ -257,7 +258,8 @@ func (c *GHClient) CreateLabel(label types.Label) error {
 	err := c.restClient.Request("POST", path, payload, nil)
 	if err != nil {
 		c.debugLog("Failed to create label '%s': %v", label.Name, err)
-		return err
+		layeredErr := errors.NewLayeredError("api", "create_label", "failed to create GitHub label", err)
+		return layeredErr.WithContext("name", label.Name).WithContext("color", label.Color)
 	}
 
 	c.debugLog("Successfully created label '%s' with color '%s'", label.Name, label.Color)
@@ -269,7 +271,7 @@ func (c *GHClient) CreateLabel(label types.Label) error {
 // the specified title, body, labels, and assignees.
 func (c *GHClient) CreateIssue(issue types.Issue) error {
 	if c.restClient == nil {
-		return fmt.Errorf("REST client is not initialized")
+		return errors.ValidationError("create_issue", "REST client is not initialized")
 	}
 
 	c.debugLog("Creating issue '%s' in repository %s/%s", issue.Title, c.Owner, c.Repo)
@@ -285,7 +287,8 @@ func (c *GHClient) CreateIssue(issue types.Issue) error {
 	err := c.restClient.Request("POST", path, payload, nil)
 	if err != nil {
 		c.debugLog("Failed to create issue '%s': %v", issue.Title, err)
-		return err
+		layeredErr := errors.NewLayeredError("api", "create_issue", "failed to create GitHub issue", err)
+		return layeredErr.WithContext("title", issue.Title)
 	}
 
 	c.debugLog("Successfully created issue '%s'", issue.Title)
@@ -528,15 +531,15 @@ func (c *GHClient) CreatePR(pullRequest types.PullRequest) error {
 	// Basic validation
 	if pullRequest.Head == "" {
 		c.debugLog("PR head branch is empty")
-		return fmt.Errorf("PR head branch cannot be empty")
+		return errors.ValidationError("validate_pr", "head branch cannot be empty")
 	}
 	if pullRequest.Base == "" {
 		c.debugLog("PR base branch is empty")
-		return fmt.Errorf("PR base branch cannot be empty")
+		return errors.ValidationError("validate_pr", "base branch cannot be empty")
 	}
 	if pullRequest.Head == pullRequest.Base {
 		c.debugLog("PR head and base branches are the same: %s", pullRequest.Head)
-		return fmt.Errorf("PR head and base branches cannot be the same (%s)", pullRequest.Head)
+		return errors.ValidationError("validate_pr", fmt.Sprintf("head and base branches cannot be the same (%s)", pullRequest.Head))
 	}
 
 	path := fmt.Sprintf("repos/%s/%s/pulls", c.Owner, c.Repo)

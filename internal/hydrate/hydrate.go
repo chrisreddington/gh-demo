@@ -35,14 +35,15 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 
 	issues, discussions, pullRequests, err := HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath, includeIssues, includeDiscussions, includePullRequests)
 	if err != nil {
-		return fmt.Errorf("failed to load configuration files: %w", err)
+		return errors.ConfigError("load_config_files", "failed to load configuration files", err)
 	}
 
 	// Try to read explicit label definitions from labels.json
 	labelsPath := filepath.Join(filepath.Dir(issuesPath), "labels.json")
 	explicitLabels, err := ReadLabelsJSON(labelsPath)
 	if err != nil {
-		return fmt.Errorf("failed to read labels configuration from %s: %w", labelsPath, err)
+		layeredErr := errors.NewLayeredError("config", "read_labels_config", "failed to read labels configuration", err)
+		return layeredErr.WithContext("path", labelsPath)
 	}
 
 	// Collect label names referenced in content
@@ -81,7 +82,7 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 	logger.Debug("Found %d total labels to ensure exist", len(labelsToEnsure))
 
 	if err := EnsureDefinedLabelsExist(client, labelsToEnsure, logger, labelSummary); err != nil {
-		return fmt.Errorf("failed to ensure labels exist: %w", err)
+		return errors.APIError("ensure_labels", "failed to ensure labels exist", err)
 	}
 
 	// Report label summary
@@ -277,12 +278,14 @@ func ReadLabelsJSON(labelsPath string) ([]types.Label, error) {
 
 	content, err := os.ReadFile(labelsPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read labels file '%s': %w", labelsPath, err)
+		layeredErr := errors.NewLayeredError("file", "read_labels", "failed to read labels file", err)
+		return nil, layeredErr.WithContext("path", labelsPath)
 	}
 
 	var labels []types.Label
 	if err := json.Unmarshal(content, &labels); err != nil {
-		return nil, fmt.Errorf("failed to parse labels JSON from '%s': %w", labelsPath, err)
+		layeredErr := errors.NewLayeredError("file", "parse_labels", "invalid JSON in labels file", err)
+		return nil, layeredErr.WithContext("path", labelsPath)
 	}
 
 	return labels, nil

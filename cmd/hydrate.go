@@ -42,7 +42,7 @@ func resolveRepositoryInfo(owner, repo string) (*repositoryInfo, error) {
 	}
 
 	if resolvedOwner == "" || resolvedRepo == "" {
-		return nil, fmt.Errorf("--owner and --repo are required (or run inside a GitHub repo)")
+		return nil, errors.ValidationError("validate_repository", "--owner and --repo are required (or run inside a GitHub repo)")
 	}
 
 	return &repositoryInfo{
@@ -62,7 +62,7 @@ type configurationPaths struct {
 func buildConfigurationPaths(configPath string) (*configurationPaths, error) {
 	root, err := hydrate.FindProjectRoot()
 	if err != nil {
-		return nil, fmt.Errorf("could not find project root: %v", err)
+		return nil, errors.FileError("find_project_root", "could not find project root", err)
 	}
 
 	return &configurationPaths{
@@ -76,7 +76,7 @@ func buildConfigurationPaths(configPath string) (*configurationPaths, error) {
 func createGitHubClient(repoInfo *repositoryInfo, debug bool) (githubapi.GitHubClient, error) {
 	client, err := githubapi.NewGHClient(repoInfo.Owner, repoInfo.Repo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create GitHub client: %w", err)
+		return nil, errors.APIError("create_client", "failed to create GitHub client", err)
 	}
 
 	// Set logger for debug mode
