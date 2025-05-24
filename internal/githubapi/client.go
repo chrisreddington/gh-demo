@@ -954,10 +954,10 @@ func (c *GHClient) ListDiscussions(ctx context.Context) ([]types.Discussion, err
 			Repository struct {
 				Discussions struct {
 					Nodes []struct {
-						ID     string `json:"id"`
-						Number int    `json:"number"`
-						Title  string `json:"title"`
-						Body   string `json:"body"`
+						ID       string `json:"id"`
+						Number   int    `json:"number"`
+						Title    string `json:"title"`
+						Body     string `json:"body"`
 						Category struct {
 							Name string `json:"name"`
 						} `json:"category"`
@@ -1153,7 +1153,7 @@ func (c *GHClient) DeleteIssue(ctx context.Context, nodeID string) error {
 	return nil
 }
 
-// DeleteDiscussion deletes a discussion by its node ID
+// DeleteDiscussion deletes a discussion by its node ID using the GraphQL deleteDiscussion mutation
 func (c *GHClient) DeleteDiscussion(ctx context.Context, nodeID string) error {
 	if c.gqlClient == nil {
 		return errors.ValidationError("delete_discussion", "GraphQL client is not initialized")
@@ -1163,15 +1163,35 @@ func (c *GHClient) DeleteDiscussion(ctx context.Context, nodeID string) error {
 		return errors.ValidationError("delete_discussion", "node ID cannot be empty")
 	}
 
-	c.debugLog("Attempting to delete discussion with nodeID: %s in repository %s/%s", nodeID, c.Owner, c.Repo)
+	c.debugLog("Deleting discussion with nodeID: %s in repository %s/%s", nodeID, c.Owner, c.Repo)
 
-	// Note: GitHub API does not currently support deleting discussions via GraphQL/REST API
-	// Discussions can only be deleted manually through the web interface by repository maintainers
-	// We'll log this limitation and return a descriptive error
-	
-	c.debugLog("Discussion deletion not supported by GitHub API for nodeID: %s", nodeID)
-	layeredErr := errors.APIError("delete_discussion", "GitHub API does not support programmatic deletion of discussions", nil)
-	return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID).WithContext("limitation", "discussions can only be deleted manually via web interface")
+	mutationVariables := map[string]interface{}{
+		"discussionId": nodeID,
+	}
+
+	var mutationResponse struct {
+		DeleteDiscussion struct {
+			Discussion struct {
+				ID    string `json:"id"`
+				Title string `json:"title"`
+			} `json:"discussion"`
+		} `json:"deleteDiscussion"`
+	}
+
+	deleteCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(deleteCtx, deleteDiscussionMutation, mutationVariables, &mutationResponse)
+	if err != nil {
+		c.debugLog("Failed to delete discussion with nodeID %s: %v", nodeID, err)
+		return errors.APIError("delete_discussion", "failed to delete discussion via GraphQL", err).(*errors.LayeredError).WithContext("node_id", nodeID)
+	}
+
+	c.debugLog("Successfully deleted discussion '%s' (ID: %s)",
+		mutationResponse.DeleteDiscussion.Discussion.Title,
+		mutationResponse.DeleteDiscussion.Discussion.ID)
+
+	return nil
 }
 
 // DeletePR deletes a pull request by its node ID

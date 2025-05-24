@@ -1120,3 +1120,100 @@ func (s *slowClient) Do(query string, variables map[string]interface{}, response
 	time.Sleep(2 * time.Second)
 	return nil
 }
+
+func TestDeleteDiscussion(t *testing.T) {
+	mockGQL := &MockGraphQLClient{
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+			// Check the mutation is correct
+			if !strings.Contains(query, "deleteDiscussion") {
+				t.Error("Expected deleteDiscussion mutation")
+			}
+
+			// Check variables
+			discussionID, ok := variables["discussionId"].(string)
+			if !ok || discussionID != "test-node-id" {
+				t.Errorf("Expected discussionId 'test-node-id', got %v", variables["discussionId"])
+			}
+
+			// Mock response
+			resp := response.(*struct {
+				DeleteDiscussion struct {
+					Discussion struct {
+						ID    string `json:"id"`
+						Title string `json:"title"`
+					} `json:"discussion"`
+				} `json:"deleteDiscussion"`
+			})
+
+			resp.DeleteDiscussion.Discussion.ID = "test-node-id"
+			resp.DeleteDiscussion.Discussion.Title = "Test Discussion"
+			return nil
+		},
+	}
+
+	client := &GHClient{
+		gqlClient: mockGQL,
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		logger:    &MockLogger{},
+	}
+
+	err := client.DeleteDiscussion(context.Background(), "test-node-id")
+	if err != nil {
+		t.Errorf("Expected no error, got %v", err)
+	}
+}
+
+func TestDeleteDiscussion_ValidationErrors(t *testing.T) {
+	client := &GHClient{
+		gqlClient: &MockGraphQLClient{},
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		logger:    &MockLogger{},
+	}
+
+	// Test empty node ID
+	err := client.DeleteDiscussion(context.Background(), "")
+	if err == nil {
+		t.Error("Expected validation error for empty node ID")
+	}
+
+	// Test whitespace only node ID
+	err = client.DeleteDiscussion(context.Background(), "   ")
+	if err == nil {
+		t.Error("Expected validation error for whitespace-only node ID")
+	}
+
+	// Test nil GraphQL client
+	nilClient := &GHClient{
+		gqlClient: nil,
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		logger:    &MockLogger{},
+	}
+
+	err = nilClient.DeleteDiscussion(context.Background(), "test-node-id")
+	if err == nil {
+		t.Error("Expected validation error for nil GraphQL client")
+	}
+}
+
+func TestDeleteDiscussion_GraphQLError(t *testing.T) {
+	mockGQL := &MockGraphQLClient{
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+			return errors.New("GraphQL error")
+		},
+	}
+
+	client := &GHClient{
+		gqlClient: mockGQL,
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		logger:    &MockLogger{},
+	}
+
+	err := client.DeleteDiscussion(context.Background(), "test-node-id")
+	if err == nil {
+		t.Error("Expected an error from GraphQL client")
+	}
+}

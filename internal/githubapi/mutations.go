@@ -136,6 +136,19 @@ const createDiscussionMutation = `
 	}
 `
 
+// deleteDiscussionMutation deletes a discussion by its node ID
+const deleteDiscussionMutation = `
+	mutation DeleteDiscussion($discussionId: ID!) {
+		deleteDiscussion(input: {id: $discussionId}) {
+			clientMutationId
+			discussion {
+				id
+				title
+			}
+		}
+	}
+`
+
 // labelByNameQuery gets label ID by name for discussion/labelable operations
 const labelByNameQuery = `
 	query($owner: String!, $repo: String!, $name: String!) {

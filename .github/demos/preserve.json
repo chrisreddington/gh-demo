@@ -8,9 +8,9 @@
     "preserve_by_id": []
   },
   "discussions": {
-    "preserve_by_title": [],
+    "preserve_by_title": ["Test Discussion from CLI"],
     "preserve_by_category": [],
-    "preserve_by_id": []
+    "preserve_by_id": ["19"]
   },
   "pull_requests": {
     "preserve_by_title": [],
