@@ -61,8 +61,8 @@ type configurationPaths struct {
 }
 
 // buildConfigurationPaths constructs the full paths to configuration files.
-func buildConfigurationPaths(configPath string) (*configurationPaths, error) {
-	root, err := hydrate.FindProjectRoot()
+func buildConfigurationPaths(ctx context.Context, configPath string) (*configurationPaths, error) {
+	root, err := hydrate.FindProjectRoot(ctx)
 	if err != nil {
 		return nil, errors.FileError("find_project_root", "could not find project root", err)
 	}
@@ -119,7 +119,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	}
 
 	// Build configuration file paths
-	paths, err := buildConfigurationPaths(configPath)
+	paths, err := buildConfigurationPaths(ctx, configPath)
 	if err != nil {
 		return err
 	}

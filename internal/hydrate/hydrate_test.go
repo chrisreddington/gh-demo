@@ -23,7 +23,7 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 		t.Fatalf("Failed to create client: %v", err)
 	}
 
-	root, err := FindProjectRoot()
+	root, err := FindProjectRoot(context.Background())
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestHydrateWithLabels(t *testing.T) {
 	client := &MockGitHubClient{ExistingLabels: map[string]bool{"bug": true, "demo": true}}
 
 	// Use demo files for content
-	root, err := FindProjectRoot()
+	root, err := FindProjectRoot(context.Background())
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestHydrateWithLabels(t *testing.T) {
 }
 
 func TestReadIssuesJSON(t *testing.T) {
-	root, err := FindProjectRoot()
+	root, err := FindProjectRoot(context.Background())
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestReadIssuesJSON(t *testing.T) {
 }
 
 func TestReadDiscussionsJSON(t *testing.T) {
-	root, err := FindProjectRoot()
+	root, err := FindProjectRoot(context.Background())
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestPRValidation(t *testing.T) {
 }
 
 func TestReadPRsJSON(t *testing.T) {
-	root, err := FindProjectRoot()
+	root, err := FindProjectRoot(context.Background())
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
@@ -502,7 +502,7 @@ func TestFindProjectRoot_NotFound(t *testing.T) {
 		t.Logf("Warning: failed to remove .git directory: %v", rmErr)
 	}
 
-	_, findErr := FindProjectRoot()
+	_, findErr := FindProjectRoot(context.Background())
 	if findErr == nil {
 		// In some environments, FindProjectRoot might still find a parent git repository
 		// So we'll allow this test to pass if it succeeds, but expect error in isolated environments
@@ -512,7 +512,7 @@ func TestFindProjectRoot_NotFound(t *testing.T) {
 
 func TestFindProjectRoot_Success(t *testing.T) {
 	// This should work in the current directory
-	root, err := FindProjectRoot()
+	root, err := FindProjectRoot(context.Background())
 	if err != nil {
 		t.Errorf("Expected to find project root, got error: %v", err)
 	}
@@ -806,7 +806,7 @@ func TestReadLabelsJSON(t *testing.T) {
 		}
 
 		// Read labels
-		labels, err := ReadLabelsJSON(labelsPath)
+		labels, err := ReadLabelsJSON(context.Background(), labelsPath)
 		if err != nil {
 			t.Errorf("ReadLabelsJSON failed: %v", err)
 		}
@@ -832,7 +832,7 @@ func TestReadLabelsJSON(t *testing.T) {
 		labelsPath := filepath.Join(tmpDir, "nonexistent.json")
 
 		// Read labels from non-existent file (should return empty slice, no error)
-		labels, err := ReadLabelsJSON(labelsPath)
+		labels, err := ReadLabelsJSON(context.Background(), labelsPath)
 		if err != nil {
 			t.Errorf("ReadLabelsJSON should not fail for non-existent file: %v", err)
 		}
@@ -852,7 +852,7 @@ func TestReadLabelsJSON(t *testing.T) {
 		}
 
 		// Read labels from invalid file (should return error)
-		_, err = ReadLabelsJSON(labelsPath)
+		_, err = ReadLabelsJSON(context.Background(), labelsPath)
 		if err == nil {
 			t.Error("ReadLabelsJSON should fail for invalid JSON")
 		}
