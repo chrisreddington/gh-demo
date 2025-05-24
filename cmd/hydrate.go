@@ -114,7 +114,7 @@ func handleHydrationResult(err error, logger common.Logger) error {
 func executeHydrate(ctx context.Context, owner, repo, configPath string, issues, discussions, pullRequests, debug bool) error {
 	// Create logger for operations
 	logger := common.NewLogger(false) // Always create logger for user feedback
-	
+
 	// Resolve repository information
 	repoInfo, err := resolveRepositoryInfo(owner, repo)
 	if err != nil {
