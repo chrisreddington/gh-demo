@@ -41,11 +41,11 @@ func TestExecute(t *testing.T) {
 			os.Args = tt.args
 
 			err := Execute()
-			
+
 			if tt.expectError && err == nil {
 				t.Errorf("%s: expected error but got none", tt.description)
 			}
-			
+
 			if !tt.expectError && err != nil {
 				t.Errorf("%s: expected no error but got: %v", tt.description, err)
 			}

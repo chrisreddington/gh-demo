@@ -505,7 +505,7 @@ func TestCollectLabels(t *testing.T) {
 	}
 }
 
-// TestFindProjectRoot tests project root detection in different scenarios  
+// TestFindProjectRoot tests project root detection in different scenarios
 func TestFindProjectRoot(t *testing.T) {
 	tests := []struct {
 		name        string
