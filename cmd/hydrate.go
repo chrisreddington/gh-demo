@@ -27,7 +27,7 @@ type repositoryInfo struct {
 func resolveRepositoryInfo(owner, repo string) (*repositoryInfo, error) {
 	resolvedOwner := strings.TrimSpace(owner)
 	resolvedRepo := strings.TrimSpace(repo)
-	
+
 	if resolvedOwner == "" || resolvedRepo == "" {
 		// Try to get from current git context
 		repoCtx, err := repository.Current()
@@ -40,11 +40,11 @@ func resolveRepositoryInfo(owner, repo string) (*repositoryInfo, error) {
 			}
 		}
 	}
-	
+
 	if resolvedOwner == "" || resolvedRepo == "" {
 		return nil, fmt.Errorf("--owner and --repo are required (or run inside a GitHub repo)")
 	}
-	
+
 	return &repositoryInfo{
 		Owner: resolvedOwner,
 		Repo:  resolvedRepo,
@@ -64,7 +64,7 @@ func buildConfigurationPaths(configPath string) (*configurationPaths, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not find project root: %v", err)
 	}
-	
+
 	return &configurationPaths{
 		Issues:       filepath.Join(root, configPath, "issues.json"),
 		Discussions:  filepath.Join(root, configPath, "discussions.json"),
@@ -78,12 +78,12 @@ func createGitHubClient(repoInfo *repositoryInfo, debug bool) (githubapi.GitHubC
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GitHub client: %w", err)
 	}
-	
+
 	// Set logger for debug mode
 	if debug {
 		client.SetLogger(common.NewLogger(debug))
 	}
-	
+
 	return client, nil
 }
 
@@ -115,22 +115,22 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	if err != nil {
 		return err
 	}
-	
+
 	// Build configuration file paths
 	paths, err := buildConfigurationPaths(configPath)
 	if err != nil {
 		return err
 	}
-	
+
 	// Create and configure GitHub client
 	client, err := createGitHubClient(repoInfo, debug)
 	if err != nil {
 		return err
 	}
-	
+
 	// Perform hydration
 	err = hydrate.HydrateWithLabels(client, paths.Issues, paths.Discussions, paths.PullRequests, issues, discussions, pullRequests, debug)
-	
+
 	// Handle the result
 	return handleHydrationResult(err)
 }
