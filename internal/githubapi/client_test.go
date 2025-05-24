@@ -3,8 +3,6 @@ package githubapi
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -24,27 +22,11 @@ func (m *MockGraphQLClient) Do(ctx context.Context, query string, variables map[
 	return nil
 }
 
-// MockRESTClient implements the interface required by RESTClient
-type MockRESTClient struct {
-	RequestFunc func(string, string, io.Reader) (*http.Response, error)
-}
-
-func (m *MockRESTClient) Request(method string, path string, body io.Reader) (*http.Response, error) {
-	if m.RequestFunc != nil {
-		return m.RequestFunc(method, path, body)
-	}
-	return &http.Response{
-		StatusCode: 200,
-		Body:       io.NopCloser(strings.NewReader("{}")),
-	}, nil
-}
-
 // Tests for GHClient
 func TestNewGHClientWithClients(t *testing.T) {
 	mockGQL := &MockGraphQLClient{}
-	mockREST := &RESTClient{client: &MockRESTClient{}}
 
-	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
+	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -58,7 +40,6 @@ func TestNewGHClientWithClients(t *testing.T) {
 
 func TestNewGHClientWithClients_ValidationErrors(t *testing.T) {
 	mockGQL := &MockGraphQLClient{}
-	mockREST := &RESTClient{client: &MockRESTClient{}}
 
 	tests := []struct {
 		name        string
@@ -105,7 +86,7 @@ func TestNewGHClientWithClients_ValidationErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := NewGHClientWithClients(tt.owner, tt.repo, mockGQL, mockREST)
+			client, err := NewGHClientWithClients(tt.owner, tt.repo, mockGQL)
 
 			if tt.expectError {
 				if err == nil {
@@ -137,15 +118,6 @@ func TestNewGHClientWithClients_ValidationErrors(t *testing.T) {
 }
 
 func TestGHClientWithMockClients(t *testing.T) {
-	restClient := &MockRESTClient{
-		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: 201,
-				Body:       io.NopCloser(strings.NewReader("{}")),
-			}, nil
-		},
-	}
-
 	gqlClient := &MockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			// Handle different GraphQL queries based on query content
@@ -254,10 +226,9 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: &RESTClient{client: restClient},
-		gqlClient:  gqlClient,
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: gqlClient,
 	}
 
 	// Test CreateLabel
@@ -527,34 +498,6 @@ func TestListLabelsNilClient(t *testing.T) {
 	}
 }
 
-// REST client tests that should work
-func TestRESTClientRequest(t *testing.T) {
-	restClient := &MockRESTClient{
-		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
-			if method != "GET" {
-				t.Errorf("Expected method GET, got %s", method)
-			}
-			if path != "test/path" {
-				t.Errorf("Expected path test/path, got %s", path)
-			}
-			return &http.Response{
-				StatusCode: 200,
-				Body:       io.NopCloser(strings.NewReader(`{"test": "data"}`)),
-			}, nil
-		},
-	}
-
-	wrappedClient := &RESTClient{client: restClient}
-	var response map[string]interface{}
-	err := wrappedClient.Request(context.Background(), "GET", "test/path", nil, &response)
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
-	}
-	if response == nil {
-		t.Error("Expected response to be populated")
-	}
-}
-
 func TestCreatePR(t *testing.T) {
 	gqlClient := &MockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
@@ -606,39 +549,10 @@ func TestCreatePR(t *testing.T) {
 	}
 }
 
-func TestCreatePRValidation(t *testing.T) {
-	restClient := &MockRESTClient{
-		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: 422,
-				Body:       io.NopCloser(strings.NewReader(`{"message": "Validation Failed", "errors": [{"message": "No commits between main and feature-branch"}]}`)),
-			}, nil
-		},
-	}
-
-	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: &RESTClient{client: restClient},
-		gqlClient:  nil,
-	}
-
-	err := client.CreatePR(context.Background(), types.PullRequest{
-		Title: "Test PR",
-		Body:  "This is a test PR",
-		Head:  "feature-branch",
-		Base:  "main",
-	})
-	if err == nil {
-		t.Error("Expected an error for validation failure")
-	}
-}
-
 func TestSetLogger(t *testing.T) {
 	mockGQL := &MockGraphQLClient{}
-	mockREST := &RESTClient{client: &MockRESTClient{}}
 
-	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
+	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -664,9 +578,8 @@ func (m *MockLogger) Info(format string, args ...interface{}) {
 
 func TestDebugLog(t *testing.T) {
 	mockGQL := &MockGraphQLClient{}
-	mockREST := &RESTClient{client: &MockRESTClient{}}
 
-	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
+	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -677,51 +590,6 @@ func TestDebugLog(t *testing.T) {
 
 	if mockLogger.lastMessage != "test message: value" {
 		t.Errorf("Expected 'test message: value', got '%s'", mockLogger.lastMessage)
-	}
-}
-
-func TestCreateLabelError(t *testing.T) {
-	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: nil, // This will cause an error
-		gqlClient:  nil,
-	}
-
-	err := client.CreateLabel(context.Background(), types.Label{
-		Name:  "test-label",
-		Color: "ff0000",
-	})
-	if err == nil {
-		t.Error("Expected an error when REST client is nil")
-	}
-}
-
-func TestCreateIssueError(t *testing.T) {
-	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: nil, // This will cause an error
-		gqlClient:  nil,
-	}
-
-	err := client.CreateIssue(context.Background(), types.Issue{Title: "Test", Body: "Test"})
-	if err == nil {
-		t.Error("Expected an error when REST client is nil")
-	}
-}
-
-func TestCreatePRError(t *testing.T) {
-	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: nil, // This will cause an error
-		gqlClient:  nil,
-	}
-
-	err := client.CreatePR(context.Background(), types.PullRequest{Title: "Test", Head: "feature", Base: "main"})
-	if err == nil {
-		t.Error("Expected an error when REST client is nil")
 	}
 }
 
@@ -1247,7 +1115,7 @@ func TestCreateIssue_ContextTimeout(t *testing.T) {
 		},
 	}
 
-	client, err := NewGHClientWithClients("testowner", "testrepo", gqlClient, nil)
+	client, err := NewGHClientWithClients("testowner", "testrepo", gqlClient)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}

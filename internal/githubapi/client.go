@@ -18,13 +18,9 @@ Testing Strategy:
 package githubapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -59,22 +55,14 @@ func (w *graphQLClientWrapper) Do(ctx context.Context, query string, variables m
 
 // GHClient is the main client for all GitHub API operations
 type GHClient struct {
-	Owner      string
-	Repo       string
-	gqlClient  GraphQLClient
-	restClient *RESTClient
-	logger     common.Logger
-}
-
-// RESTClient wraps the REST client for testability
-type RESTClient struct {
-	client interface {
-		Request(string, string, io.Reader) (*http.Response, error)
-	}
+	Owner     string
+	Repo      string
+	gqlClient GraphQLClient
+	logger    common.Logger
 }
 
 // NewGHClient creates a new GitHub API client for the specified owner and repository.
-// It initializes both GraphQL and REST clients using the go-gh library and validates that
+// It initializes the GraphQL client using the go-gh library and validates that
 // the owner and repo parameters are not empty. The client is ready to perform operations
 // like creating issues, discussions, pull requests, and managing labels.
 func NewGHClient(owner, repo string) (*GHClient, error) {
@@ -91,27 +79,18 @@ func NewGHClient(owner, repo string) (*GHClient, error) {
 		return nil, errors.APIError("create_graphql_client", "failed to initialize GraphQL client", err)
 	}
 
-	// Create REST client using go-gh
-	restRawClient, err := api.DefaultRESTClient()
-	if err != nil {
-		return nil, errors.APIError("create_rest_client", "failed to initialize REST client", err)
-	}
-
-	restClient := &RESTClient{client: restRawClient}
-
 	return &GHClient{
-		Owner:      strings.TrimSpace(owner),
-		Repo:       strings.TrimSpace(repo),
-		gqlClient:  &graphQLClientWrapper{client: gqlClient},
-		restClient: restClient,
-		logger:     nil, // Will be set when SetLogger is called
+		Owner:     strings.TrimSpace(owner),
+		Repo:      strings.TrimSpace(repo),
+		gqlClient: &graphQLClientWrapper{client: gqlClient},
+		logger:    nil, // Will be set when SetLogger is called
 	}, nil
 }
 
 // NewGHClientWithClients creates a new GitHub API client with provided clients for testing.
 // This constructor allows dependency injection of mock clients for unit testing while
 // maintaining the same validation and initialization logic as NewGHClient.
-func NewGHClientWithClients(owner, repo string, gqlClient GraphQLClient, restClient *RESTClient) (*GHClient, error) {
+func NewGHClientWithClients(owner, repo string, gqlClient GraphQLClient) (*GHClient, error) {
 	if strings.TrimSpace(owner) == "" {
 		return nil, errors.ValidationError("validate_client_params", "owner cannot be empty")
 	}
@@ -120,11 +99,10 @@ func NewGHClientWithClients(owner, repo string, gqlClient GraphQLClient, restCli
 	}
 
 	return &GHClient{
-		Owner:      strings.TrimSpace(owner),
-		Repo:       strings.TrimSpace(repo),
-		gqlClient:  gqlClient,
-		restClient: restClient,
-		logger:     nil, // Will be set when SetLogger is called
+		Owner:     strings.TrimSpace(owner),
+		Repo:      strings.TrimSpace(repo),
+		gqlClient: gqlClient,
+		logger:    nil, // Will be set when SetLogger is called
 	}, nil
 }
 
@@ -138,68 +116,6 @@ func (c *GHClient) debugLog(format string, args ...interface{}) {
 	if c.logger != nil {
 		c.logger.Debug(format, args...)
 	}
-}
-
-// Request makes an HTTP request to the REST API
-func (c *RESTClient) Request(ctx context.Context, method string, path string, body interface{}, response interface{}) error {
-	var requestBody io.Reader
-	if body != nil {
-		jsonData, err := json.Marshal(body)
-		if err != nil {
-			return err
-		}
-		requestBody = bytes.NewBuffer(jsonData)
-	}
-
-	// Check if context is already cancelled before making the request
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	// Note: go-gh client doesn't directly support context, but we accept it for interface compatibility
-	// In a real implementation, we would need to handle context timeout/cancellation at a higher level
-	resp, err := c.client.Request(method, path, requestBody)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			// Log the error but don't fail the operation
-			// In a real application, you'd use a proper logger here
-			fmt.Fprintf(os.Stderr, "Warning: failed to close response body: %v\n", closeErr)
-		}
-	}()
-
-	if response != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return json.NewDecoder(resp.Body).Decode(response)
-	}
-
-	if resp.StatusCode >= 400 {
-		// Try to read the error response body for more details
-		bodyBytes, readErr := io.ReadAll(resp.Body)
-		if readErr == nil && len(bodyBytes) > 0 {
-			// Try to parse as GitHub API error format
-			var apiError struct {
-				Message string `json:"message"`
-				Errors  []struct {
-					Field   string `json:"field"`
-					Code    string `json:"code"`
-					Message string `json:"message"`
-				} `json:"errors"`
-			}
-			if jsonErr := json.Unmarshal(bodyBytes, &apiError); jsonErr == nil && apiError.Message != "" {
-				if len(apiError.Errors) > 0 {
-					return errors.APIError("http_request", fmt.Sprintf("HTTP %d: %s - %s", resp.StatusCode, apiError.Message, apiError.Errors[0].Message), nil)
-				}
-				return errors.APIError("http_request", fmt.Sprintf("HTTP %d: %s", resp.StatusCode, apiError.Message), nil)
-			}
-			// If not parseable as JSON, return raw body
-			return errors.APIError("http_request", fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(bodyBytes)), nil)
-		}
-		return errors.APIError("http_request", fmt.Sprintf("API request failed with status %d", resp.StatusCode), nil)
-	}
-
-	return nil
 }
 
 // Label operations
