@@ -145,8 +145,8 @@ func (m *ConfigurableMockGitHubClient) DeleteDiscussion(ctx context.Context, nod
 
 func (m *ConfigurableMockGitHubClient) DeletePR(ctx context.Context, nodeID string) error {
 	// For testing, just remove from created PRs if found
-	for i, pr := range m.CreatedPRs {
-		if pr.NodeID == nodeID {
+	for i, pullRequest := range m.CreatedPRs {
+		if pullRequest.NodeID == nodeID {
 			m.CreatedPRs = append(m.CreatedPRs[:i], m.CreatedPRs[i+1:]...)
 			return nil
 		}

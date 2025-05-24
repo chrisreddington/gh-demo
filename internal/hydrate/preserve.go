@@ -9,23 +9,23 @@ import (
 )
 
 // ShouldPreserveIssue checks if an issue should be preserved based on the configuration.
-func ShouldPreserveIssue(pc *config.PreserveConfig, issue types.Issue) bool {
+func ShouldPreserveIssue(preserveConfig *config.PreserveConfig, issue types.Issue) bool {
 	// Check by ID
-	for _, id := range pc.Issues.PreserveByID {
+	for _, id := range preserveConfig.Issues.PreserveByID {
 		if issue.NodeID == id {
 			return true
 		}
 	}
 
 	// Check by title (exact match and regex)
-	for _, pattern := range pc.Issues.PreserveByTitle {
+	for _, pattern := range preserveConfig.Issues.PreserveByTitle {
 		if isMatchOrRegex(issue.Title, pattern) {
 			return true
 		}
 	}
 
 	// Check by labels
-	for _, preserveLabel := range pc.Issues.PreserveByLabel {
+	for _, preserveLabel := range preserveConfig.Issues.PreserveByLabel {
 		for _, issueLabel := range issue.Labels {
 			if issueLabel == preserveLabel {
 				return true
@@ -37,23 +37,23 @@ func ShouldPreserveIssue(pc *config.PreserveConfig, issue types.Issue) bool {
 }
 
 // ShouldPreserveDiscussion checks if a discussion should be preserved based on the configuration.
-func ShouldPreserveDiscussion(pc *config.PreserveConfig, discussion types.Discussion) bool {
+func ShouldPreserveDiscussion(preserveConfig *config.PreserveConfig, discussion types.Discussion) bool {
 	// Check by ID
-	for _, id := range pc.Discussions.PreserveByID {
+	for _, id := range preserveConfig.Discussions.PreserveByID {
 		if discussion.NodeID == id {
 			return true
 		}
 	}
 
 	// Check by title (exact match and regex)
-	for _, pattern := range pc.Discussions.PreserveByTitle {
+	for _, pattern := range preserveConfig.Discussions.PreserveByTitle {
 		if isMatchOrRegex(discussion.Title, pattern) {
 			return true
 		}
 	}
 
 	// Check by category
-	for _, category := range pc.Discussions.PreserveByCategory {
+	for _, category := range preserveConfig.Discussions.PreserveByCategory {
 		if discussion.Category == category {
 			return true
 		}
@@ -63,24 +63,24 @@ func ShouldPreserveDiscussion(pc *config.PreserveConfig, discussion types.Discus
 }
 
 // ShouldPreservePR checks if a pull request should be preserved based on the configuration.
-func ShouldPreservePR(pc *config.PreserveConfig, pr types.PullRequest) bool {
+func ShouldPreservePR(preserveConfig *config.PreserveConfig, pullRequest types.PullRequest) bool {
 	// Check by ID
-	for _, id := range pc.PullRequests.PreserveByID {
-		if pr.NodeID == id {
+	for _, id := range preserveConfig.PullRequests.PreserveByID {
+		if pullRequest.NodeID == id {
 			return true
 		}
 	}
 
 	// Check by title (exact match and regex)
-	for _, pattern := range pc.PullRequests.PreserveByTitle {
-		if isMatchOrRegex(pr.Title, pattern) {
+	for _, pattern := range preserveConfig.PullRequests.PreserveByTitle {
+		if isMatchOrRegex(pullRequest.Title, pattern) {
 			return true
 		}
 	}
 
 	// Check by labels
-	for _, preserveLabel := range pc.PullRequests.PreserveByLabel {
-		for _, prLabel := range pr.Labels {
+	for _, preserveLabel := range preserveConfig.PullRequests.PreserveByLabel {
+		for _, prLabel := range pullRequest.Labels {
 			if prLabel == preserveLabel {
 				return true
 			}
@@ -91,8 +91,8 @@ func ShouldPreservePR(pc *config.PreserveConfig, pr types.PullRequest) bool {
 }
 
 // ShouldPreserveLabel checks if a label should be preserved based on the configuration.
-func ShouldPreserveLabel(pc *config.PreserveConfig, labelName string) bool {
-	for _, name := range pc.Labels.PreserveByName {
+func ShouldPreserveLabel(preserveConfig *config.PreserveConfig, labelName string) bool {
+	for _, name := range preserveConfig.Labels.PreserveByName {
 		if labelName == name {
 			return true
 		}

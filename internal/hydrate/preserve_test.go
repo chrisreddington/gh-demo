@@ -228,20 +228,20 @@ func TestShouldPreservePR(t *testing.T) {
 	preserveConfig.PullRequests.PreserveByID = []string{"pr123"}
 
 	tests := []struct {
-		name     string
-		pr       types.PullRequest
-		expected bool
+		name        string
+		pullRequest types.PullRequest
+		expected    bool
 	}{
 		{
 			name: "preserve by regex title",
-			pr: types.PullRequest{
+			pullRequest: types.PullRequest{
 				Title: "Release v2.0.0",
 			},
 			expected: true,
 		},
 		{
 			name: "preserve by label",
-			pr: types.PullRequest{
+			pullRequest: types.PullRequest{
 				Title:  "Some PR",
 				Labels: []string{"feature", "release"},
 			},
@@ -249,7 +249,7 @@ func TestShouldPreservePR(t *testing.T) {
 		},
 		{
 			name: "preserve by node ID",
-			pr: types.PullRequest{
+			pullRequest: types.PullRequest{
 				NodeID: "pr123",
 				Title:  "Any PR",
 			},
@@ -257,7 +257,7 @@ func TestShouldPreservePR(t *testing.T) {
 		},
 		{
 			name: "do not preserve",
-			pr: types.PullRequest{
+			pullRequest: types.PullRequest{
 				Title:  "Regular PR",
 				Labels: []string{"feature"},
 			},
@@ -267,9 +267,9 @@ func TestShouldPreservePR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ShouldPreservePR(preserveConfig, tt.pr)
+			result := ShouldPreservePR(preserveConfig, tt.pullRequest)
 			if result != tt.expected {
-				t.Errorf("Expected %v, got %v for PR: %s", tt.expected, result, tt.pr.Title)
+				t.Errorf("Expected %v, got %v for PR: %s", tt.expected, result, tt.pullRequest.Title)
 			}
 		})
 	}

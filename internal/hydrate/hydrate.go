@@ -476,19 +476,19 @@ func cleanupPRs(ctx context.Context, client githubapi.GitHubClient, options Clea
 
 	logger.Debug("Found %d pull requests to evaluate for cleanup", len(prs))
 
-	for _, pr := range prs {
-		if options.PreserveConfig != nil && ShouldPreservePR(options.PreserveConfig, pr) {
+	for _, pullRequest := range prs {
+		if options.PreserveConfig != nil && ShouldPreservePR(options.PreserveConfig, pullRequest) {
 			summary.PRsPreserved++
-			logger.Debug("Preserving PR: %s", pr.Title)
+			logger.Debug("Preserving PR: %s", pullRequest.Title)
 			continue
 		}
 
 		if options.DryRun {
-			logger.Info("Would delete PR: %s", pr.Title)
+			logger.Info("Would delete PR: %s", pullRequest.Title)
 		} else {
-			logger.Debug("Deleting PR: %s", pr.Title)
-			if err := client.DeletePR(ctx, pr.NodeID); err != nil {
-				errMsg := fmt.Sprintf("failed to delete PR '%s': %v", pr.Title, err)
+			logger.Debug("Deleting PR: %s", pullRequest.Title)
+			if err := client.DeletePR(ctx, pullRequest.NodeID); err != nil {
+				errMsg := fmt.Sprintf("failed to delete PR '%s': %v", pullRequest.Title, err)
 				logger.Info(errMsg)
 				errs = append(errs, errMsg)
 				continue
