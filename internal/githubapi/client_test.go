@@ -148,7 +148,107 @@ func TestGHClientWithMockClients(t *testing.T) {
 
 	gqlClient := &MockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
-			// Mock successful responses for GraphQL queries
+			// Handle different GraphQL queries based on query content
+			if strings.Contains(query, "GetRepositoryId") {
+				// Repository ID query
+				resp := response.(*struct {
+					Repository struct {
+						ID string `json:"id"`
+					} `json:"repository"`
+				})
+				resp.Repository.ID = "repo-id-123"
+				return nil
+			} else if strings.Contains(query, "createLabel") {
+				// Create label mutation
+				resp := response.(*struct {
+					CreateLabel struct {
+						Label struct {
+							ID          string `json:"id"`
+							Name        string `json:"name"`
+							Color       string `json:"color"`
+							Description string `json:"description"`
+						} `json:"label"`
+					} `json:"createLabel"`
+				})
+				resp.CreateLabel.Label.ID = "label-id-123"
+				resp.CreateLabel.Label.Name = "test-label"
+				resp.CreateLabel.Label.Color = "ff0000"
+				resp.CreateLabel.Label.Description = "A test label"
+				return nil
+			} else if strings.Contains(query, "GetLabelId") {
+				// Label ID query for issue/PR creation
+				resp := response.(*struct {
+					Repository struct {
+						Label struct {
+							ID string `json:"id"`
+						} `json:"label"`
+					} `json:"repository"`
+				})
+				resp.Repository.Label.ID = "label-id-456"
+				return nil
+			} else if strings.Contains(query, "GetUserId") {
+				// User ID query for assignees
+				resp := response.(*struct {
+					User struct {
+						ID string `json:"id"`
+					} `json:"user"`
+				})
+				resp.User.ID = "user-id-789"
+				return nil
+			} else if strings.Contains(query, "createIssue") {
+				// Create issue mutation
+				resp := response.(*struct {
+					CreateIssue struct {
+						Issue struct {
+							ID     string `json:"id"`
+							Number int    `json:"number"`
+							Title  string `json:"title"`
+							URL    string `json:"url"`
+						} `json:"issue"`
+					} `json:"createIssue"`
+				})
+				resp.CreateIssue.Issue.ID = "issue-id-123"
+				resp.CreateIssue.Issue.Number = 1
+				resp.CreateIssue.Issue.Title = "Test Issue"
+				resp.CreateIssue.Issue.URL = "https://github.com/owner/repo/issues/1"
+				return nil
+			} else if strings.Contains(query, "createPullRequest") {
+				// Create pull request mutation
+				resp := response.(*struct {
+					CreatePullRequest struct {
+						PullRequest struct {
+							ID     string `json:"id"`
+							Number int    `json:"number"`
+							Title  string `json:"title"`
+							URL    string `json:"url"`
+						} `json:"pullRequest"`
+					} `json:"createPullRequest"`
+				})
+				resp.CreatePullRequest.PullRequest.ID = "pr-id-123"
+				resp.CreatePullRequest.PullRequest.Number = 1
+				resp.CreatePullRequest.PullRequest.Title = "Test PR"
+				resp.CreatePullRequest.PullRequest.URL = "https://github.com/owner/repo/pull/1"
+				return nil
+			} else if strings.Contains(query, "addLabelsToLabelable") {
+				// Add labels mutation
+				resp := response.(*struct {
+					AddLabelsToLabelable struct {
+						ClientMutationID string `json:"clientMutationId"`
+					} `json:"addLabelsToLabelable"`
+				})
+				resp.AddLabelsToLabelable.ClientMutationID = "mutation-id-123"
+				return nil
+			} else if strings.Contains(query, "addAssigneesToAssignable") {
+				// Add assignees mutation
+				resp := response.(*struct {
+					AddAssigneesToAssignable struct {
+						ClientMutationID string `json:"clientMutationId"`
+					} `json:"addAssigneesToAssignable"`
+				})
+				resp.AddAssigneesToAssignable.ClientMutationID = "mutation-id-456"
+				return nil
+			}
+			// Default response for other queries
 			return nil
 		},
 	}
@@ -456,20 +556,43 @@ func TestRESTClientRequest(t *testing.T) {
 }
 
 func TestCreatePR(t *testing.T) {
-	restClient := &MockRESTClient{
-		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: 201,
-				Body:       io.NopCloser(strings.NewReader(`{"number": 1, "html_url": "https://github.com/test/test/pull/1"}`)),
-			}, nil
+	gqlClient := &MockGraphQLClient{
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+			if strings.Contains(query, "GetRepositoryId") {
+				// Repository ID query
+				resp := response.(*struct {
+					Repository struct {
+						ID string `json:"id"`
+					} `json:"repository"`
+				})
+				resp.Repository.ID = "repo-id-123"
+				return nil
+			} else if strings.Contains(query, "createPullRequest") {
+				// Create pull request mutation
+				resp := response.(*struct {
+					CreatePullRequest struct {
+						PullRequest struct {
+							ID     string `json:"id"`
+							Number int    `json:"number"`
+							Title  string `json:"title"`
+							URL    string `json:"url"`
+						} `json:"pullRequest"`
+					} `json:"createPullRequest"`
+				})
+				resp.CreatePullRequest.PullRequest.ID = "pr-id-123"
+				resp.CreatePullRequest.PullRequest.Number = 1
+				resp.CreatePullRequest.PullRequest.Title = "Test PR"
+				resp.CreatePullRequest.PullRequest.URL = "https://github.com/test/test/pull/1"
+				return nil
+			}
+			return nil
 		},
 	}
 
 	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: &RESTClient{client: restClient},
-		gqlClient:  nil, // PR creation uses REST API
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: gqlClient,
 	}
 
 	err := client.CreatePR(context.Background(), types.PullRequest{
@@ -823,19 +946,18 @@ func TestAddLabelToDiscussion_GraphQLError(t *testing.T) {
 
 // TestCreatePR_ValidationErrors tests CreatePR validation error paths
 func TestCreatePR_ValidationErrors(t *testing.T) {
-	restClient := &MockRESTClient{
-		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: 201,
-				Body:       io.NopCloser(strings.NewReader(`{"number": 1}`)),
-			}, nil
+	gqlClient := &MockGraphQLClient{
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+			// This should not be called for validation errors
+			t.Error("GraphQL client should not be called for validation errors")
+			return nil
 		},
 	}
 
 	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: &RESTClient{client: restClient},
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: gqlClient,
 	}
 
 	// Test empty head branch
@@ -883,32 +1005,66 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 
 // TestCreatePR_WithLabelsAndAssignees tests CreatePR with labels and assignees
 func TestCreatePR_WithLabelsAndAssignees(t *testing.T) {
-	restClient := &MockRESTClient{
-		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
-			if method == "POST" && strings.Contains(path, "/pulls") {
-				// PR creation request
-				return &http.Response{
-					StatusCode: 201,
-					Body:       io.NopCloser(strings.NewReader(`{"number": 1, "title": "Test PR"}`)),
-				}, nil
-			} else if method == "PATCH" && strings.Contains(path, "/issues/") {
-				// Labels/assignees update request
-				return &http.Response{
-					StatusCode: 200,
-					Body:       io.NopCloser(strings.NewReader(`{"number": 1}`)),
-				}, nil
+	gqlClient := &MockGraphQLClient{
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+			if strings.Contains(query, "GetRepositoryId") {
+				// Repository ID query
+				resp := response.(*struct {
+					Repository struct {
+						ID string `json:"id"`
+					} `json:"repository"`
+				})
+				resp.Repository.ID = "repo-id-123"
+				return nil
+			} else if strings.Contains(query, "GetLabelId") {
+				// Label ID query
+				resp := response.(*struct {
+					Repository struct {
+						Label struct {
+							ID string `json:"id"`
+						} `json:"label"`
+					} `json:"repository"`
+				})
+				resp.Repository.Label.ID = "label-id-456"
+				return nil
+			} else if strings.Contains(query, "GetUserId") {
+				// User ID query
+				resp := response.(*struct {
+					User struct {
+						ID string `json:"id"`
+					} `json:"user"`
+				})
+				resp.User.ID = "user-id-789"
+				return nil
+			} else if strings.Contains(query, "createPullRequest") {
+				// Create pull request mutation
+				resp := response.(*struct {
+					CreatePullRequest struct {
+						PullRequest struct {
+							ID     string `json:"id"`
+							Number int    `json:"number"`
+							Title  string `json:"title"`
+							URL    string `json:"url"`
+						} `json:"pullRequest"`
+					} `json:"createPullRequest"`
+				})
+				resp.CreatePullRequest.PullRequest.ID = "pr-id-123"
+				resp.CreatePullRequest.PullRequest.Number = 1
+				resp.CreatePullRequest.PullRequest.Title = "Test PR"
+				resp.CreatePullRequest.PullRequest.URL = "https://github.com/test/test/pull/1"
+				return nil
+			} else if strings.Contains(query, "addLabelsToLabelable") || strings.Contains(query, "addAssigneesToAssignable") {
+				// Add labels/assignees mutations
+				return nil
 			}
-			return &http.Response{
-				StatusCode: 404,
-				Body:       io.NopCloser(strings.NewReader(`{"message": "Not Found"}`)),
-			}, fmt.Errorf("unexpected request")
+			return nil
 		},
 	}
 
 	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: &RESTClient{client: restClient},
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: gqlClient,
 	}
 
 	err := client.CreatePR(context.Background(), types.PullRequest{
@@ -926,32 +1082,66 @@ func TestCreatePR_WithLabelsAndAssignees(t *testing.T) {
 
 // TestCreatePR_LabelsAssigneesFailure tests CreatePR when labels/assignees update fails
 func TestCreatePR_LabelsAssigneesFailure(t *testing.T) {
-	restClient := &MockRESTClient{
-		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
-			if method == "POST" && strings.Contains(path, "/pulls") {
-				// PR creation request succeeds
-				return &http.Response{
-					StatusCode: 201,
-					Body:       io.NopCloser(strings.NewReader(`{"number": 1, "title": "Test PR"}`)),
-				}, nil
-			} else if method == "PATCH" && strings.Contains(path, "/issues/") {
-				// Labels/assignees update request fails
-				return &http.Response{
-					StatusCode: 404,
-					Body:       io.NopCloser(strings.NewReader(`{"message": "Not Found"}`)),
-				}, fmt.Errorf("failed to update labels/assignees")
+	gqlClient := &MockGraphQLClient{
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+			if strings.Contains(query, "GetRepositoryId") {
+				// Repository ID query
+				resp := response.(*struct {
+					Repository struct {
+						ID string `json:"id"`
+					} `json:"repository"`
+				})
+				resp.Repository.ID = "repo-id-123"
+				return nil
+			} else if strings.Contains(query, "GetLabelId") {
+				// Label ID query
+				resp := response.(*struct {
+					Repository struct {
+						Label struct {
+							ID string `json:"id"`
+						} `json:"label"`
+					} `json:"repository"`
+				})
+				resp.Repository.Label.ID = "label-id-456"
+				return nil
+			} else if strings.Contains(query, "GetUserId") {
+				// User ID query
+				resp := response.(*struct {
+					User struct {
+						ID string `json:"id"`
+					} `json:"user"`
+				})
+				resp.User.ID = "user-id-789"
+				return nil
+			} else if strings.Contains(query, "createPullRequest") {
+				// Create pull request mutation succeeds
+				resp := response.(*struct {
+					CreatePullRequest struct {
+						PullRequest struct {
+							ID     string `json:"id"`
+							Number int    `json:"number"`
+							Title  string `json:"title"`
+							URL    string `json:"url"`
+						} `json:"pullRequest"`
+					} `json:"createPullRequest"`
+				})
+				resp.CreatePullRequest.PullRequest.ID = "pr-id-123"
+				resp.CreatePullRequest.PullRequest.Number = 1
+				resp.CreatePullRequest.PullRequest.Title = "Test PR"
+				resp.CreatePullRequest.PullRequest.URL = "https://github.com/test/test/pull/1"
+				return nil
+			} else if strings.Contains(query, "addLabelsToLabelable") || strings.Contains(query, "addAssigneesToAssignable") {
+				// Add labels/assignees mutations fail
+				return fmt.Errorf("failed to update labels/assignees")
 			}
-			return &http.Response{
-				StatusCode: 404,
-				Body:       io.NopCloser(strings.NewReader(`{"message": "Not Found"}`)),
-			}, fmt.Errorf("unexpected request")
+			return nil
 		},
 	}
 
 	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: &RESTClient{client: restClient},
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: gqlClient,
 	}
 
 	err := client.CreatePR(context.Background(), types.PullRequest{
@@ -972,19 +1162,29 @@ func TestCreatePR_LabelsAssigneesFailure(t *testing.T) {
 
 // TestCreatePR_RequestFailure tests CreatePR when the initial request fails
 func TestCreatePR_RequestFailure(t *testing.T) {
-	restClient := &MockRESTClient{
-		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: 500,
-				Body:       io.NopCloser(strings.NewReader(`{"message": "Internal Server Error"}`)),
-			}, fmt.Errorf("server error")
+	gqlClient := &MockGraphQLClient{
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+			if strings.Contains(query, "GetRepositoryId") {
+				// Repository ID query
+				resp := response.(*struct {
+					Repository struct {
+						ID string `json:"id"`
+					} `json:"repository"`
+				})
+				resp.Repository.ID = "repo-id-123"
+				return nil
+			} else if strings.Contains(query, "createPullRequest") {
+				// Create pull request mutation fails
+				return fmt.Errorf("server error")
+			}
+			return nil
 		},
 	}
 
 	client := &GHClient{
-		Owner:      "testowner",
-		Repo:       "testrepo",
-		restClient: &RESTClient{client: restClient},
+		Owner:     "testowner",
+		Repo:      "testrepo",
+		gqlClient: gqlClient,
 	}
 
 	err := client.CreatePR(context.Background(), types.PullRequest{
@@ -1034,23 +1234,20 @@ func TestCreateIssue_ContextTimeout(t *testing.T) {
 	// Wait for context to timeout
 	time.Sleep(2 * time.Millisecond)
 
-	gqlClient := &MockGraphQLClient{}
-	restClient := &RESTClient{client: &MockRESTClient{
-		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
+	gqlClient := &MockGraphQLClient{
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			// Check if context is already cancelled
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return ctx.Err()
 			default:
-				return &http.Response{
-					StatusCode: 201,
-					Body:       io.NopCloser(strings.NewReader(`{"number": 1}`)),
-				}, nil
+				// This should not be reached due to timeout
+				return nil
 			}
 		},
-	}}
+	}
 
-	client, err := NewGHClientWithClients("testowner", "testrepo", gqlClient, restClient)
+	client, err := NewGHClientWithClients("testowner", "testrepo", gqlClient, nil)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
