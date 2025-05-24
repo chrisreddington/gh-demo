@@ -4,45 +4,92 @@ import (
 	"testing"
 )
 
+// TestNewLogger tests logger constructor with different configurations
 func TestNewLogger(t *testing.T) {
-	// Test debug mode enabled
-	debugLogger := NewLogger(true)
-	if !debugLogger.debug {
-		t.Error("Expected debug mode to be enabled")
+	tests := []struct {
+		name        string
+		debugMode   bool
+		expectedDebug bool
+	}{
+		{
+			name:        "debug mode enabled",
+			debugMode:   true,
+			expectedDebug: true,
+		},
+		{
+			name:        "debug mode disabled", 
+			debugMode:   false,
+			expectedDebug: false,
+		},
 	}
 
-	// Test debug mode disabled
-	infoLogger := NewLogger(false)
-	if infoLogger.debug {
-		t.Error("Expected debug mode to be disabled")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := NewLogger(tt.debugMode)
+			if logger.debug != tt.expectedDebug {
+				t.Errorf("Expected debug mode to be %v, got %v", tt.expectedDebug, logger.debug)
+			}
+
+			// Test that logger implements the Logger interface
+			var _ Logger = logger
+		})
 	}
 }
 
-func TestStandardLogger_Debug(t *testing.T) {
-	// Test with debug enabled - should output
-	debugLogger := NewLogger(true)
-	// We can't easily capture stdout in tests, but we can ensure the method doesn't panic
-	debugLogger.Debug("test debug message: %s", "value")
+// TestStandardLogger_Methods tests logger method behavior with different configurations
+func TestStandardLogger_Methods(t *testing.T) {
+	tests := []struct {
+		name      string
+		debugMode bool
+		testFunc  func(t *testing.T, logger Logger)
+	}{
+		{
+			name:      "debug method with debug enabled",
+			debugMode: true,
+			testFunc: func(t *testing.T, logger Logger) {
+				// We can't easily capture stdout in tests, but we can ensure the method doesn't panic
+				logger.Debug("test debug message: %s", "value")
+			},
+		},
+		{
+			name:      "debug method with debug disabled",
+			debugMode: false,
+			testFunc: func(t *testing.T, logger Logger) {
+				// Should not output but also shouldn't panic
+				logger.Debug("test debug message: %s", "value")
+			},
+		},
+		{
+			name:      "info method with debug enabled",
+			debugMode: true,
+			testFunc: func(t *testing.T, logger Logger) {
+				// Info logging always outputs regardless of debug mode
+				logger.Info("test info message: %s", "value")
+			},
+		},
+		{
+			name:      "info method with debug disabled",
+			debugMode: false,
+			testFunc: func(t *testing.T, logger Logger) {
+				// Info logging always outputs regardless of debug mode
+				logger.Info("test info message: %s", "value")
+			},
+		},
+		{
+			name:      "interface compliance",
+			debugMode: true,
+			testFunc: func(t *testing.T, logger Logger) {
+				// Test that we can call interface methods
+				logger.Debug("debug test")
+				logger.Info("info test")
+			},
+		},
+	}
 
-	// Test with debug disabled - should not output
-	infoLogger := NewLogger(false)
-	infoLogger.Debug("test debug message: %s", "value")
-}
-
-func TestStandardLogger_Info(t *testing.T) {
-	// Test info logging (always outputs regardless of debug mode)
-	debugLogger := NewLogger(true)
-	debugLogger.Info("test info message: %s", "value")
-
-	infoLogger := NewLogger(false)
-	infoLogger.Info("test info message: %s", "value")
-}
-
-func TestStandardLogger_Interface(t *testing.T) {
-	// Test that StandardLogger implements the Logger interface
-	var logger Logger = NewLogger(true)
-
-	// Test that we can call interface methods
-	logger.Debug("debug test")
-	logger.Info("info test")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logger := NewLogger(tt.debugMode)
+			tt.testFunc(t, logger)
+		})
+	}
 }
