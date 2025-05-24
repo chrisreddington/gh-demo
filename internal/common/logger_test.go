@@ -41,7 +41,7 @@ func TestStandardLogger_Info(t *testing.T) {
 func TestStandardLogger_Interface(t *testing.T) {
 	// Test that StandardLogger implements the Logger interface
 	var logger Logger = NewLogger(true)
-	
+
 	// Test that we can call interface methods
 	logger.Debug("debug test")
 	logger.Info("info test")
