@@ -31,9 +31,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/config"
 	"github.com/chrisreddington/gh-demo/internal/errors"
 	"github.com/chrisreddington/gh-demo/internal/types"
 	"github.com/cli/go-gh/v2/pkg/api"
@@ -171,7 +171,7 @@ func (c *GHClient) ListLabels(ctx context.Context) ([]string, error) {
 	}
 
 	// Create timeout context for API call
-	apiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	apiCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
 	defer cancel()
 
 	err := c.gqlClient.Do(apiCtx, labelsQuery, variables, &response)
@@ -215,7 +215,7 @@ func (c *GHClient) CreateLabel(ctx context.Context, label types.Label) error {
 	}
 
 	// Create timeout context for repository query
-	repoCtx, repoCancel := context.WithTimeout(ctx, 30*time.Second)
+	repoCtx, repoCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer repoCancel()
 
 	err := c.gqlClient.Do(repoCtx, getRepositoryIdQuery, repoVariables, &repoResponse)
@@ -251,7 +251,7 @@ func (c *GHClient) CreateLabel(ctx context.Context, label types.Label) error {
 	}
 
 	// Create timeout context for label creation
-	createCtx, createCancel := context.WithTimeout(ctx, 30*time.Second)
+	createCtx, createCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer createCancel()
 
 	err = c.gqlClient.Do(createCtx, createLabelMutation, mutationVariables, &mutationResponse)
@@ -299,7 +299,7 @@ func (c *GHClient) resolveLabelIDs(ctx context.Context, labelNames []string) ([]
 		}
 
 		// Create timeout context for the label query
-		labelCtx, labelCancel := context.WithTimeout(ctx, 30*time.Second)
+		labelCtx, labelCancel := context.WithTimeout(ctx, config.APITimeout)
 		defer labelCancel()
 
 		err := c.gqlClient.Do(labelCtx, getLabelIdQuery, labelVariables, &labelResponse)
@@ -340,7 +340,7 @@ func (c *GHClient) resolveUserIDs(ctx context.Context, userLogins []string) ([]s
 		}
 
 		// Create timeout context for the user query
-		userCtx, userCancel := context.WithTimeout(ctx, 30*time.Second)
+		userCtx, userCancel := context.WithTimeout(ctx, config.APITimeout)
 		defer userCancel()
 
 		err := c.gqlClient.Do(userCtx, getUserIdQuery, userVariables, &userResponse)
@@ -384,7 +384,7 @@ func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 	}
 
 	// Create timeout context for repository query
-	repoCtx, repoCancel := context.WithTimeout(ctx, 30*time.Second)
+	repoCtx, repoCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer repoCancel()
 
 	err := c.gqlClient.Do(repoCtx, getRepositoryIdQuery, repoVariables, &repoResponse)
@@ -435,7 +435,7 @@ func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 	}
 
 	// Create timeout context for issue creation
-	createCtx, createCancel := context.WithTimeout(ctx, 30*time.Second)
+	createCtx, createCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer createCancel()
 
 	err = c.gqlClient.Do(createCtx, createIssueMutation, mutationVariables, &mutationResponse)
@@ -503,7 +503,7 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	}
 
 	// Create timeout context for API call
-	apiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	apiCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
 	defer cancel()
 
 	err := c.gqlClient.Do(apiCtx, repoQuery, repoVariables, &repoResponse)
@@ -580,7 +580,7 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	c.debugLog("Mutation input: %s", string(inputData))
 
 	// Create timeout context for the creation mutation
-	createCtx, createCancel := context.WithTimeout(ctx, 30*time.Second)
+	createCtx, createCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer createCancel()
 
 	err = c.gqlClient.Do(createCtx, createMutation, mutationVariables, &mutationResponse)
@@ -655,7 +655,7 @@ func (c *GHClient) addLabelToDiscussion(ctx context.Context, discussionID, label
 	}
 
 	// Create timeout context for the label query
-	labelCtx, labelCancel := context.WithTimeout(ctx, 30*time.Second)
+	labelCtx, labelCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer labelCancel()
 
 	err := c.gqlClient.Do(labelCtx, labelQuery, labelVariables, &labelResponse)
@@ -691,7 +691,7 @@ func (c *GHClient) addLabelToDiscussion(ctx context.Context, discussionID, label
 	}
 
 	// Create timeout context for the add label mutation
-	addLabelCtx, addLabelCancel := context.WithTimeout(ctx, 30*time.Second)
+	addLabelCtx, addLabelCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer addLabelCancel()
 
 	err = c.gqlClient.Do(addLabelCtx, addLabelMutation, labelMutationVariables, &labelMutationResponse)
@@ -752,7 +752,7 @@ func (c *GHClient) addLabelsAndAssigneesToPR(ctx context.Context, prID string, l
 			"labelIds":    labelIDs,
 		}
 
-		labelCtx, labelCancel := context.WithTimeout(ctx, 30*time.Second)
+		labelCtx, labelCancel := context.WithTimeout(ctx, config.APITimeout)
 		defer labelCancel()
 
 		err = c.gqlClient.Do(labelCtx, addLabelsMutation, labelVariables, &labelResponse)
@@ -786,7 +786,7 @@ func (c *GHClient) addLabelsAndAssigneesToPR(ctx context.Context, prID string, l
 			"assigneeIds":  assigneeIDs,
 		}
 
-		assigneeCtx, assigneeCancel := context.WithTimeout(ctx, 30*time.Second)
+		assigneeCtx, assigneeCancel := context.WithTimeout(ctx, config.APITimeout)
 		defer assigneeCancel()
 
 		err = c.gqlClient.Do(assigneeCtx, addAssigneesMutation, assigneeVariables, &assigneeResponse)
@@ -835,7 +835,7 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 	}
 
 	// Create timeout context for repository query
-	repoCtx, repoCancel := context.WithTimeout(ctx, 30*time.Second)
+	repoCtx, repoCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer repoCancel()
 
 	err := c.gqlClient.Do(repoCtx, getRepositoryIdQuery, repoVariables, &repoResponse)
@@ -872,7 +872,7 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 	}
 
 	// Create timeout context for PR creation
-	createCtx, createCancel := context.WithTimeout(ctx, 30*time.Second)
+	createCtx, createCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer createCancel()
 
 	err = c.gqlClient.Do(createCtx, createPullRequestMutation, mutationVariables, &mutationResponse)
