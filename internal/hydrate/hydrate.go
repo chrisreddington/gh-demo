@@ -35,7 +35,7 @@ type CleanupOptions struct {
 	CleanPRs         bool
 	CleanLabels      bool
 	DryRun           bool
-	PreserveConfig   *PreserveConfig
+	PreserveConfig   *config.PreserveConfig
 }
 
 // CleanupSummary holds statistics for cleanup operations
@@ -403,7 +403,7 @@ func cleanupIssues(ctx context.Context, client githubapi.GitHubClient, options C
 	logger.Debug("Found %d issues to evaluate for cleanup", len(issues))
 
 	for _, issue := range issues {
-		if options.PreserveConfig != nil && options.PreserveConfig.ShouldPreserveIssue(issue) {
+		if options.PreserveConfig != nil && ShouldPreserveIssue(options.PreserveConfig, issue) {
 			summary.IssuesPreserved++
 			logger.Debug("Preserving issue: %s", issue.Title)
 			continue
@@ -440,7 +440,7 @@ func cleanupDiscussions(ctx context.Context, client githubapi.GitHubClient, opti
 	logger.Debug("Found %d discussions to evaluate for cleanup", len(discussions))
 
 	for _, discussion := range discussions {
-		if options.PreserveConfig != nil && options.PreserveConfig.ShouldPreserveDiscussion(discussion) {
+		if options.PreserveConfig != nil && ShouldPreserveDiscussion(options.PreserveConfig, discussion) {
 			summary.DiscussionsPreserved++
 			logger.Debug("Preserving discussion: %s", discussion.Title)
 			continue
@@ -477,7 +477,7 @@ func cleanupPRs(ctx context.Context, client githubapi.GitHubClient, options Clea
 	logger.Debug("Found %d pull requests to evaluate for cleanup", len(prs))
 
 	for _, pr := range prs {
-		if options.PreserveConfig != nil && options.PreserveConfig.ShouldPreservePR(pr) {
+		if options.PreserveConfig != nil && ShouldPreservePR(options.PreserveConfig, pr) {
 			summary.PRsPreserved++
 			logger.Debug("Preserving PR: %s", pr.Title)
 			continue
@@ -514,7 +514,7 @@ func cleanupLabels(ctx context.Context, client githubapi.GitHubClient, options C
 	logger.Debug("Found %d labels to evaluate for cleanup", len(labelNames))
 
 	for _, labelName := range labelNames {
-		if options.PreserveConfig != nil && options.PreserveConfig.ShouldPreserveLabel(labelName) {
+		if options.PreserveConfig != nil && ShouldPreserveLabel(options.PreserveConfig, labelName) {
 			summary.LabelsPreserved++
 			logger.Debug("Preserving label: %s", labelName)
 			continue

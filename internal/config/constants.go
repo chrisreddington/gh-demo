@@ -4,8 +4,12 @@ package config
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/chrisreddington/gh-demo/internal/errors"
 )
 
 const (
@@ -26,6 +30,7 @@ const (
 	DiscussionsFilename  = "discussions.json"
 	PullRequestsFilename = "prs.json"
 	LabelsFilename       = "labels.json"
+	PreserveFilename     = "preserve.json"
 )
 
 // Configuration holds all configuration paths and provides validation.
@@ -39,6 +44,7 @@ type Configuration struct {
 	DiscussionsPath  string
 	PullRequestsPath string
 	LabelsPath       string
+	PreservePath     string
 }
 
 // NewConfiguration creates a new configuration with the given base path.
@@ -50,6 +56,7 @@ func NewConfiguration(basePath string) *Configuration {
 		DiscussionsPath:  filepath.Join(basePath, DiscussionsFilename),
 		PullRequestsPath: filepath.Join(basePath, PullRequestsFilename),
 		LabelsPath:       filepath.Join(basePath, LabelsFilename),
+		PreservePath:     filepath.Join(basePath, PreserveFilename),
 	}
 }
 
@@ -63,5 +70,56 @@ func NewConfigurationWithRoot(ctx context.Context, projectRoot, basePath string)
 		DiscussionsPath:  filepath.Join(absoluteBasePath, DiscussionsFilename),
 		PullRequestsPath: filepath.Join(absoluteBasePath, PullRequestsFilename),
 		LabelsPath:       filepath.Join(absoluteBasePath, LabelsFilename),
+		PreservePath:     filepath.Join(absoluteBasePath, PreserveFilename),
 	}
+}
+
+// PreserveConfig defines the configuration for objects to preserve during cleanup.
+// It supports multiple criteria for each object type including exact matches and regex patterns.
+type PreserveConfig struct {
+	Issues struct {
+		PreserveByTitle []string `json:"preserve_by_title,omitempty"`
+		PreserveByLabel []string `json:"preserve_by_label,omitempty"`
+		PreserveByID    []string `json:"preserve_by_id,omitempty"`
+	} `json:"issues,omitempty"`
+
+	Discussions struct {
+		PreserveByTitle    []string `json:"preserve_by_title,omitempty"`
+		PreserveByCategory []string `json:"preserve_by_category,omitempty"`
+		PreserveByID       []string `json:"preserve_by_id,omitempty"`
+	} `json:"discussions,omitempty"`
+
+	PullRequests struct {
+		PreserveByTitle []string `json:"preserve_by_title,omitempty"`
+		PreserveByLabel []string `json:"preserve_by_label,omitempty"`
+		PreserveByID    []string `json:"preserve_by_id,omitempty"`
+	} `json:"pull_requests,omitempty"`
+
+	Labels struct {
+		PreserveByName []string `json:"preserve_by_name,omitempty"`
+	} `json:"labels,omitempty"`
+}
+
+// LoadPreserveConfig loads the preserve configuration from the specified file path.
+// If the file doesn't exist, it returns an empty configuration (preserve nothing).
+func LoadPreserveConfig(ctx context.Context, filePath string) (*PreserveConfig, error) {
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// Return empty config if file doesn't exist
+		return &PreserveConfig{}, nil
+	}
+
+	// Read file contents
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, errors.FileError("read_preserve_config", "failed to read preserve configuration file", err)
+	}
+
+	// Parse JSON
+	var config PreserveConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, errors.FileError("parse_preserve_config", "failed to parse preserve configuration JSON", err)
+	}
+
+	return &config, nil
 }

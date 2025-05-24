@@ -151,10 +151,10 @@ func performCleanup(ctx context.Context, client githubapi.GitHubClient, flags Cl
 	// Load preserve configuration
 	preserveConfigPath := flags.PreserveConfig
 	if preserveConfigPath == "" {
-		preserveConfigPath = hydrate.DefaultPreserveConfigPath(cfg.BasePath)
+		preserveConfigPath = cfg.PreservePath
 	}
 
-	preserveConfig, err := hydrate.LoadPreserveConfig(ctx, preserveConfigPath)
+	preserveConfig, err := config.LoadPreserveConfig(ctx, preserveConfigPath)
 	if err != nil {
 		return errors.FileError("load_preserve_config", "failed to load preserve configuration", err)
 	}

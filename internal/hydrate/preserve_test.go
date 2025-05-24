@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/chrisreddington/gh-demo/internal/config"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
@@ -23,7 +24,7 @@ func TestLoadPreserveConfig(t *testing.T) {
 		name           string
 		setupConfig    func(string) string // returns file path
 		expectError    bool
-		expectedConfig *PreserveConfig
+		expectedConfig *config.PreserveConfig
 	}{
 		{
 			name: "non-existent file returns empty config",
@@ -31,23 +32,23 @@ func TestLoadPreserveConfig(t *testing.T) {
 				return filepath.Join(dir, "nonexistent.json")
 			},
 			expectError:    false,
-			expectedConfig: &PreserveConfig{},
+			expectedConfig: &config.PreserveConfig{},
 		},
 		{
 			name: "valid config file",
 			setupConfig: func(dir string) string {
-				config := PreserveConfig{}
-				config.Issues.PreserveByTitle = []string{"Important Issue"}
-				config.Issues.PreserveByLabel = []string{"permanent"}
-				config.Labels.PreserveByName = []string{"bug", "enhancement"}
+				preserveConfig := config.PreserveConfig{}
+				preserveConfig.Issues.PreserveByTitle = []string{"Important Issue"}
+				preserveConfig.Issues.PreserveByLabel = []string{"permanent"}
+				preserveConfig.Labels.PreserveByName = []string{"bug", "enhancement"}
 
-				data, _ := json.Marshal(config)
+				data, _ := json.Marshal(preserveConfig)
 				path := filepath.Join(dir, "preserve.json")
 				os.WriteFile(path, data, 0644)
 				return path
 			},
 			expectError: false,
-			expectedConfig: &PreserveConfig{
+			expectedConfig: &config.PreserveConfig{
 				Issues: struct {
 					PreserveByTitle []string `json:"preserve_by_title,omitempty"`
 					PreserveByLabel []string `json:"preserve_by_label,omitempty"`
@@ -78,7 +79,7 @@ func TestLoadPreserveConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			filePath := tt.setupConfig(tempDir)
 			
-			config, err := LoadPreserveConfig(context.Background(), filePath)
+			config, err := config.LoadPreserveConfig(context.Background(), filePath)
 			
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -104,10 +105,10 @@ func TestLoadPreserveConfig(t *testing.T) {
 
 // TestShouldPreserveIssue tests issue preservation logic
 func TestShouldPreserveIssue(t *testing.T) {
-	config := &PreserveConfig{}
-	config.Issues.PreserveByTitle = []string{"Important Issue", "^Release.*"}
-	config.Issues.PreserveByLabel = []string{"permanent", "keep"}
-	config.Issues.PreserveByID = []string{"node123", "node456"}
+	preserveConfig := &config.PreserveConfig{}
+	preserveConfig.Issues.PreserveByTitle = []string{"Important Issue", "^Release.*"}
+	preserveConfig.Issues.PreserveByLabel = []string{"permanent", "keep"}
+	preserveConfig.Issues.PreserveByID = []string{"node123", "node456"}
 
 	tests := []struct {
 		name     string
@@ -156,7 +157,7 @@ func TestShouldPreserveIssue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := config.ShouldPreserveIssue(tt.issue)
+			result := ShouldPreserveIssue(preserveConfig, tt.issue)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for issue: %s", tt.expected, result, tt.issue.Title)
 			}
@@ -166,10 +167,10 @@ func TestShouldPreserveIssue(t *testing.T) {
 
 // TestShouldPreserveDiscussion tests discussion preservation logic
 func TestShouldPreserveDiscussion(t *testing.T) {
-	config := &PreserveConfig{}
-	config.Discussions.PreserveByTitle = []string{"Welcome Discussion"}
-	config.Discussions.PreserveByCategory = []string{"Announcements"}
-	config.Discussions.PreserveByID = []string{"disc123"}
+	preserveConfig := &config.PreserveConfig{}
+	preserveConfig.Discussions.PreserveByTitle = []string{"Welcome Discussion"}
+	preserveConfig.Discussions.PreserveByCategory = []string{"Announcements"}
+	preserveConfig.Discussions.PreserveByID = []string{"disc123"}
 
 	tests := []struct {
 		name       string
@@ -211,7 +212,7 @@ func TestShouldPreserveDiscussion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := config.ShouldPreserveDiscussion(tt.discussion)
+			result := ShouldPreserveDiscussion(preserveConfig, tt.discussion)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for discussion: %s", tt.expected, result, tt.discussion.Title)
 			}
@@ -221,10 +222,10 @@ func TestShouldPreserveDiscussion(t *testing.T) {
 
 // TestShouldPreservePR tests pull request preservation logic
 func TestShouldPreservePR(t *testing.T) {
-	config := &PreserveConfig{}
-	config.PullRequests.PreserveByTitle = []string{"^Release.*"}
-	config.PullRequests.PreserveByLabel = []string{"release"}
-	config.PullRequests.PreserveByID = []string{"pr123"}
+	preserveConfig := &config.PreserveConfig{}
+	preserveConfig.PullRequests.PreserveByTitle = []string{"^Release.*"}
+	preserveConfig.PullRequests.PreserveByLabel = []string{"release"}
+	preserveConfig.PullRequests.PreserveByID = []string{"pr123"}
 
 	tests := []struct {
 		name     string
@@ -266,7 +267,7 @@ func TestShouldPreservePR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := config.ShouldPreservePR(tt.pr)
+			result := ShouldPreservePR(preserveConfig, tt.pr)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for PR: %s", tt.expected, result, tt.pr.Title)
 			}
@@ -276,8 +277,8 @@ func TestShouldPreservePR(t *testing.T) {
 
 // TestShouldPreserveLabel tests label preservation logic
 func TestShouldPreserveLabel(t *testing.T) {
-	config := &PreserveConfig{}
-	config.Labels.PreserveByName = []string{"bug", "enhancement", "help wanted"}
+	preserveConfig := &config.PreserveConfig{}
+	preserveConfig.Labels.PreserveByName = []string{"bug", "enhancement", "help wanted"}
 
 	tests := []struct {
 		name      string
@@ -303,7 +304,7 @@ func TestShouldPreserveLabel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := config.ShouldPreserveLabel(tt.labelName)
+			result := ShouldPreserveLabel(preserveConfig, tt.labelName)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for label: %s", tt.expected, result, tt.labelName)
 			}

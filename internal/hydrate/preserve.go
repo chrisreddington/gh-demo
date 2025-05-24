@@ -2,68 +2,14 @@
 package hydrate
 
 import (
-	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"regexp"
 
-	"github.com/chrisreddington/gh-demo/internal/errors"
+	"github.com/chrisreddington/gh-demo/internal/config"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
-// PreserveConfig defines the configuration for objects to preserve during cleanup.
-// It supports multiple criteria for each object type including exact matches and regex patterns.
-type PreserveConfig struct {
-	Issues struct {
-		PreserveByTitle []string `json:"preserve_by_title,omitempty"`
-		PreserveByLabel []string `json:"preserve_by_label,omitempty"`
-		PreserveByID    []string `json:"preserve_by_id,omitempty"`
-	} `json:"issues,omitempty"`
-
-	Discussions struct {
-		PreserveByTitle    []string `json:"preserve_by_title,omitempty"`
-		PreserveByCategory []string `json:"preserve_by_category,omitempty"`
-		PreserveByID       []string `json:"preserve_by_id,omitempty"`
-	} `json:"discussions,omitempty"`
-
-	PullRequests struct {
-		PreserveByTitle []string `json:"preserve_by_title,omitempty"`
-		PreserveByLabel []string `json:"preserve_by_label,omitempty"`
-		PreserveByID    []string `json:"preserve_by_id,omitempty"`
-	} `json:"pull_requests,omitempty"`
-
-	Labels struct {
-		PreserveByName []string `json:"preserve_by_name,omitempty"`
-	} `json:"labels,omitempty"`
-}
-
-// LoadPreserveConfig loads the preserve configuration from the specified file path.
-// If the file doesn't exist, it returns an empty configuration (preserve nothing).
-func LoadPreserveConfig(ctx context.Context, filePath string) (*PreserveConfig, error) {
-	// Check if file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		// Return empty config if file doesn't exist
-		return &PreserveConfig{}, nil
-	}
-
-	// Read file contents
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, errors.FileError("read_preserve_config", "failed to read preserve configuration file", err)
-	}
-
-	// Parse JSON
-	var config PreserveConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, errors.FileError("parse_preserve_config", "failed to parse preserve configuration JSON", err)
-	}
-
-	return &config, nil
-}
-
 // ShouldPreserveIssue checks if an issue should be preserved based on the configuration.
-func (pc *PreserveConfig) ShouldPreserveIssue(issue types.Issue) bool {
+func ShouldPreserveIssue(pc *config.PreserveConfig, issue types.Issue) bool {
 	// Check by ID
 	for _, id := range pc.Issues.PreserveByID {
 		if issue.NodeID == id {
@@ -91,7 +37,7 @@ func (pc *PreserveConfig) ShouldPreserveIssue(issue types.Issue) bool {
 }
 
 // ShouldPreserveDiscussion checks if a discussion should be preserved based on the configuration.
-func (pc *PreserveConfig) ShouldPreserveDiscussion(discussion types.Discussion) bool {
+func ShouldPreserveDiscussion(pc *config.PreserveConfig, discussion types.Discussion) bool {
 	// Check by ID
 	for _, id := range pc.Discussions.PreserveByID {
 		if discussion.NodeID == id {
@@ -117,7 +63,7 @@ func (pc *PreserveConfig) ShouldPreserveDiscussion(discussion types.Discussion) 
 }
 
 // ShouldPreservePR checks if a pull request should be preserved based on the configuration.
-func (pc *PreserveConfig) ShouldPreservePR(pr types.PullRequest) bool {
+func ShouldPreservePR(pc *config.PreserveConfig, pr types.PullRequest) bool {
 	// Check by ID
 	for _, id := range pc.PullRequests.PreserveByID {
 		if pr.NodeID == id {
@@ -145,7 +91,7 @@ func (pc *PreserveConfig) ShouldPreservePR(pr types.PullRequest) bool {
 }
 
 // ShouldPreserveLabel checks if a label should be preserved based on the configuration.
-func (pc *PreserveConfig) ShouldPreserveLabel(labelName string) bool {
+func ShouldPreserveLabel(pc *config.PreserveConfig, labelName string) bool {
 	for _, name := range pc.Labels.PreserveByName {
 		if labelName == name {
 			return true
@@ -170,9 +116,4 @@ func isMatchOrRegex(value, pattern string) bool {
 	}
 
 	return false
-}
-
-// DefaultPreserveConfigPath returns the default path for the preserve configuration file.
-func DefaultPreserveConfigPath(configRoot string) string {
-	return filepath.Join(configRoot, "preserve.json")
 }
