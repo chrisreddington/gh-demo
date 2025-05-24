@@ -861,9 +861,81 @@ func (c *GHClient) ListIssues(ctx context.Context) ([]types.Issue, error) {
 		return nil, errors.ValidationError("list_issues", "GraphQL client is not initialized")
 	}
 
-	// TODO: Implement GraphQL query to list issues
-	c.debugLog("ListIssues not yet implemented")
-	return []types.Issue{}, nil
+	c.debugLog("Fetching issues from repository %s/%s", c.Owner, c.Repo)
+
+	var allIssues []types.Issue
+	var cursor *string
+
+	for {
+		var response struct {
+			Repository struct {
+				Issues struct {
+					Nodes []struct {
+						ID     string `json:"id"`
+						Number int    `json:"number"`
+						Title  string `json:"title"`
+						Body   string `json:"body"`
+						Labels struct {
+							Nodes []struct {
+								Name string `json:"name"`
+							} `json:"nodes"`
+						} `json:"labels"`
+					} `json:"nodes"`
+					PageInfo struct {
+						HasNextPage bool    `json:"hasNextPage"`
+						EndCursor   *string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"issues"`
+			} `json:"repository"`
+		}
+
+		variables := map[string]interface{}{
+			"owner": c.Owner,
+			"name":  c.Repo,
+			"first": 100,
+		}
+		if cursor != nil {
+			variables["after"] = *cursor
+		}
+
+		// Create timeout context for API call
+		apiCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+		defer cancel()
+
+		err := c.gqlClient.Do(apiCtx, listIssuesQuery, variables, &response)
+		if err != nil {
+			c.debugLog("Failed to fetch issues: %v", err)
+			if errors.IsContextError(err) {
+				return nil, errors.ContextError("list_issues", err)
+			}
+			return nil, errors.APIError("list_issues", "failed to fetch issues", err)
+		}
+
+		// Convert GraphQL response to types.Issue
+		for _, issue := range response.Repository.Issues.Nodes {
+			labels := make([]string, 0, len(issue.Labels.Nodes))
+			for _, label := range issue.Labels.Nodes {
+				labels = append(labels, label.Name)
+			}
+
+			allIssues = append(allIssues, types.Issue{
+				NodeID: issue.ID,
+				Number: issue.Number,
+				Title:  issue.Title,
+				Body:   issue.Body,
+				Labels: labels,
+			})
+		}
+
+		// Check if we need to fetch more pages
+		if !response.Repository.Issues.PageInfo.HasNextPage {
+			break
+		}
+		cursor = response.Repository.Issues.PageInfo.EndCursor
+	}
+
+	c.debugLog("Successfully fetched %d issues", len(allIssues))
+	return allIssues, nil
 }
 
 // ListDiscussions retrieves all existing discussions from the repository
@@ -872,9 +944,74 @@ func (c *GHClient) ListDiscussions(ctx context.Context) ([]types.Discussion, err
 		return nil, errors.ValidationError("list_discussions", "GraphQL client is not initialized")
 	}
 
-	// TODO: Implement GraphQL query to list discussions
-	c.debugLog("ListDiscussions not yet implemented")
-	return []types.Discussion{}, nil
+	c.debugLog("Fetching discussions from repository %s/%s", c.Owner, c.Repo)
+
+	var allDiscussions []types.Discussion
+	var cursor *string
+
+	for {
+		var response struct {
+			Repository struct {
+				Discussions struct {
+					Nodes []struct {
+						ID     string `json:"id"`
+						Number int    `json:"number"`
+						Title  string `json:"title"`
+						Body   string `json:"body"`
+						Category struct {
+							Name string `json:"name"`
+						} `json:"category"`
+					} `json:"nodes"`
+					PageInfo struct {
+						HasNextPage bool    `json:"hasNextPage"`
+						EndCursor   *string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"discussions"`
+			} `json:"repository"`
+		}
+
+		variables := map[string]interface{}{
+			"owner": c.Owner,
+			"name":  c.Repo,
+			"first": 100,
+		}
+		if cursor != nil {
+			variables["after"] = *cursor
+		}
+
+		// Create timeout context for API call
+		apiCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+		defer cancel()
+
+		err := c.gqlClient.Do(apiCtx, listDiscussionsQuery, variables, &response)
+		if err != nil {
+			c.debugLog("Failed to fetch discussions: %v", err)
+			if errors.IsContextError(err) {
+				return nil, errors.ContextError("list_discussions", err)
+			}
+			return nil, errors.APIError("list_discussions", "failed to fetch discussions", err)
+		}
+
+		// Convert GraphQL response to types.Discussion
+		for _, discussion := range response.Repository.Discussions.Nodes {
+			allDiscussions = append(allDiscussions, types.Discussion{
+				NodeID:   discussion.ID,
+				Number:   discussion.Number,
+				Title:    discussion.Title,
+				Body:     discussion.Body,
+				Category: discussion.Category.Name,
+			})
+		}
+
+		// Check if we need to fetch more pages
+		if !response.Repository.Discussions.PageInfo.HasNextPage {
+			break
+		}
+		cursor = response.Repository.Discussions.PageInfo.EndCursor
+	}
+
+	c.debugLog("Successfully fetched %d discussions", len(allDiscussions))
+	return allDiscussions, nil
 }
 
 // ListPRs retrieves all existing pull requests from the repository
@@ -883,9 +1020,85 @@ func (c *GHClient) ListPRs(ctx context.Context) ([]types.PullRequest, error) {
 		return nil, errors.ValidationError("list_prs", "GraphQL client is not initialized")
 	}
 
-	// TODO: Implement GraphQL query to list PRs
-	c.debugLog("ListPRs not yet implemented")
-	return []types.PullRequest{}, nil
+	c.debugLog("Fetching pull requests from repository %s/%s", c.Owner, c.Repo)
+
+	var allPRs []types.PullRequest
+	var cursor *string
+
+	for {
+		var response struct {
+			Repository struct {
+				PullRequests struct {
+					Nodes []struct {
+						ID          string `json:"id"`
+						Number      int    `json:"number"`
+						Title       string `json:"title"`
+						Body        string `json:"body"`
+						HeadRefName string `json:"headRefName"`
+						BaseRefName string `json:"baseRefName"`
+						Labels      struct {
+							Nodes []struct {
+								Name string `json:"name"`
+							} `json:"nodes"`
+						} `json:"labels"`
+					} `json:"nodes"`
+					PageInfo struct {
+						HasNextPage bool    `json:"hasNextPage"`
+						EndCursor   *string `json:"endCursor"`
+					} `json:"pageInfo"`
+				} `json:"pullRequests"`
+			} `json:"repository"`
+		}
+
+		variables := map[string]interface{}{
+			"owner": c.Owner,
+			"name":  c.Repo,
+			"first": 100,
+		}
+		if cursor != nil {
+			variables["after"] = *cursor
+		}
+
+		// Create timeout context for API call
+		apiCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+		defer cancel()
+
+		err := c.gqlClient.Do(apiCtx, listPullRequestsQuery, variables, &response)
+		if err != nil {
+			c.debugLog("Failed to fetch pull requests: %v", err)
+			if errors.IsContextError(err) {
+				return nil, errors.ContextError("list_prs", err)
+			}
+			return nil, errors.APIError("list_prs", "failed to fetch pull requests", err)
+		}
+
+		// Convert GraphQL response to types.PullRequest
+		for _, pr := range response.Repository.PullRequests.Nodes {
+			labels := make([]string, 0, len(pr.Labels.Nodes))
+			for _, label := range pr.Labels.Nodes {
+				labels = append(labels, label.Name)
+			}
+
+			allPRs = append(allPRs, types.PullRequest{
+				NodeID: pr.ID,
+				Number: pr.Number,
+				Title:  pr.Title,
+				Body:   pr.Body,
+				Head:   pr.HeadRefName,
+				Base:   pr.BaseRefName,
+				Labels: labels,
+			})
+		}
+
+		// Check if we need to fetch more pages
+		if !response.Repository.PullRequests.PageInfo.HasNextPage {
+			break
+		}
+		cursor = response.Repository.PullRequests.PageInfo.EndCursor
+	}
+
+	c.debugLog("Successfully fetched %d pull requests", len(allPRs))
+	return allPRs, nil
 }
 
 // Deletion operations for cleanup
@@ -896,8 +1109,47 @@ func (c *GHClient) DeleteIssue(ctx context.Context, nodeID string) error {
 		return errors.ValidationError("delete_issue", "GraphQL client is not initialized")
 	}
 
-	// TODO: Implement GraphQL mutation to delete issue
-	c.debugLog("DeleteIssue not yet implemented for nodeID: %s", nodeID)
+	if strings.TrimSpace(nodeID) == "" {
+		return errors.ValidationError("delete_issue", "node ID cannot be empty")
+	}
+
+	c.debugLog("Closing issue with nodeID: %s in repository %s/%s", nodeID, c.Owner, c.Repo)
+
+	var response struct {
+		CloseIssue struct {
+			Issue struct {
+				ID    string `json:"id"`
+				State string `json:"state"`
+			} `json:"issue"`
+		} `json:"closeIssue"`
+	}
+
+	variables := map[string]interface{}{
+		"issueId": nodeID,
+	}
+
+	// Create timeout context for API call
+	apiCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(apiCtx, deleteIssueMutation, variables, &response)
+	if err != nil {
+		c.debugLog("Failed to close issue %s: %v", nodeID, err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("delete_issue", err)
+		}
+		layeredErr := errors.APIError("delete_issue", "failed to close issue", err)
+		return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID)
+	}
+
+	// Verify the issue was closed
+	if response.CloseIssue.Issue.State != "CLOSED" {
+		c.debugLog("Issue %s was not properly closed - state: %s", nodeID, response.CloseIssue.Issue.State)
+		layeredErr := errors.APIError("delete_issue", "issue was not properly closed", nil)
+		return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID).WithContext("state", response.CloseIssue.Issue.State)
+	}
+
+	c.debugLog("Successfully closed issue %s", nodeID)
 	return nil
 }
 
@@ -907,9 +1159,19 @@ func (c *GHClient) DeleteDiscussion(ctx context.Context, nodeID string) error {
 		return errors.ValidationError("delete_discussion", "GraphQL client is not initialized")
 	}
 
-	// TODO: Implement GraphQL mutation to delete discussion
-	c.debugLog("DeleteDiscussion not yet implemented for nodeID: %s", nodeID)
-	return nil
+	if strings.TrimSpace(nodeID) == "" {
+		return errors.ValidationError("delete_discussion", "node ID cannot be empty")
+	}
+
+	c.debugLog("Attempting to delete discussion with nodeID: %s in repository %s/%s", nodeID, c.Owner, c.Repo)
+
+	// Note: GitHub API does not currently support deleting discussions via GraphQL/REST API
+	// Discussions can only be deleted manually through the web interface by repository maintainers
+	// We'll log this limitation and return a descriptive error
+	
+	c.debugLog("Discussion deletion not supported by GitHub API for nodeID: %s", nodeID)
+	layeredErr := errors.APIError("delete_discussion", "GitHub API does not support programmatic deletion of discussions", nil)
+	return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID).WithContext("limitation", "discussions can only be deleted manually via web interface")
 }
 
 // DeletePR deletes a pull request by its node ID
@@ -918,8 +1180,47 @@ func (c *GHClient) DeletePR(ctx context.Context, nodeID string) error {
 		return errors.ValidationError("delete_pr", "GraphQL client is not initialized")
 	}
 
-	// TODO: Implement GraphQL mutation to delete PR
-	c.debugLog("DeletePR not yet implemented for nodeID: %s", nodeID)
+	if strings.TrimSpace(nodeID) == "" {
+		return errors.ValidationError("delete_pr", "node ID cannot be empty")
+	}
+
+	c.debugLog("Closing pull request with nodeID: %s in repository %s/%s", nodeID, c.Owner, c.Repo)
+
+	var response struct {
+		ClosePullRequest struct {
+			PullRequest struct {
+				ID    string `json:"id"`
+				State string `json:"state"`
+			} `json:"pullRequest"`
+		} `json:"closePullRequest"`
+	}
+
+	variables := map[string]interface{}{
+		"pullRequestId": nodeID,
+	}
+
+	// Create timeout context for API call
+	apiCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(apiCtx, deletePullRequestMutation, variables, &response)
+	if err != nil {
+		c.debugLog("Failed to close pull request %s: %v", nodeID, err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("delete_pr", err)
+		}
+		layeredErr := errors.APIError("delete_pr", "failed to close pull request", err)
+		return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID)
+	}
+
+	// Verify the pull request was closed
+	if response.ClosePullRequest.PullRequest.State != "CLOSED" {
+		c.debugLog("Pull request %s was not properly closed - state: %s", nodeID, response.ClosePullRequest.PullRequest.State)
+		layeredErr := errors.APIError("delete_pr", "pull request was not properly closed", nil)
+		return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID).WithContext("state", response.ClosePullRequest.PullRequest.State)
+	}
+
+	c.debugLog("Successfully closed pull request %s", nodeID)
 	return nil
 }
 
@@ -929,7 +1230,72 @@ func (c *GHClient) DeleteLabel(ctx context.Context, name string) error {
 		return errors.ValidationError("delete_label", "GraphQL client is not initialized")
 	}
 
-	// TODO: Implement GraphQL mutation to delete label
-	c.debugLog("DeleteLabel not yet implemented for name: %s", name)
+	if strings.TrimSpace(name) == "" {
+		return errors.ValidationError("delete_label", "label name cannot be empty")
+	}
+
+	c.debugLog("Deleting label '%s' from repository %s/%s", name, c.Owner, c.Repo)
+
+	// First, get the label ID by name
+	var labelResponse struct {
+		Repository struct {
+			Label struct {
+				ID string `json:"id"`
+			} `json:"label"`
+		} `json:"repository"`
+	}
+
+	labelVariables := map[string]interface{}{
+		"owner":     c.Owner,
+		"name":      c.Repo,
+		"labelName": name,
+	}
+
+	// Create timeout context for the label query
+	labelCtx, labelCancel := context.WithTimeout(ctx, config.APITimeout)
+	defer labelCancel()
+
+	err := c.gqlClient.Do(labelCtx, getLabelByNameQuery, labelVariables, &labelResponse)
+	if err != nil {
+		c.debugLog("Failed to find label '%s': %v", name, err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("find_label", err)
+		}
+		layeredErr := errors.APIError("find_label", fmt.Sprintf("failed to find label '%s'", name), err)
+		return layeredErr.(*errors.LayeredError).WithContext("label_name", name)
+	}
+
+	if labelResponse.Repository.Label.ID == "" {
+		c.debugLog("Label '%s' not found in repository", name)
+		layeredErr := errors.ValidationError("validate_label", fmt.Sprintf("label '%s' not found in repository", name))
+		return layeredErr.(*errors.LayeredError).WithContext("label_name", name)
+	}
+
+	// Delete the label using its ID
+	var deleteResponse struct {
+		DeleteLabel struct {
+			ClientMutationID string `json:"clientMutationId"`
+		} `json:"deleteLabel"`
+	}
+
+	deleteVariables := map[string]interface{}{
+		"labelId": labelResponse.Repository.Label.ID,
+	}
+
+	// Create timeout context for the delete mutation
+	deleteCtx, deleteCancel := context.WithTimeout(ctx, config.APITimeout)
+	defer deleteCancel()
+
+	err = c.gqlClient.Do(deleteCtx, deleteLabelMutation, deleteVariables, &deleteResponse)
+	if err != nil {
+		c.debugLog("Failed to delete label '%s': %v", name, err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("delete_label", err)
+		}
+		layeredErr := errors.APIError("delete_label", fmt.Sprintf("failed to delete label '%s'", name), err)
+		return layeredErr.(*errors.LayeredError).WithContext("label_name", name).WithContext("label_id", labelResponse.Repository.Label.ID)
+	}
+
+	c.debugLog("Successfully deleted label '%s'", name)
 	return nil
 }
