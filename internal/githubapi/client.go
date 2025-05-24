@@ -268,32 +268,68 @@ func (c *GHClient) ListLabels(ctx context.Context) ([]string, error) {
 }
 
 // CreateLabel creates a new label in the repository using the provided label data.
-// It validates that the REST client is initialized and creates the label with
-// the specified name, description, and color.
+// It validates that the GraphQL client is initialized and creates the label with
+// the specified name, description, and color using GraphQL mutations.
 func (c *GHClient) CreateLabel(ctx context.Context, label types.Label) error {
-	if c.restClient == nil {
-		return errors.ValidationError("create_label", "REST client is not initialized")
+	if c.gqlClient == nil {
+		return errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
 
 	c.debugLog("Creating label '%s' (color: %s) in repository %s/%s", label.Name, label.Color, c.Owner, c.Repo)
 
-	// Using the REST API for label creation as it's simpler than GraphQL for this case
-	path := fmt.Sprintf("repos/%s/%s/labels", c.Owner, c.Repo)
-	payload := map[string]interface{}{
-		"name":  label.Name,
-		"color": label.Color,
+	// First, get the repository ID
+	var repoResponse struct {
+		Repository struct {
+			ID string `json:"id"`
+		} `json:"repository"`
 	}
 
-	// Add description if provided
-	if label.Description != "" {
-		payload["description"] = label.Description
+	repoVariables := map[string]interface{}{
+		"owner": c.Owner,
+		"name":  c.Repo,
 	}
 
-	// Create timeout context for API call
-	apiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+	// Create timeout context for repository query
+	repoCtx, repoCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer repoCancel()
 
-	err := c.restClient.Request(apiCtx, "POST", path, payload, nil)
+	err := c.gqlClient.Do(repoCtx, getRepositoryIdQuery, repoVariables, &repoResponse)
+	if err != nil {
+		c.debugLog("Failed to fetch repository ID for label creation: %v", err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("get_repository_id", err)
+		}
+		return errors.APIError("get_repository_id", "failed to fetch repository ID", err)
+	}
+
+	if repoResponse.Repository.ID == "" {
+		return errors.ValidationError("validate_repository", "repository not found")
+	}
+
+	// Create the label using GraphQL mutation
+	var mutationResponse struct {
+		CreateLabel struct {
+			Label struct {
+				ID          string `json:"id"`
+				Name        string `json:"name"`
+				Color       string `json:"color"`
+				Description string `json:"description"`
+			} `json:"label"`
+		} `json:"createLabel"`
+	}
+
+	mutationVariables := map[string]interface{}{
+		"repositoryId": repoResponse.Repository.ID,
+		"name":         label.Name,
+		"color":        label.Color,
+		"description":  label.Description,
+	}
+
+	// Create timeout context for label creation
+	createCtx, createCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer createCancel()
+
+	err = c.gqlClient.Do(createCtx, createLabelMutation, mutationVariables, &mutationResponse)
 	if err != nil {
 		c.debugLog("Failed to create label '%s': %v", label.Name, err)
 		if errors.IsContextError(err) {
@@ -303,33 +339,181 @@ func (c *GHClient) CreateLabel(ctx context.Context, label types.Label) error {
 		return layeredErr.WithContext("name", label.Name).WithContext("color", label.Color)
 	}
 
+	// Verify label was created
+	if mutationResponse.CreateLabel.Label.ID == "" {
+		c.debugLog("Label creation for '%s' failed - no Label ID returned", label.Name)
+		layeredErr := errors.APIError("create_label", "label creation failed - no Label ID returned from GitHub API", nil)
+		return layeredErr.(*errors.LayeredError).WithContext("name", label.Name)
+	}
+
 	c.debugLog("Successfully created label '%s' with color '%s'", label.Name, label.Color)
 	return nil
 }
 
+// resolveLabelIDs resolves label names to their corresponding IDs
+func (c *GHClient) resolveLabelIDs(ctx context.Context, labelNames []string) ([]string, error) {
+	if len(labelNames) == 0 {
+		return nil, nil
+	}
+
+	labelIDs := make([]string, 0, len(labelNames))
+	
+	for _, labelName := range labelNames {
+		var labelResponse struct {
+			Repository struct {
+				Label struct {
+					ID string `json:"id"`
+				} `json:"label"`
+			} `json:"repository"`
+		}
+
+		labelVariables := map[string]interface{}{
+			"owner":     c.Owner,
+			"name":      c.Repo,
+			"labelName": labelName,
+		}
+
+		// Create timeout context for the label query
+		labelCtx, labelCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer labelCancel()
+
+		err := c.gqlClient.Do(labelCtx, getLabelIdQuery, labelVariables, &labelResponse)
+		if err != nil {
+			c.debugLog("Failed to find label '%s': %v", labelName, err)
+			// Continue with other labels even if one fails
+			continue
+		}
+
+		if labelResponse.Repository.Label.ID != "" {
+			labelIDs = append(labelIDs, labelResponse.Repository.Label.ID)
+			c.debugLog("Resolved label '%s' to ID: %s", labelName, labelResponse.Repository.Label.ID)
+		} else {
+			c.debugLog("Label '%s' not found in repository", labelName)
+		}
+	}
+
+	return labelIDs, nil
+}
+
+// resolveUserIDs resolves user logins to their corresponding IDs
+func (c *GHClient) resolveUserIDs(ctx context.Context, userLogins []string) ([]string, error) {
+	if len(userLogins) == 0 {
+		return nil, nil
+	}
+
+	userIDs := make([]string, 0, len(userLogins))
+	
+	for _, login := range userLogins {
+		var userResponse struct {
+			User struct {
+				ID string `json:"id"`
+			} `json:"user"`
+		}
+
+		userVariables := map[string]interface{}{
+			"login": login,
+		}
+
+		// Create timeout context for the user query
+		userCtx, userCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer userCancel()
+
+		err := c.gqlClient.Do(userCtx, getUserIdQuery, userVariables, &userResponse)
+		if err != nil {
+			c.debugLog("Failed to find user '%s': %v", login, err)
+			// Continue with other users even if one fails
+			continue
+		}
+
+		if userResponse.User.ID != "" {
+			userIDs = append(userIDs, userResponse.User.ID)
+			c.debugLog("Resolved user '%s' to ID: %s", login, userResponse.User.ID)
+		} else {
+			c.debugLog("User '%s' not found", login)
+		}
+	}
+
+	return userIDs, nil
+}
+
 // CreateIssue creates a new issue in the repository using the provided issue data.
-// It validates that the REST client is initialized and creates the issue with
-// the specified title, body, labels, and assignees.
+// It validates that the GraphQL client is initialized and creates the issue with
+// the specified title, body, labels, and assignees using GraphQL mutations.
 func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
-	if c.restClient == nil {
-		return errors.ValidationError("create_issue", "REST client is not initialized")
+	if c.gqlClient == nil {
+		return errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
 
 	c.debugLog("Creating issue '%s' in repository %s/%s", issue.Title, c.Owner, c.Repo)
 
-	path := fmt.Sprintf("repos/%s/%s/issues", c.Owner, c.Repo)
-	payload := map[string]interface{}{
-		"title":     issue.Title,
-		"body":      issue.Body,
-		"labels":    issue.Labels,
-		"assignees": issue.Assignees,
+	// First, get the repository ID
+	var repoResponse struct {
+		Repository struct {
+			ID string `json:"id"`
+		} `json:"repository"`
 	}
 
-	// Create timeout context for API call
-	apiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
+	repoVariables := map[string]interface{}{
+		"owner": c.Owner,
+		"name":  c.Repo,
+	}
 
-	err := c.restClient.Request(apiCtx, "POST", path, payload, nil)
+	// Create timeout context for repository query
+	repoCtx, repoCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer repoCancel()
+
+	err := c.gqlClient.Do(repoCtx, getRepositoryIdQuery, repoVariables, &repoResponse)
+	if err != nil {
+		c.debugLog("Failed to fetch repository ID for issue creation: %v", err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("get_repository_id", err)
+		}
+		return errors.APIError("get_repository_id", "failed to fetch repository ID", err)
+	}
+
+	if repoResponse.Repository.ID == "" {
+		return errors.ValidationError("validate_repository", "repository not found")
+	}
+
+	// Resolve label names to IDs
+	labelIDs, err := c.resolveLabelIDs(ctx, issue.Labels)
+	if err != nil {
+		c.debugLog("Failed to resolve label IDs: %v", err)
+		return errors.APIError("resolve_labels", "failed to resolve label IDs", err)
+	}
+
+	// Resolve assignee logins to IDs
+	assigneeIDs, err := c.resolveUserIDs(ctx, issue.Assignees)
+	if err != nil {
+		c.debugLog("Failed to resolve assignee IDs: %v", err)
+		return errors.APIError("resolve_assignees", "failed to resolve assignee IDs", err)
+	}
+
+	// Create the issue using GraphQL mutation
+	var mutationResponse struct {
+		CreateIssue struct {
+			Issue struct {
+				ID     string `json:"id"`
+				Number int    `json:"number"`
+				Title  string `json:"title"`
+				URL    string `json:"url"`
+			} `json:"issue"`
+		} `json:"createIssue"`
+	}
+
+	mutationVariables := map[string]interface{}{
+		"repositoryId": repoResponse.Repository.ID,
+		"title":        issue.Title,
+		"body":         issue.Body,
+		"labelIds":     labelIDs,
+		"assigneeIds":  assigneeIDs,
+	}
+
+	// Create timeout context for issue creation
+	createCtx, createCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer createCancel()
+
+	err = c.gqlClient.Do(createCtx, createIssueMutation, mutationVariables, &mutationResponse)
 	if err != nil {
 		c.debugLog("Failed to create issue '%s': %v", issue.Title, err)
 		if errors.IsContextError(err) {
@@ -339,7 +523,15 @@ func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 		return layeredErr.WithContext("title", issue.Title)
 	}
 
-	c.debugLog("Successfully created issue '%s'", issue.Title)
+	// Verify issue was created
+	if mutationResponse.CreateIssue.Issue.ID == "" {
+		c.debugLog("Issue creation for '%s' failed - no Issue ID returned", issue.Title)
+		layeredErr := errors.APIError("create_issue", "issue creation failed - no Issue ID returned from GitHub API", nil)
+		return layeredErr.(*errors.LayeredError).WithContext("title", issue.Title)
+	}
+
+	c.debugLog("Successfully created issue '%s' (Number: %d, URL: %s)", 
+		issue.Title, mutationResponse.CreateIssue.Issue.Number, mutationResponse.CreateIssue.Issue.URL)
 	return nil
 }
 
@@ -585,11 +777,108 @@ func (c *GHClient) addLabelToDiscussion(ctx context.Context, discussionID, label
 	return nil
 }
 
+// addLabelsAndAssigneesToPR adds labels and assignees to an existing pull request using its ID
+func (c *GHClient) addLabelsAndAssigneesToPR(ctx context.Context, prID string, labelNames []string, assigneeLogins []string) error {
+	if len(labelNames) == 0 && len(assigneeLogins) == 0 {
+		return nil // Nothing to add
+	}
+
+	// Resolve label names to IDs
+	labelIDs, err := c.resolveLabelIDs(ctx, labelNames)
+	if err != nil {
+		c.debugLog("Failed to resolve label IDs for PR: %v", err)
+		return errors.APIError("resolve_labels", "failed to resolve label IDs", err)
+	}
+
+	// Resolve assignee logins to IDs
+	assigneeIDs, err := c.resolveUserIDs(ctx, assigneeLogins)
+	if err != nil {
+		c.debugLog("Failed to resolve assignee IDs for PR: %v", err)
+		return errors.APIError("resolve_assignees", "failed to resolve assignee IDs", err)
+	}
+
+	// Only proceed if we have labels or assignees to add
+	if len(labelIDs) == 0 && len(assigneeIDs) == 0 {
+		c.debugLog("No valid labels or assignees to add to PR")
+		return nil
+	}
+
+	// Add labels if we have any
+	if len(labelIDs) > 0 {
+		addLabelsMutation := `
+			mutation AddLabelsToPR($labelableId: ID!, $labelIds: [ID!]!) {
+				addLabelsToLabelable(input: {
+					labelableId: $labelableId
+					labelIds: $labelIds
+				}) {
+					clientMutationId
+				}
+			}
+		`
+
+		var labelResponse struct {
+			AddLabelsToLabelable struct {
+				ClientMutationID string `json:"clientMutationId"`
+			} `json:"addLabelsToLabelable"`
+		}
+
+		labelVariables := map[string]interface{}{
+			"labelableId": prID,
+			"labelIds":    labelIDs,
+		}
+
+		labelCtx, labelCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer labelCancel()
+
+		err = c.gqlClient.Do(labelCtx, addLabelsMutation, labelVariables, &labelResponse)
+		if err != nil {
+			c.debugLog("Failed to add labels to PR: %v", err)
+			return errors.APIError("add_labels_to_pr", "failed to add labels to pull request", err)
+		}
+	}
+
+	// Add assignees if we have any
+	if len(assigneeIDs) > 0 {
+		addAssigneesMutation := `
+			mutation AddAssigneesToPR($assignableId: ID!, $assigneeIds: [ID!]!) {
+				addAssigneesToAssignable(input: {
+					assignableId: $assignableId
+					assigneeIds: $assigneeIds
+				}) {
+					clientMutationId
+				}
+			}
+		`
+
+		var assigneeResponse struct {
+			AddAssigneesToAssignable struct {
+				ClientMutationID string `json:"clientMutationId"`
+			} `json:"addAssigneesToAssignable"`
+		}
+
+		assigneeVariables := map[string]interface{}{
+			"assignableId": prID,
+			"assigneeIds":  assigneeIDs,
+		}
+
+		assigneeCtx, assigneeCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer assigneeCancel()
+
+		err = c.gqlClient.Do(assigneeCtx, addAssigneesMutation, assigneeVariables, &assigneeResponse)
+		if err != nil {
+			c.debugLog("Failed to add assignees to PR: %v", err)
+			return errors.APIError("add_assignees_to_pr", "failed to add assignees to pull request", err)
+		}
+	}
+
+	return nil
+}
+
 // CreatePR creates a new pull request in the repository using the provided pull request data.
-// It validates the head and base branches, creates the PR via REST API, and adds labels/assignees if specified.
+// It validates the head and base branches, creates the PR via GraphQL API, and adds labels/assignees if specified.
 func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) error {
-	if c.restClient == nil {
-		return errors.ValidationError("validate_client", "REST client is not initialized")
+	if c.gqlClient == nil {
+		return errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
 
 	c.debugLog("Creating pull request '%s' in repository %s/%s (head: %s, base: %s)", pullRequest.Title, c.Owner, c.Repo, pullRequest.Head, pullRequest.Base)
@@ -608,40 +897,85 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 		return errors.ValidationError("validate_pr", fmt.Sprintf("head and base branches cannot be the same (%s)", pullRequest.Head))
 	}
 
-	path := fmt.Sprintf("repos/%s/%s/pulls", c.Owner, c.Repo)
-	payload := map[string]interface{}{
-		"title": pullRequest.Title,
-		"body":  pullRequest.Body,
-		"head":  pullRequest.Head,
-		"base":  pullRequest.Base,
+	// First, get the repository ID
+	var repoResponse struct {
+		Repository struct {
+			ID string `json:"id"`
+		} `json:"repository"`
 	}
 
-	// Create timeout context for the PR creation
-	prCtx, prCancel := context.WithTimeout(ctx, 30*time.Second)
-	defer prCancel()
+	repoVariables := map[string]interface{}{
+		"owner": c.Owner,
+		"name":  c.Repo,
+	}
 
-	var response map[string]interface{}
-	err := c.restClient.Request(prCtx, "POST", path, payload, &response)
+	// Create timeout context for repository query
+	repoCtx, repoCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer repoCancel()
+
+	err := c.gqlClient.Do(repoCtx, getRepositoryIdQuery, repoVariables, &repoResponse)
+	if err != nil {
+		c.debugLog("Failed to fetch repository ID for PR creation: %v", err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("get_repository_id", err)
+		}
+		return errors.APIError("get_repository_id", "failed to fetch repository ID", err)
+	}
+
+	if repoResponse.Repository.ID == "" {
+		return errors.ValidationError("validate_repository", "repository not found")
+	}
+
+	// Create the pull request using GraphQL mutation
+	var mutationResponse struct {
+		CreatePullRequest struct {
+			PullRequest struct {
+				ID     string `json:"id"`
+				Number int    `json:"number"`
+				Title  string `json:"title"`
+				URL    string `json:"url"`
+			} `json:"pullRequest"`
+		} `json:"createPullRequest"`
+	}
+
+	mutationVariables := map[string]interface{}{
+		"repositoryId": repoResponse.Repository.ID,
+		"title":        pullRequest.Title,
+		"body":         pullRequest.Body,
+		"headRefName":  pullRequest.Head,
+		"baseRefName":  pullRequest.Base,
+	}
+
+	// Create timeout context for PR creation
+	createCtx, createCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer createCancel()
+
+	err = c.gqlClient.Do(createCtx, createPullRequestMutation, mutationVariables, &mutationResponse)
 	if err != nil {
 		c.debugLog("Failed to create pull request '%s': %v", pullRequest.Title, err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("create_pull_request", err)
+		}
 		layeredErr := errors.APIError("create_pull_request", "failed to create pull request", err)
 		return layeredErr.(*errors.LayeredError).WithContext("title", pullRequest.Title).WithContext("head", pullRequest.Head).WithContext("base", pullRequest.Base)
 	}
 
-	// If the PR was created successfully and has labels/assignees, add them
-	if prNumber, ok := response["number"].(float64); ok && (len(pullRequest.Labels) > 0 || len(pullRequest.Assignees) > 0) {
+	// Verify PR was created
+	if mutationResponse.CreatePullRequest.PullRequest.ID == "" {
+		c.debugLog("PR creation for '%s' failed - no PR ID returned", pullRequest.Title)
+		layeredErr := errors.APIError("create_pull_request", "pull request creation failed - no PR ID returned from GitHub API", nil)
+		return layeredErr.(*errors.LayeredError).WithContext("title", pullRequest.Title)
+	}
+
+	prID := mutationResponse.CreatePullRequest.PullRequest.ID
+	c.debugLog("Successfully created pull request '%s' (Number: %d, URL: %s)", 
+		pullRequest.Title, mutationResponse.CreatePullRequest.PullRequest.Number, mutationResponse.CreatePullRequest.PullRequest.URL)
+
+	// Add labels and assignees if specified
+	if len(pullRequest.Labels) > 0 || len(pullRequest.Assignees) > 0 {
 		c.debugLog("Adding labels/assignees to PR '%s'", pullRequest.Title)
-		issuePayload := map[string]interface{}{
-			"labels":    pullRequest.Labels,
-			"assignees": pullRequest.Assignees,
-		}
-
-		// Create timeout context for adding labels/assignees
-		labelCtx, labelCancel := context.WithTimeout(ctx, 30*time.Second)
-		defer labelCancel()
-
-		issuePath := fmt.Sprintf("repos/%s/%s/issues/%d", c.Owner, c.Repo, int(prNumber))
-		if err := c.restClient.Request(labelCtx, "PATCH", issuePath, issuePayload, nil); err != nil {
+		err := c.addLabelsAndAssigneesToPR(ctx, prID, pullRequest.Labels, pullRequest.Assignees)
+		if err != nil {
 			c.debugLog("Failed to add labels/assignees to PR '%s': %v", pullRequest.Title, err)
 			layeredErr := errors.APIError("add_pr_labels_assignees", "created PR but failed to add labels/assignees", err)
 			return layeredErr.(*errors.LayeredError).WithContext("title", pullRequest.Title)
