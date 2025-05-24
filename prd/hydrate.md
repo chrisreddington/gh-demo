@@ -37,3 +37,4 @@ As the product developer of the hydration feature, I want to provide a consisten
 - [ ] The schema for issues, discussions, and pull requests is well-defined and documented. It should not just include titles and bodies, but also labels, assignees, and other relevant metadata.
 - [ ] The command line should use the `go-gh` package to interact with the GitHub API, ensuring compatibility and ease of use. Implement this using the GraphQL API.
 - [ ] The hydration process should handle rate limits gracefully, retrying as necessary without failing completely.
+- [ ] Users can configure the path to the configuration files using a `--config-path` flag, with `.github/demos` as the default location.

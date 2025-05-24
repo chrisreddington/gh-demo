@@ -9,6 +9,8 @@ var rootCmd = &cobra.Command{
 	Short: "GitHub Demo CLI Extension",
 }
 
+// Execute runs the root command and returns any error that occurs during execution.
+// This is the main entry point for the CLI application and should be called from main().
 func Execute() error {
 	return rootCmd.Execute()
 }

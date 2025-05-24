@@ -30,6 +30,13 @@ This is a GitHub CLI Extension written in Go to automate repository hydration ta
 - Having multiple files in a package is acceptable (e.g. `client.go`, `interfaces.go`, `types.go`), but keep related code together
 - Use `context.Context` for passing request-scoped values and cancellation signals
 
+### Code Quality Standards
+- **Type Consolidation**: Avoid duplicating type definitions across packages. Shared types should be defined in a common location or use consistent naming patterns
+- **Naming Consistency**: Use consistent variable naming throughout the codebase (e.g., prefer `pullRequests` over `prs` for clarity, or establish a consistent abbreviation pattern)
+- **Documentation Coverage**: All exported functions, types, methods, and packages must have comprehensive GoDoc comments that explain purpose, parameters, return values, and usage examples where appropriate
+- **Type Safety**: Prefer strongly typed interfaces over generic `interface{}` where possible
+- **Error Handling**: Provide meaningful error messages that include context about what operation failed
+
 ## Development Flow
 
 - Build: `go build`

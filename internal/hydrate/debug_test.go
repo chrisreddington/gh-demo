@@ -3,6 +3,8 @@ package hydrate
 import (
 	"strings"
 	"testing"
+
+	"github.com/chrisreddington/gh-demo/internal/common"
 )
 
 // TestLogger captures debug and info messages for testing
@@ -22,7 +24,7 @@ func (l *TestLogger) Info(format string, args ...interface{}) {
 // TestDebugLogging tests that debug messages are correctly logged
 func TestDebugLogging(t *testing.T) {
 	// Test debug logger
-	logger := NewLogger(true)
+	logger := common.NewLogger(true)
 
 	// Capture output by testing the Logger interface
 	testLogger := &TestLogger{}

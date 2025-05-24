@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
 // MockGraphQLClient implements the GraphQLClient interface for testing
@@ -36,13 +38,99 @@ func (m *MockRESTClient) Request(method string, path string, body io.Reader) (*h
 }
 
 // Tests for GHClient
-func TestNewGHClient(t *testing.T) {
-	client := NewGHClient("testowner", "testrepo")
+func TestNewGHClientWithClients(t *testing.T) {
+	mockGQL := &MockGraphQLClient{}
+	mockREST := &RESTClient{client: &MockRESTClient{}}
+
+	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
 	if client.Owner != "testowner" {
 		t.Errorf("Expected owner to be 'testowner', got '%s'", client.Owner)
 	}
 	if client.Repo != "testrepo" {
 		t.Errorf("Expected repo to be 'testrepo', got '%s'", client.Repo)
+	}
+}
+
+func TestNewGHClientWithClients_ValidationErrors(t *testing.T) {
+	mockGQL := &MockGraphQLClient{}
+	mockREST := &RESTClient{client: &MockRESTClient{}}
+
+	tests := []struct {
+		name        string
+		owner       string
+		repo        string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "empty owner",
+			owner:       "",
+			repo:        "testrepo",
+			expectError: true,
+			errorMsg:    "owner cannot be empty",
+		},
+		{
+			name:        "whitespace only owner",
+			owner:       "   ",
+			repo:        "testrepo",
+			expectError: true,
+			errorMsg:    "owner cannot be empty",
+		},
+		{
+			name:        "empty repo",
+			owner:       "testowner",
+			repo:        "",
+			expectError: true,
+			errorMsg:    "repo cannot be empty",
+		},
+		{
+			name:        "whitespace only repo",
+			owner:       "testowner",
+			repo:        "   ",
+			expectError: true,
+			errorMsg:    "repo cannot be empty",
+		},
+		{
+			name:        "valid trimmed parameters",
+			owner:       "  testowner  ",
+			repo:        "  testrepo  ",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := NewGHClientWithClients(tt.owner, tt.repo, mockGQL, mockREST)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorMsg) {
+					t.Errorf("Expected error to contain '%s', got: %v", tt.errorMsg, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+					return
+				}
+				if client == nil {
+					t.Error("Expected client to be created")
+					return
+				}
+				// Check that parameters are properly trimmed
+				if client.Owner != strings.TrimSpace(tt.owner) {
+					t.Errorf("Expected owner to be trimmed to '%s', got '%s'", strings.TrimSpace(tt.owner), client.Owner)
+				}
+				if client.Repo != strings.TrimSpace(tt.repo) {
+					t.Errorf("Expected repo to be trimmed to '%s', got '%s'", strings.TrimSpace(tt.repo), client.Repo)
+				}
+			}
+		})
 	}
 }
 
@@ -71,13 +159,17 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	// Test CreateLabel
-	err := client.CreateLabel("test-label")
+	err := client.CreateLabel(types.Label{
+		Name:        "test-label",
+		Description: "A test label",
+		Color:       "ff0000",
+	})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
 	// Test CreateIssue
-	err = client.CreateIssue(IssueInput{
+	err = client.CreateIssue(types.Issue{
 		Title:     "Test Issue",
 		Body:      "This is a test issue",
 		Labels:    []string{"bug"},
@@ -88,7 +180,7 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	// Test CreatePR
-	err = client.CreatePR(PRInput{
+	err = client.CreatePR(types.PullRequest{
 		Title:     "Test PR",
 		Body:      "This is a test PR",
 		Head:      "feature-branch",
@@ -200,7 +292,7 @@ func TestCreateDiscussion(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -245,7 +337,7 @@ func TestCreateDiscussion_CategoryNotFound(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "NonExistent",
@@ -271,7 +363,7 @@ func TestCreateDiscussion_GraphQLError(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -307,7 +399,7 @@ func TestCreateDiscussionError(t *testing.T) {
 		gqlClient: nil, // This will cause an error
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -378,7 +470,7 @@ func TestCreatePR(t *testing.T) {
 		gqlClient:  nil, // PR creation uses REST API
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "This is a test PR",
 		Head:  "feature-branch",
@@ -406,7 +498,7 @@ func TestCreatePRValidation(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "This is a test PR",
 		Head:  "feature-branch",
@@ -418,7 +510,13 @@ func TestCreatePRValidation(t *testing.T) {
 }
 
 func TestSetLogger(t *testing.T) {
-	client := NewGHClient("testowner", "testrepo")
+	mockGQL := &MockGraphQLClient{}
+	mockREST := &RESTClient{client: &MockRESTClient{}}
+	
+	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
 	logger := &MockLogger{}
 	client.SetLogger(logger)
 
@@ -440,7 +538,13 @@ func (m *MockLogger) Info(format string, args ...interface{}) {
 }
 
 func TestDebugLog(t *testing.T) {
-	client := NewGHClient("testowner", "testrepo")
+	mockGQL := &MockGraphQLClient{}
+	mockREST := &RESTClient{client: &MockRESTClient{}}
+	
+	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
 	mockLogger := &MockLogger{}
 	client.SetLogger(mockLogger)
 
@@ -459,7 +563,10 @@ func TestCreateLabelError(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreateLabel("test-label")
+	err := client.CreateLabel(types.Label{
+		Name:  "test-label",
+		Color: "ff0000",
+	})
 	if err == nil {
 		t.Error("Expected an error when REST client is nil")
 	}
@@ -473,7 +580,7 @@ func TestCreateIssueError(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreateIssue(IssueInput{Title: "Test", Body: "Test"})
+	err := client.CreateIssue(types.Issue{Title: "Test", Body: "Test"})
 	if err == nil {
 		t.Error("Expected an error when REST client is nil")
 	}
@@ -487,7 +594,7 @@ func TestCreatePRError(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreatePR(PRInput{Title: "Test", Head: "feature", Base: "main"})
+	err := client.CreatePR(types.PullRequest{Title: "Test", Head: "feature", Base: "main"})
 	if err == nil {
 		t.Error("Expected an error when REST client is nil")
 	}
@@ -562,7 +669,7 @@ func TestCreateDiscussionWithLabels(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -635,7 +742,7 @@ func TestAddLabelToDiscussion_LabelNotFound(t *testing.T) {
 	}
 
 	// This should still succeed, but the label addition will fail silently
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -701,7 +808,7 @@ func TestAddLabelToDiscussion_GraphQLError(t *testing.T) {
 	}
 
 	// This should still succeed overall, but label addition will fail
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -730,7 +837,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 	}
 
 	// Test empty head branch
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "", // Empty head should cause error
@@ -744,7 +851,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 	}
 
 	// Test empty base branch
-	err = client.CreatePR(PRInput{
+	err = client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "feature",
@@ -758,7 +865,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 	}
 
 	// Test head and base are the same
-	err = client.CreatePR(PRInput{
+	err = client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "main",
@@ -802,7 +909,7 @@ func TestCreatePR_WithLabelsAndAssignees(t *testing.T) {
 		restClient: &RESTClient{client: restClient},
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title:     "Test PR",
 		Body:      "Test body",
 		Head:      "feature",
@@ -845,7 +952,7 @@ func TestCreatePR_LabelsAssigneesFailure(t *testing.T) {
 		restClient: &RESTClient{client: restClient},
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title:     "Test PR",
 		Body:      "Test body",
 		Head:      "feature",
@@ -878,7 +985,7 @@ func TestCreatePR_RequestFailure(t *testing.T) {
 		restClient: &RESTClient{client: restClient},
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "feature",
@@ -889,5 +996,29 @@ func TestCreatePR_RequestFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to create pull request") {
 		t.Errorf("Expected 'failed to create pull request' error, got: %v", err)
+	}
+}
+
+// TestNewGHClient_Integration tests the real GitHub client creation
+// This test requires authentication and should be skipped in CI without credentials
+func TestNewGHClient_Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	// This test will only pass if GitHub credentials are available
+	client, err := NewGHClient("testowner", "testrepo")
+	if err != nil {
+		// If error contains authentication message, skip the test
+		if strings.Contains(err.Error(), "authentication token not found") {
+			t.Skip("Skipping integration test: GitHub authentication not available")
+		}
+		t.Fatalf("Failed to create client: %v", err)
+	}
+	if client.Owner != "testowner" {
+		t.Errorf("Expected owner to be 'testowner', got '%s'", client.Owner)
+	}
+	if client.Repo != "testrepo" {
+		t.Errorf("Expected repo to be 'testrepo', got '%s'", client.Repo)
 	}
 }

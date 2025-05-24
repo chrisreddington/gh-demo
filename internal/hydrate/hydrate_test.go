@@ -8,13 +8,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
+	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
 func TestHydrateWithRealGHClient(t *testing.T) {
 	t.Skip("Skipping test that requires real GitHub credentials")
 	// This test uses the real (stubbed) GHClient to ensure wiring is correct.
-	client := githubapi.NewGHClient("octocat", "demo-repo")
+	client, err := githubapi.NewGHClient("octocat", "demo-repo")
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
 
 	root, err := FindProjectRoot()
 	if err != nil {
@@ -33,27 +38,35 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 
 // MockGitHubClient is a mock for label operations
 type MockGitHubClient struct {
-	ExistingLabels map[string]bool
-	CreatedLabels  []string
-	FailPRs        bool // If true, CreatePR will fail
-	FailIssues     bool // If true, CreateIssue will fail
-	FailListLabels bool // If true, ListLabels will fail
+	ExistingLabels     map[string]bool
+	CreatedLabels      []string
+	FailPRs            bool // If true, CreatePR will fail
+	FailIssues         bool // If true, CreateIssue will fail
+	FailListLabels     bool // If true, ListLabels will fail
+	CreatedIssues      []types.Issue
+	CreatedDiscussions []types.Discussion
+	CreatedPRs         []types.PullRequest
 }
 
 // Add stubs for the rest of the interface
-func (m *MockGitHubClient) CreateIssue(issue githubapi.IssueInput) error {
+func (m *MockGitHubClient) CreateIssue(issue types.Issue) error {
 	if m.FailIssues {
 		return fmt.Errorf("simulated issue creation failure for: %s", issue.Title)
 	}
+	m.CreatedIssues = append(m.CreatedIssues, issue)
 	return nil
 }
 
-func (m *MockGitHubClient) CreateDiscussion(d githubapi.DiscussionInput) error { return nil }
+func (m *MockGitHubClient) CreateDiscussion(discussion types.Discussion) error {
+	m.CreatedDiscussions = append(m.CreatedDiscussions, discussion)
+	return nil
+}
 
-func (m *MockGitHubClient) CreatePR(pr githubapi.PRInput) error {
+func (m *MockGitHubClient) CreatePR(pullRequest types.PullRequest) error {
 	if m.FailPRs {
-		return fmt.Errorf("simulated PR creation failure for: %s (head: %s, base: %s)", pr.Title, pr.Head, pr.Base)
+		return fmt.Errorf("simulated PR creation failure for: %s (head: %s, base: %s)", pullRequest.Title, pullRequest.Head, pullRequest.Base)
 	}
+	m.CreatedPRs = append(m.CreatedPRs, pullRequest)
 	return nil
 }
 
@@ -68,13 +81,13 @@ func (m *MockGitHubClient) ListLabels() ([]string, error) {
 	return labels, nil
 }
 
-func (m *MockGitHubClient) CreateLabel(label string) error {
-	m.CreatedLabels = append(m.CreatedLabels, label)
-	m.ExistingLabels[label] = true
+func (m *MockGitHubClient) CreateLabel(label types.Label) error {
+	m.CreatedLabels = append(m.CreatedLabels, label.Name)
+	m.ExistingLabels[label.Name] = true
 	return nil
 }
 
-func (m *MockGitHubClient) SetLogger(logger githubapi.Logger) {
+func (m *MockGitHubClient) SetLogger(logger common.Logger) {
 	// Mock implementation - does nothing
 }
 
@@ -119,7 +132,7 @@ func TestReadIssuesJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read issues.json: %v", err)
 	}
-	var issues []Issue
+	var issues []types.Issue
 	if err := json.Unmarshal(data, &issues); err != nil {
 		t.Fatalf("failed to unmarshal issues.json: %v", err)
 	}
@@ -138,7 +151,7 @@ func TestReadDiscussionsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read discussions.json: %v", err)
 	}
-	var discussions []Discussion
+	var discussions []types.Discussion
 	if err := json.Unmarshal(data, &discussions); err != nil {
 		t.Fatalf("failed to unmarshal discussions.json: %v", err)
 	}
@@ -156,18 +169,16 @@ func TestGracefulErrorHandling(t *testing.T) {
 
 	// Create temporary test files
 	tempDir := t.TempDir()
-
 	// Create issues.json
 	issuesPath := filepath.Join(tempDir, "issues.json")
-	issues := []Issue{{Title: "Test Issue", Body: "Test body", Labels: []string{"enhancement"}}}
+	issues := []types.Issue{{Title: "Test Issue", Body: "Test body", Labels: []string{"enhancement"}}}
 	issuesData, _ := json.Marshal(issues)
 	if err := os.WriteFile(issuesPath, issuesData, 0644); err != nil {
 		t.Fatalf("failed to write test issues file: %v", err)
 	}
-
 	// Create prs.json
 	prsPath := filepath.Join(tempDir, "prs.json")
-	prs := []PullRequest{{Title: "Test PR", Body: "Test body", Head: "demo-branch", Base: "main", Labels: []string{"demo"}}}
+	prs := []types.PullRequest{{Title: "Test PR", Body: "Test body", Head: "demo-branch", Base: "main", Labels: []string{"demo"}}}
 	prsData, _ := json.Marshal(prs)
 	if err := os.WriteFile(prsPath, prsData, 0644); err != nil {
 		t.Fatalf("failed to write test prs file: %v", err)
@@ -207,7 +218,7 @@ func TestPRValidation(t *testing.T) {
 
 	// Create prs.json with invalid PR (empty head)
 	prsPath := filepath.Join(tempDir, "prs.json")
-	prs := []PullRequest{{Title: "Invalid PR", Body: "Test body", Head: "", Base: "main"}}
+	prs := []types.PullRequest{{Title: "Invalid PR", Body: "Test body", Head: "", Base: "main"}}
 	prsData, _ := json.Marshal(prs)
 	if err := os.WriteFile(prsPath, prsData, 0644); err != nil {
 		t.Fatalf("failed to write test prs file: %v", err)
@@ -248,7 +259,7 @@ func TestReadPRsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read prs.json: %v", err)
 	}
-	var prs []PullRequest
+	var prs []types.PullRequest
 	if err := json.Unmarshal(data, &prs); err != nil {
 		t.Fatalf("failed to unmarshal prs.json: %v", err)
 	}
@@ -259,20 +270,20 @@ func TestReadPRsJSON(t *testing.T) {
 
 // Test Logger functionality
 func TestNewLogger(t *testing.T) {
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	if logger == nil {
 		t.Error("Expected logger to be created")
 	}
 }
 
 func TestLoggerDebug(t *testing.T) {
-	logger := NewLogger(true)
+	logger := common.NewLogger(true)
 	// This should not panic
 	logger.Debug("test debug message: %s", "value")
 }
 
 func TestLoggerInfo(t *testing.T) {
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	// This should not panic
 	logger.Info("test info message: %s", "value")
 }
@@ -381,16 +392,16 @@ func TestHydrateFromFiles_InvalidPRsJSON(t *testing.T) {
 }
 
 func TestCollectLabels_EmptySlices(t *testing.T) {
-	labels := CollectLabels([]Issue{}, []Discussion{}, []PullRequest{})
+	labels := CollectLabels([]types.Issue{}, []types.Discussion{}, []types.PullRequest{})
 	if len(labels) != 0 {
 		t.Errorf("Expected empty labels slice, got %v", labels)
 	}
 }
 
 func TestCollectLabels_WithLabels(t *testing.T) {
-	issues := []Issue{{Labels: []string{"bug", "enhancement"}}}
-	discussions := []Discussion{{Labels: []string{"question", "bug"}}}
-	prs := []PullRequest{{Labels: []string{"feature", "bug"}}}
+	issues := []types.Issue{{Labels: []string{"bug", "enhancement"}}}
+	discussions := []types.Discussion{{Labels: []string{"question", "bug"}}}
+	prs := []types.PullRequest{{Labels: []string{"feature", "bug"}}}
 
 	labels := CollectLabels(issues, discussions, prs)
 
@@ -468,11 +479,14 @@ func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 
 	// The mock should be configured to fail for "fail" label and succeed for others
 	// Let's test with a successful case first to ensure the basic flow works
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
-	labels := []string{"existing", "new"}
+	labels := []types.Label{
+		{Name: "existing", Color: "ff0000"},
+		{Name: "new", Color: "00ff00"},
+	}
 
-	err := EnsureLabelsExist(client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(client, labels, logger, summary)
 
 	// This should succeed with our mock
 	if err != nil {
@@ -489,11 +503,11 @@ func TestEnsureLabelsExist_ListLabelsError(t *testing.T) {
 		CreatedLabels:  []string{},
 	}
 
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
-	labels := []string{"test-label"}
+	labels := []types.Label{{Name: "test-label", Color: "ff0000"}}
 
-	err := EnsureLabelsExist(client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(client, labels, logger, summary)
 
 	// This should return an error due to ListLabels failing
 	if err == nil {
@@ -513,11 +527,11 @@ func TestEnsureLabelsExist_EmptyLabels(t *testing.T) {
 		CreatedLabels:  []string{},
 	}
 
-	logger := NewLogger(false)
+	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
-	labels := []string{} // Empty labels slice
+	labels := []types.Label{} // Empty labels slice
 
-	err := EnsureLabelsExist(client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(client, labels, logger, summary)
 
 	// This should return nil without calling any client methods
 	if err != nil {
@@ -650,4 +664,142 @@ func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "some items failed to create") {
 		t.Errorf("Expected 'some items failed to create' error, got: %v", err)
 	}
+}
+
+// TestConfigurablePaths tests that different configuration paths work correctly
+func TestConfigurablePaths(t *testing.T) {
+	// Create temporary project root
+	tempRoot := t.TempDir()
+
+	// Test with custom config path
+	configPath := "custom/config/path"
+	configDir := filepath.Join(tempRoot, configPath)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("Failed to create config directory: %v", err)
+	}
+
+	// Setup basic test files
+	issuesPath := filepath.Join(configDir, "issues.json")
+	issuesJSON := `[{"title": "Test Issue", "body": "Test body", "labels": ["bug"], "assignees": []}]`
+	if err := os.WriteFile(issuesPath, []byte(issuesJSON), 0644); err != nil {
+		t.Fatalf("Failed to create issues.json: %v", err)
+	}
+
+	discussionsPath := filepath.Join(configDir, "discussions.json")
+	discussionsJSON := `[{"title": "Test Discussion", "body": "Test body", "category": "General", "labels": ["question"]}]`
+	if err := os.WriteFile(discussionsPath, []byte(discussionsJSON), 0644); err != nil {
+		t.Fatalf("Failed to create discussions.json: %v", err)
+	}
+
+	prsPath := filepath.Join(configDir, "prs.json")
+	prsJSON := `[{"title": "Test PR", "body": "Test body", "head": "feature", "base": "main", "labels": ["enhancement"], "assignees": []}]`
+	if err := os.WriteFile(prsPath, []byte(prsJSON), 0644); err != nil {
+		t.Fatalf("Failed to create prs.json: %v", err)
+	}
+
+	// Create mock client
+	client := &MockGitHubClient{
+		ExistingLabels: map[string]bool{},
+		CreatedLabels:  []string{},
+	}
+
+	// Test hydration with the custom paths
+	err := HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	if err != nil {
+		t.Errorf("HydrateWithLabels failed with custom config path: %v", err)
+	}
+
+	// Verify that the mock client was called correctly
+	if len(client.CreatedIssues) == 0 {
+		t.Error("Expected at least one issue to be created")
+	}
+	if len(client.CreatedDiscussions) == 0 {
+		t.Error("Expected at least one discussion to be created")
+	}
+	if len(client.CreatedPRs) == 0 {
+		t.Error("Expected at least one PR to be created")
+	}
+}
+
+func TestReadLabelsJSON(t *testing.T) {
+	// Create a temporary directory for this test
+	tmpDir, err := os.MkdirTemp("", "gh-demo-labels-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() {
+		if err := os.RemoveAll(tmpDir); err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
+
+	t.Run("ValidLabelsFile", func(t *testing.T) {
+		labelsPath := filepath.Join(tmpDir, "labels.json")
+		expectedLabels := []types.Label{
+			{Name: "bug", Description: "Something isn't working", Color: "d73a4a"},
+			{Name: "enhancement", Description: "New feature or request", Color: "a2eeef"},
+			{Name: "documentation", Description: "Improvements or additions to documentation", Color: "0075ca"},
+		}
+
+		// Write test labels file
+		labelsJSON, err := json.Marshal(expectedLabels)
+		if err != nil {
+			t.Fatalf("Failed to marshal labels: %v", err)
+		}
+		if err := os.WriteFile(labelsPath, labelsJSON, 0644); err != nil {
+			t.Fatalf("Failed to write labels file: %v", err)
+		}
+
+		// Read labels
+		labels, err := ReadLabelsJSON(labelsPath)
+		if err != nil {
+			t.Errorf("ReadLabelsJSON failed: %v", err)
+		}
+
+		if len(labels) != len(expectedLabels) {
+			t.Errorf("Expected %d labels, got %d", len(expectedLabels), len(labels))
+		}
+
+		for i, label := range labels {
+			if label.Name != expectedLabels[i].Name {
+				t.Errorf("Expected label name '%s', got '%s'", expectedLabels[i].Name, label.Name)
+			}
+			if label.Description != expectedLabels[i].Description {
+				t.Errorf("Expected label description '%s', got '%s'", expectedLabels[i].Description, label.Description)
+			}
+			if label.Color != expectedLabels[i].Color {
+				t.Errorf("Expected label color '%s', got '%s'", expectedLabels[i].Color, label.Color)
+			}
+		}
+	})
+
+	t.Run("NonExistentFile", func(t *testing.T) {
+		labelsPath := filepath.Join(tmpDir, "nonexistent.json")
+
+		// Read labels from non-existent file (should return empty slice, no error)
+		labels, err := ReadLabelsJSON(labelsPath)
+		if err != nil {
+			t.Errorf("ReadLabelsJSON should not fail for non-existent file: %v", err)
+		}
+
+		if len(labels) != 0 {
+			t.Errorf("Expected empty slice for non-existent file, got %d labels", len(labels))
+		}
+	})
+
+	t.Run("InvalidJSON", func(t *testing.T) {
+		labelsPath := filepath.Join(tmpDir, "invalid.json")
+
+		// Write invalid JSON
+		err := os.WriteFile(labelsPath, []byte(`{"invalid": json}`), 0644)
+		if err != nil {
+			t.Fatalf("Failed to write invalid JSON: %v", err)
+		}
+
+		// Read labels from invalid file (should return error)
+		_, err = ReadLabelsJSON(labelsPath)
+		if err == nil {
+			t.Error("ReadLabelsJSON should fail for invalid JSON")
+		}
+	})
 }

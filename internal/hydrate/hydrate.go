@@ -1,3 +1,6 @@
+// Package hydrate provides functionality for hydrating GitHub repositories with demo content.
+// It handles the creation of issues, discussions, and pull requests based on JSON configuration files,
+// ensuring that all required labels exist before creating content.
 package hydrate
 
 import (
@@ -8,57 +11,75 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
+	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
-// Logger handles debug and info logging
-type Logger struct {
-	debug bool
-}
-
-// NewLogger creates a new logger with the specified debug mode
-func NewLogger(debug bool) *Logger {
-	return &Logger{debug: debug}
-}
-
-// Debug logs a message only when debug mode is enabled
-func (l *Logger) Debug(format string, args ...interface{}) {
-	if l.debug {
-		fmt.Printf("[DEBUG] "+format+"\n", args...)
-	}
-}
-
-// Info logs a message always
-func (l *Logger) Info(format string, args ...interface{}) {
-	fmt.Printf(format+"\n", args...)
-}
-
-// SectionSummary holds statistics for a section
+// SectionSummary holds statistics for a hydration section (labels, issues, discussions, pull requests).
+// It tracks the total number of items processed, successful operations, failures, and detailed error messages.
 type SectionSummary struct {
-	Name     string
-	Total    int
-	Success  int
-	Failures int
-	Errors   []string
+	Name     string   // Name of the section (e.g., "Issues", "Labels")
+	Total    int      // Total number of items to process
+	Success  int      // Number of successful operations
+	Failures int      // Number of failed operations
+	Errors   []string // Detailed error messages for failed operations
 }
 
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
+// It supports both explicit label definitions from labels.json and auto-generated labels with defaults.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
-func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs, debug bool) error {
-	logger := NewLogger(debug)
+func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
+	logger := common.NewLogger(debug)
 
-	issues, discussions, prs, err := HydrateFromFiles(issuesPath, discussionsPath, prsPath, includeIssues, includeDiscussions, includePRs)
+	issues, discussions, pullRequests, err := HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath, includeIssues, includeDiscussions, includePullRequests)
 	if err != nil {
 		return err
 	}
 
-	// Collect and ensure all labels exist before creating content
-	labels := CollectLabels(issues, discussions, prs)
-	labelSummary := &SectionSummary{Name: "Labels", Total: len(labels)}
+	// Try to read explicit label definitions from labels.json
+	labelsPath := filepath.Join(filepath.Dir(issuesPath), "labels.json")
+	explicitLabels, err := ReadLabelsJSON(labelsPath)
+	if err != nil {
+		return fmt.Errorf("failed to read labels configuration: %w", err)
+	}
 
-	logger.Debug("Found %d unique labels to ensure exist: %v", len(labels), labels)
+	// Collect label names referenced in content
+	referencedLabelNames := CollectLabels(issues, discussions, pullRequests)
 
-	if err := EnsureLabelsExist(client, labels, logger, labelSummary); err != nil {
+	// Create a map of explicit labels by name for quick lookup
+	explicitLabelMap := make(map[string]types.Label)
+	for _, label := range explicitLabels {
+		explicitLabelMap[label.Name] = label
+	}
+
+	// Build final list of labels to ensure exist
+	var labelsToEnsure []types.Label
+
+	// Add all explicit labels from labels.json
+	labelsToEnsure = append(labelsToEnsure, explicitLabels...)
+
+	// Add any referenced labels that aren't explicitly defined (with defaults)
+	for _, labelName := range referencedLabelNames {
+		if _, exists := explicitLabelMap[labelName]; !exists {
+			// Create a default label for any referenced label not explicitly defined
+			defaultLabel := types.Label{
+				Name:        labelName,
+				Description: "Label created by gh-demo hydration tool",
+				Color:       "ededed", // Light gray default color
+			}
+			labelsToEnsure = append(labelsToEnsure, defaultLabel)
+		}
+	}
+
+	labelSummary := &SectionSummary{Name: "Labels", Total: len(labelsToEnsure)}
+
+	if len(explicitLabels) > 0 {
+		logger.Debug("Found %d explicit label definitions from %s", len(explicitLabels), labelsPath)
+	}
+	logger.Debug("Found %d total labels to ensure exist", len(labelsToEnsure))
+
+	if err := EnsureDefinedLabelsExist(client, labelsToEnsure, logger, labelSummary); err != nil {
 		return fmt.Errorf("failed to ensure labels exist: %w", err)
 	}
 
@@ -73,13 +94,7 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 		logger.Debug("Creating %d issues", len(issues))
 
 		for i, issue := range issues {
-			issueInput := githubapi.IssueInput{
-				Title:     issue.Title,
-				Body:      issue.Body,
-				Labels:    issue.Labels,
-				Assignees: issue.Assignees,
-			}
-			if err := client.CreateIssue(issueInput); err != nil {
+			if err := client.CreateIssue(issue); err != nil {
 				errorMsg := fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err)
 				allErrors = append(allErrors, errorMsg)
 				issueSummary.Errors = append(issueSummary.Errors, errorMsg)
@@ -90,7 +105,6 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				logger.Debug("Successfully created issue '%s'", issue.Title)
 			}
 		}
-
 		logger.Info("Issues: %d total, %d successful, %d failed", issueSummary.Total, issueSummary.Success, issueSummary.Failures)
 	}
 
@@ -100,13 +114,7 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 		logger.Debug("Creating %d discussions", len(discussions))
 
 		for i, discussion := range discussions {
-			discussionInput := githubapi.DiscussionInput{
-				Title:    discussion.Title,
-				Body:     discussion.Body,
-				Category: discussion.Category,
-				Labels:   discussion.Labels,
-			}
-			if err := client.CreateDiscussion(discussionInput); err != nil {
+			if err := client.CreateDiscussion(discussion); err != nil {
 				errorMsg := fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err)
 				allErrors = append(allErrors, errorMsg)
 				discussionSummary.Errors = append(discussionSummary.Errors, errorMsg)
@@ -117,37 +125,27 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				logger.Debug("Successfully created discussion '%s'", discussion.Title)
 			}
 		}
-
 		logger.Info("Discussions: %d total, %d successful, %d failed", discussionSummary.Total, discussionSummary.Success, discussionSummary.Failures)
 	}
 
 	// Create pull requests
-	if includePRs {
-		prSummary := &SectionSummary{Name: "Pull Requests", Total: len(prs)}
-		logger.Debug("Creating %d pull requests", len(prs))
+	if includePullRequests {
+		pullRequestSummary := &SectionSummary{Name: "Pull Requests", Total: len(pullRequests)}
+		logger.Debug("Creating %d pull requests", len(pullRequests))
 
-		for i, pr := range prs {
-			prInput := githubapi.PRInput{
-				Title:     pr.Title,
-				Body:      pr.Body,
-				Head:      pr.Head,
-				Base:      pr.Base,
-				Labels:    pr.Labels,
-				Assignees: pr.Assignees,
-			}
-			if err := client.CreatePR(prInput); err != nil {
-				errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pr.Title, err)
+		for i, pullRequest := range pullRequests {
+			if err := client.CreatePR(pullRequest); err != nil {
+				errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pullRequest.Title, err)
 				allErrors = append(allErrors, errorMsg)
-				prSummary.Errors = append(prSummary.Errors, errorMsg)
-				prSummary.Failures++
-				logger.Debug("Failed to create pull request '%s': %v", pr.Title, err)
+				pullRequestSummary.Errors = append(pullRequestSummary.Errors, errorMsg)
+				pullRequestSummary.Failures++
+				logger.Debug("Failed to create pull request '%s': %v", pullRequest.Title, err)
 			} else {
-				prSummary.Success++
-				logger.Debug("Successfully created pull request '%s'", pr.Title)
+				pullRequestSummary.Success++
+				logger.Debug("Successfully created pull request '%s'", pullRequest.Title)
 			}
 		}
-
-		logger.Info("Pull Requests: %d total, %d successful, %d failed", prSummary.Total, prSummary.Success, prSummary.Failures)
+		logger.Info("Pull Requests: %d total, %d successful, %d failed", pullRequestSummary.Total, pullRequestSummary.Success, pullRequestSummary.Failures)
 	}
 
 	// If any errors occurred, return them as a combined error but don't fail completely
@@ -158,31 +156,10 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 	return nil
 }
 
-type Issue struct {
-	Title     string   `json:"title"`
-	Body      string   `json:"body"`
-	Labels    []string `json:"labels"`
-	Assignees []string `json:"assignees"`
-}
-
-type Discussion struct {
-	Title    string   `json:"title"`
-	Body     string   `json:"body"`
-	Category string   `json:"category"`
-	Labels   []string `json:"labels"`
-}
-
-type PullRequest struct {
-	Title     string   `json:"title"`
-	Body      string   `json:"body"`
-	Head      string   `json:"head"`
-	Base      string   `json:"base"`
-	Labels    []string `json:"labels"`
-	Assignees []string `json:"assignees"`
-}
-
-// EnsureLabelsExist checks if each label exists in the repo, and creates it if not.
-func EnsureLabelsExist(client githubapi.GitHubClient, labels []string, logger *Logger, summary *SectionSummary) error {
+// EnsureDefinedLabelsExist creates any missing labels in the repository.
+// It checks which labels already exist and only creates those that are missing.
+// This function works with full Label objects that include color and description.
+func EnsureDefinedLabelsExist(client githubapi.GitHubClient, labels []types.Label, logger common.Logger, summary *SectionSummary) error {
 	if len(labels) == 0 {
 		return nil
 	}
@@ -200,31 +177,34 @@ func EnsureLabelsExist(client githubapi.GitHubClient, labels []string, logger *L
 
 	logger.Debug("Found %d existing labels in repository", len(existing))
 
-	for _, l := range labels {
-		if _, ok := existSet[l]; !ok {
-			logger.Debug("Creating missing label '%s'", l)
-			if err := client.CreateLabel(l); err != nil {
-				errorMsg := fmt.Sprintf("Label '%s': %v", l, err)
+	for _, label := range labels {
+		if _, ok := existSet[label.Name]; !ok {
+			logger.Debug("Creating missing label '%s' (color: %s)", label.Name, label.Color)
+
+			if err := client.CreateLabel(label); err != nil {
+				errorMsg := fmt.Sprintf("Label '%s': %v", label.Name, err)
 				summary.Errors = append(summary.Errors, errorMsg)
 				summary.Failures++
-				logger.Debug("Failed to create label '%s': %v", l, err)
+				logger.Debug("Failed to create label '%s': %v", label.Name, err)
 			} else {
 				summary.Success++
-				logger.Debug("Successfully created label '%s'", l)
+				logger.Debug("Successfully created label '%s' with color '%s'", label.Name, label.Color)
 			}
 		} else {
 			summary.Success++
-			logger.Debug("Label '%s' already exists", l)
+			logger.Debug("Label '%s' already exists", label.Name)
 		}
 	}
 
 	return nil
 }
 
-func HydrateFromFiles(issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs bool) ([]Issue, []Discussion, []PullRequest, error) {
-	var issues []Issue
-	var discussions []Discussion
-	var prs []PullRequest
+// HydrateFromFiles loads issues, discussions, and pull requests from their respective JSON files.
+// It only loads files for content types that are included (enabled by the respective boolean flags).
+func HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests bool) ([]types.Issue, []types.Discussion, []types.PullRequest, error) {
+	var issues []types.Issue
+	var discussions []types.Discussion
+	var pullRequests []types.PullRequest
 
 	if includeIssues {
 		data, err := os.ReadFile(issuesPath)
@@ -246,42 +226,65 @@ func HydrateFromFiles(issuesPath, discussionsPath, prsPath string, includeIssues
 		}
 	}
 
-	if includePRs {
-		data, err := os.ReadFile(prsPath)
+	if includePullRequests {
+		data, err := os.ReadFile(pullRequestsPath)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		if err := json.Unmarshal(data, &prs); err != nil {
+		if err := json.Unmarshal(data, &pullRequests); err != nil {
 			return nil, nil, nil, err
 		}
 	}
 
-	return issues, discussions, prs, nil
+	return issues, discussions, pullRequests, nil
 }
 
 // CollectLabels returns a deduplicated list of all labels used in issues, discussions, and PRs.
-func CollectLabels(issues []Issue, discussions []Discussion, prs []PullRequest) []string {
+// CollectLabels returns a deduplicated list of all labels used in issues, discussions, and pull requests.
+func CollectLabels(issues []types.Issue, discussions []types.Discussion, pullRequests []types.PullRequest) []string {
 	labelSet := make(map[string]struct{})
-	for _, i := range issues {
-		for _, l := range i.Labels {
-			labelSet[l] = struct{}{}
+	for _, issue := range issues {
+		for _, label := range issue.Labels {
+			labelSet[label] = struct{}{}
 		}
 	}
-	for _, d := range discussions {
-		for _, l := range d.Labels {
-			labelSet[l] = struct{}{}
+	for _, discussion := range discussions {
+		for _, label := range discussion.Labels {
+			labelSet[label] = struct{}{}
 		}
 	}
-	for _, p := range prs {
-		for _, l := range p.Labels {
-			labelSet[l] = struct{}{}
+	for _, pullRequest := range pullRequests {
+		for _, label := range pullRequest.Labels {
+			labelSet[label] = struct{}{}
 		}
 	}
-	out := make([]string, 0, len(labelSet))
-	for l := range labelSet {
-		out = append(out, l)
+	labels := make([]string, 0, len(labelSet))
+	for label := range labelSet {
+		labels = append(labels, label)
 	}
-	return out
+	return labels
+}
+
+// ReadLabelsJSON reads label definitions from a JSON file.
+// This allows users to define labels with specific colors and descriptions.
+// Returns an empty slice if the file doesn't exist (not an error condition).
+func ReadLabelsJSON(labelsPath string) ([]types.Label, error) {
+	if _, err := os.Stat(labelsPath); os.IsNotExist(err) {
+		// File doesn't exist, return empty slice (not an error)
+		return []types.Label{}, nil
+	}
+
+	content, err := os.ReadFile(labelsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read labels file '%s': %w", labelsPath, err)
+	}
+
+	var labels []types.Label
+	if err := json.Unmarshal(content, &labels); err != nil {
+		return nil, fmt.Errorf("failed to parse labels JSON from '%s': %w", labelsPath, err)
+	}
+
+	return labels, nil
 }
 
 // FindProjectRoot traverses up from the current file to find the directory containing go.mod

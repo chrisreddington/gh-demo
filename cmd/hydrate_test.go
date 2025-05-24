@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"testing"
+
+	"github.com/chrisreddington/gh-demo/internal/common"
 )
 
 func TestDebugLogger(t *testing.T) {
-	logger := &DebugLogger{}
+	logger := common.NewLogger(true)
 
 	// Test Debug method
 	logger.Debug("test debug message: %s", "value")
@@ -47,14 +49,24 @@ func TestNewHydrateCmd(t *testing.T) {
 		t.Error("Expected discussions flag to be defined")
 	}
 
-	prsFlag := cmd.Flags().Lookup("prs")
-	if prsFlag == nil {
+	pullRequestsFlag := cmd.Flags().Lookup("prs")
+	if pullRequestsFlag == nil {
 		t.Error("Expected prs flag to be defined")
 	}
 
 	debugFlag := cmd.Flags().Lookup("debug")
 	if debugFlag == nil {
 		t.Error("Expected debug flag to be defined")
+	}
+
+	configPathFlag := cmd.Flags().Lookup("config-path")
+	if configPathFlag == nil {
+		t.Error("Expected config-path flag to be defined")
+	} else {
+		// Test default value for config-path
+		if configPathFlag.DefValue != ".github/demos" {
+			t.Errorf("Expected config-path default value to be '.github/demos', got %s", configPathFlag.DefValue)
+		}
 	}
 }
 
@@ -152,8 +164,8 @@ func TestHydrateCmd_WithValidParams(t *testing.T) {
 		t.Error("Discussions flag should default to true")
 	}
 
-	prsFlag := flags.Lookup("prs")
-	if prsFlag != nil && prsFlag.DefValue != "true" {
+	pullRequestsFlag := flags.Lookup("prs")
+	if pullRequestsFlag != nil && pullRequestsFlag.DefValue != "true" {
 		t.Error("PRs flag should default to true")
 	}
 
@@ -339,32 +351,32 @@ func TestExecuteHydrate_SuccessCase(t *testing.T) {
 func TestExecuteHydrate_DebugMode(t *testing.T) {
 	// This test verifies that debug mode can be enabled and the function structures work correctly
 	// We test the command structure and flag parsing without making actual API calls
-	
+
 	// Test that debug mode flag parsing works
 	cmd := NewHydrateCmd()
 	cmd.SetArgs([]string{"--owner", "test-owner", "--repo", "test-repo", "--debug", "true"})
-	
+
 	err := cmd.ParseFlags([]string{"--owner", "test-owner", "--repo", "test-repo", "--debug", "true"})
 	if err != nil {
 		t.Fatalf("Failed to parse flags with debug mode: %v", err)
 	}
-	
+
 	// Verify debug flag is accessible and set correctly
 	debugFlag := cmd.Flag("debug")
 	if debugFlag == nil {
 		t.Error("Debug flag should be accessible")
 		return
 	}
-	
+
 	// Test that the debug flag value can be retrieved
 	debugValue := debugFlag.Value.String()
 	if debugValue != "true" {
 		t.Errorf("Expected debug flag to be 'true', got: %s", debugValue)
 	}
-	
+
 	// Test debug logger creation and functionality
-	logger := &DebugLogger{}
-	
+	logger := common.NewLogger(true)
+
 	// Test that debug logger methods exist and don't panic
 	logger.Debug("Test debug message in debug mode")
 	logger.Info("Test info message in debug mode")
@@ -393,7 +405,7 @@ func TestExecuteHydrate_ValidatesParameters(t *testing.T) {
 	// Since executeHydrate is designed to fall back to git context when parameters are missing,
 	// and we're running in a git repository, we can't easily test the "missing parameters" case.
 	// Instead, test that the function works correctly with explicit parameters.
-	
+
 	// Skip this test as it conflicts with the git context fallback design
 	// The function is working as intended - it uses git context when parameters are missing
 	t.Skip("Skipping parameter validation test - function correctly uses git context fallback when available")
@@ -472,6 +484,69 @@ func TestNewHydrateCmd_ErrorHandling(t *testing.T) {
 			err := cmd.ParseFlags(scenario)
 			if err != nil {
 				t.Errorf("Flag parsing should not fail, actual execution would fail: %v", err)
+			}
+		})
+	}
+}
+
+// TestNewHydrateCmd_ConfigPath tests that the config-path parameter works correctly
+func TestNewHydrateCmd_ConfigPath(t *testing.T) {
+	tests := []struct {
+		name         string
+		configPath   string
+		expectedPath string
+	}{
+		{
+			name:         "default config path",
+			configPath:   "",
+			expectedPath: ".github/demos",
+		},
+		{
+			name:         "custom config path",
+			configPath:   "custom/config/path",
+			expectedPath: "custom/config/path",
+		},
+		{
+			name:         "absolute path",
+			configPath:   "/absolute/path/config",
+			expectedPath: "/absolute/path/config",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := NewHydrateCmd()
+
+			// Set up the command with test arguments
+			args := []string{"--owner", "testowner", "--repo", "testrepo"}
+			if tt.configPath != "" {
+				args = append(args, "--config-path", tt.configPath)
+			}
+			cmd.SetArgs(args)
+
+			// Parse flags to ensure the config-path value is set correctly
+			err := cmd.Flags().Parse(args)
+			if err != nil {
+				t.Fatalf("Failed to parse flags: %v", err)
+			}
+
+			configPathFlag := cmd.Flags().Lookup("config-path")
+			if configPathFlag == nil {
+				t.Fatal("config-path flag should be defined")
+			}
+
+			expectedValue := tt.expectedPath
+			if tt.configPath == "" {
+				expectedValue = configPathFlag.DefValue
+			}
+
+			actualValue, err := cmd.Flags().GetString("config-path")
+			if err != nil {
+				t.Fatalf("Failed to get config-path value: %v", err)
+			}
+
+			if actualValue != expectedValue {
+				t.Errorf("Expected config-path to be %s, got %s", expectedValue, actualValue)
 			}
 		})
 	}
