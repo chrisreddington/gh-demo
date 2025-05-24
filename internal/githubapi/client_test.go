@@ -512,7 +512,7 @@ func TestCreatePRValidation(t *testing.T) {
 func TestSetLogger(t *testing.T) {
 	mockGQL := &MockGraphQLClient{}
 	mockREST := &RESTClient{client: &MockRESTClient{}}
-	
+
 	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
@@ -540,7 +540,7 @@ func (m *MockLogger) Info(format string, args ...interface{}) {
 func TestDebugLog(t *testing.T) {
 	mockGQL := &MockGraphQLClient{}
 	mockREST := &RESTClient{client: &MockRESTClient{}}
-	
+
 	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL, mockREST)
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
