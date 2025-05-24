@@ -464,7 +464,7 @@ func TestHydrateCmdCleanupFlags(t *testing.T) {
 			}
 
 			if flag.DefValue != flagTest.defaultValue {
-				t.Errorf("Flag %s should have default value %s, got %s", 
+				t.Errorf("Flag %s should have default value %s, got %s",
 					flagTest.name, flagTest.defaultValue, flag.DefValue)
 			}
 

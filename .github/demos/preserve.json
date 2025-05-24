@@ -1,38 +1,21 @@
 {
   "issues": {
     "preserve_by_title": [
-      "Important: Do Not Delete",
+      "Add Cleanup/Deletion Functionality to Hydration Process",
       "^Release.*"
     ],
-    "preserve_by_label": [
-      "permanent",
-      "keep",
-      "documentation"
-    ],
+    "preserve_by_label": [],
     "preserve_by_id": []
   },
   "discussions": {
-    "preserve_by_title": [
-      "Welcome Discussion",
-      "^Announcement.*"
-    ],
-    "preserve_by_category": [
-      "Announcements",
-      "General"
-    ],
+    "preserve_by_title": [],
+    "preserve_by_category": [],
     "preserve_by_id": []
   },
   "pull_requests": {
-    "preserve_by_title": [
-      "^Release.*",
-      "^Hotfix.*"
-    ],
-    "preserve_by_label": [
-      "release",
-      "hotfix",
-      "security"
-    ],
-    "preserve_by_id": []
+    "preserve_by_title": [],
+    "preserve_by_label": [],
+    "preserve_by_id": ["84"]
   },
   "labels": {
     "preserve_by_name": [

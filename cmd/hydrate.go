@@ -185,7 +185,7 @@ func NewHydrateCmd() *cobra.Command {
 	var owner, repo, configPath string
 	var issues, discussions, pullRequests bool
 	var debug bool
-	
+
 	// Cleanup flags
 	var cleanupFlags CleanupFlags
 
@@ -219,12 +219,12 @@ Cleanup flags allow you to clean existing objects before hydrating:
 	cmd.Flags().StringVar(&owner, "owner", "", "GitHub repository owner (required)")
 	cmd.Flags().StringVar(&repo, "repo", "", "GitHub repository name (required)")
 	cmd.Flags().StringVar(&configPath, "config-path", config.DefaultConfigPath, "Path to configuration files relative to project root")
-	
+
 	// Content type flags
 	cmd.Flags().BoolVar(&issues, "issues", true, "Include issues")
 	cmd.Flags().BoolVar(&discussions, "discussions", true, "Include discussions")
 	cmd.Flags().BoolVar(&pullRequests, "prs", true, "Include pull requests")
-	
+
 	// Debug flag
 	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug mode for detailed logging")
 

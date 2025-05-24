@@ -18,7 +18,11 @@ func TestLoadPreserveConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() {
+		if err := os.RemoveAll(tempDir); err != nil {
+			t.Errorf("Failed to remove temp dir: %v", err)
+		}
+	}()
 
 	tests := []struct {
 		name           string
@@ -44,7 +48,9 @@ func TestLoadPreserveConfig(t *testing.T) {
 
 				data, _ := json.Marshal(preserveConfig)
 				path := filepath.Join(dir, "preserve.json")
-				os.WriteFile(path, data, 0644)
+				if err := os.WriteFile(path, data, 0644); err != nil {
+					t.Fatalf("Failed to write test file: %v", err)
+				}
 				return path
 			},
 			expectError: false,
@@ -68,7 +74,9 @@ func TestLoadPreserveConfig(t *testing.T) {
 			name: "invalid JSON returns error",
 			setupConfig: func(dir string) string {
 				path := filepath.Join(dir, "invalid.json")
-				os.WriteFile(path, []byte("{invalid json"), 0644)
+				if err := os.WriteFile(path, []byte("{invalid json"), 0644); err != nil {
+					t.Fatalf("Failed to write test file: %v", err)
+				}
 				return path
 			},
 			expectError: true,
@@ -78,24 +86,24 @@ func TestLoadPreserveConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filePath := tt.setupConfig(tempDir)
-			
+
 			config, err := config.LoadPreserveConfig(context.Background(), filePath)
-			
+
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
 			}
 			if !tt.expectError && err != nil {
 				t.Errorf("Unexpected error: %v", err)
 			}
-			
+
 			if !tt.expectError {
 				// Compare relevant fields
 				if len(config.Issues.PreserveByTitle) != len(tt.expectedConfig.Issues.PreserveByTitle) {
-					t.Errorf("Expected %d PreserveByTitle items, got %d", 
+					t.Errorf("Expected %d PreserveByTitle items, got %d",
 						len(tt.expectedConfig.Issues.PreserveByTitle), len(config.Issues.PreserveByTitle))
 				}
 				if len(config.Labels.PreserveByName) != len(tt.expectedConfig.Labels.PreserveByName) {
-					t.Errorf("Expected %d PreserveByName items, got %d", 
+					t.Errorf("Expected %d PreserveByName items, got %d",
 						len(tt.expectedConfig.Labels.PreserveByName), len(config.Labels.PreserveByName))
 				}
 			}
@@ -356,7 +364,7 @@ func TestIsMatchOrRegex(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isMatchOrRegex(tt.value, tt.pattern)
 			if result != tt.expected {
-				t.Errorf("Expected %v, got %v for value '%s' and pattern '%s'", 
+				t.Errorf("Expected %v, got %v for value '%s' and pattern '%s'",
 					tt.expected, result, tt.value, tt.pattern)
 			}
 		})
