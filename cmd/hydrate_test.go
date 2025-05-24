@@ -438,6 +438,102 @@ func TestNewHydrateCmd_RunFunction(t *testing.T) {
 	}
 }
 
+// TestHydrateCmdCleanupFlags tests that cleanup flags are properly configured
+func TestHydrateCmdCleanupFlags(t *testing.T) {
+	cmd := NewHydrateCmd()
+
+	cleanupFlags := []struct {
+		name         string
+		defaultValue string
+	}{
+		{"clean", "false"},
+		{"clean-issues", "false"},
+		{"clean-discussions", "false"},
+		{"clean-prs", "false"},
+		{"clean-labels", "false"},
+		{"dry-run", "false"},
+		{"preserve-config", ""},
+	}
+
+	for _, flagTest := range cleanupFlags {
+		t.Run(flagTest.name, func(t *testing.T) {
+			flag := cmd.Flag(flagTest.name)
+			if flag == nil {
+				t.Errorf("Flag %s should exist", flagTest.name)
+				return
+			}
+
+			if flag.DefValue != flagTest.defaultValue {
+				t.Errorf("Flag %s should have default value %s, got %s", 
+					flagTest.name, flagTest.defaultValue, flag.DefValue)
+			}
+
+			if flag.Usage == "" {
+				t.Errorf("Flag %s should have usage text", flagTest.name)
+			}
+		})
+	}
+}
+
+// TestShouldPerformCleanup tests the cleanup decision logic
+func TestShouldPerformCleanup(t *testing.T) {
+	tests := []struct {
+		name     string
+		flags    CleanupFlags
+		expected bool
+	}{
+		{
+			name:     "no cleanup flags",
+			flags:    CleanupFlags{},
+			expected: false,
+		},
+		{
+			name:     "clean all flag",
+			flags:    CleanupFlags{Clean: true},
+			expected: true,
+		},
+		{
+			name:     "clean issues flag",
+			flags:    CleanupFlags{CleanIssues: true},
+			expected: true,
+		},
+		{
+			name:     "clean discussions flag",
+			flags:    CleanupFlags{CleanDiscussions: true},
+			expected: true,
+		},
+		{
+			name:     "clean PRs flag",
+			flags:    CleanupFlags{CleanPRs: true},
+			expected: true,
+		},
+		{
+			name:     "clean labels flag",
+			flags:    CleanupFlags{CleanLabels: true},
+			expected: true,
+		},
+		{
+			name:     "multiple flags",
+			flags:    CleanupFlags{CleanIssues: true, CleanLabels: true},
+			expected: true,
+		},
+		{
+			name:     "dry run only",
+			flags:    CleanupFlags{DryRun: true},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := shouldPerformCleanup(tt.flags)
+			if result != tt.expected {
+				t.Errorf("Expected %v, got %v for flags: %+v", tt.expected, result, tt.flags)
+			}
+		})
+	}
+}
+
 // TestNewHydrateCmd_RunWithValidArgs tests Run function structure with valid arguments
 func TestNewHydrateCmd_RunWithValidArgs(t *testing.T) {
 	cmd := NewHydrateCmd()

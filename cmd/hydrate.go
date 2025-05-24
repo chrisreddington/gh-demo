@@ -86,12 +86,23 @@ func handleHydrationResult(err error, logger common.Logger) error {
 	return nil
 }
 
+// CleanupFlags holds all cleanup-related command line flags
+type CleanupFlags struct {
+	Clean            bool
+	CleanIssues      bool
+	CleanDiscussions bool
+	CleanPRs         bool
+	CleanLabels      bool
+	DryRun           bool
+	PreserveConfig   string
+}
+
 // executeHydrate contains the core hydration logic separated from CLI concerns
 // executeHydrate performs the hydration operation with the given parameters.
 // It validates required parameters, resolves git context if needed, and orchestrates the hydration process.
-func executeHydrate(ctx context.Context, owner, repo, configPath string, issues, discussions, pullRequests, debug bool) error {
+func executeHydrate(ctx context.Context, owner, repo, configPath string, issues, discussions, pullRequests, debug bool, cleanupFlags CleanupFlags) error {
 	// Create logger for operations
-	logger := common.NewLogger(false) // Always create logger for user feedback
+	logger := common.NewLogger(debug) // Use debug flag for logger
 
 	// Resolve repository information
 	repoInfo, err := resolveRepositoryInfo(owner, repo)
@@ -114,6 +125,15 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 		return err
 	}
 
+	// Perform cleanup if requested
+	if shouldPerformCleanup(cleanupFlags) {
+		err := performCleanup(ctx, client, cleanupFlags, cfg, logger)
+		if err != nil {
+			// Log cleanup error but continue with hydration unless it's a critical failure
+			logger.Info("Cleanup encountered errors but continuing with hydration: %v", err)
+		}
+	}
+
 	// Perform hydration
 	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, debug)
 
@@ -121,21 +141,73 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	return handleHydrationResult(err, logger)
 }
 
+// shouldPerformCleanup determines if any cleanup operations should be performed
+func shouldPerformCleanup(flags CleanupFlags) bool {
+	return flags.Clean || flags.CleanIssues || flags.CleanDiscussions || flags.CleanPRs || flags.CleanLabels
+}
+
+// performCleanup executes cleanup operations based on flags
+func performCleanup(ctx context.Context, client githubapi.GitHubClient, flags CleanupFlags, cfg *config.Configuration, logger common.Logger) error {
+	// Load preserve configuration
+	preserveConfigPath := flags.PreserveConfig
+	if preserveConfigPath == "" {
+		preserveConfigPath = hydrate.DefaultPreserveConfigPath(cfg.BasePath)
+	}
+
+	preserveConfig, err := hydrate.LoadPreserveConfig(ctx, preserveConfigPath)
+	if err != nil {
+		return errors.FileError("load_preserve_config", "failed to load preserve configuration", err)
+	}
+
+	// Create cleanup options
+	cleanupOptions := hydrate.CleanupOptions{
+		CleanIssues:      flags.Clean || flags.CleanIssues,
+		CleanDiscussions: flags.Clean || flags.CleanDiscussions,
+		CleanPRs:         flags.Clean || flags.CleanPRs,
+		CleanLabels:      flags.Clean || flags.CleanLabels,
+		DryRun:           flags.DryRun,
+		PreserveConfig:   preserveConfig,
+	}
+
+	// Perform cleanup
+	summary, err := hydrate.CleanupBeforeHydration(ctx, client, cleanupOptions, logger)
+	if summary != nil {
+		// Log cleanup summary
+		logger.Info("Cleanup completed: %d issues cleaned, %d discussions cleaned, %d PRs cleaned, %d labels cleaned",
+			summary.IssuesDeleted, summary.DiscussionsDeleted, summary.PRsDeleted, summary.LabelsDeleted)
+	}
+
+	return err
+}
+
 // NewHydrateCmd returns the Cobra command for repository hydration
 func NewHydrateCmd() *cobra.Command {
 	var owner, repo, configPath string
 	var issues, discussions, pullRequests bool
 	var debug bool
+	
+	// Cleanup flags
+	var cleanupFlags CleanupFlags
 
 	cmd := &cobra.Command{
 		Use:   "hydrate",
 		Short: "Hydrate a repository with demo issues, discussions, and pull requests",
+		Long: `Hydrate a repository with demo issues, discussions, and pull requests.
+
+Cleanup flags allow you to clean existing objects before hydrating:
+  --clean: Clean all object types (issues, discussions, PRs, labels)
+  --clean-issues: Clean only issues
+  --clean-discussions: Clean only discussions
+  --clean-prs: Clean only pull requests
+  --clean-labels: Clean only labels
+  --dry-run: Preview what would be deleted without actually deleting
+  --preserve-config: Path to preserve configuration file (default: .github/demos/preserve.json)`,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Create context with cancellation for Ctrl+C
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
-			err := executeHydrate(ctx, owner, repo, configPath, issues, discussions, pullRequests, debug)
+			err := executeHydrate(ctx, owner, repo, configPath, issues, discussions, pullRequests, debug, cleanupFlags)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -143,13 +215,27 @@ func NewHydrateCmd() *cobra.Command {
 		},
 	}
 
+	// Repository flags
 	cmd.Flags().StringVar(&owner, "owner", "", "GitHub repository owner (required)")
 	cmd.Flags().StringVar(&repo, "repo", "", "GitHub repository name (required)")
 	cmd.Flags().StringVar(&configPath, "config-path", config.DefaultConfigPath, "Path to configuration files relative to project root")
+	
+	// Content type flags
 	cmd.Flags().BoolVar(&issues, "issues", true, "Include issues")
 	cmd.Flags().BoolVar(&discussions, "discussions", true, "Include discussions")
 	cmd.Flags().BoolVar(&pullRequests, "prs", true, "Include pull requests")
+	
+	// Debug flag
 	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug mode for detailed logging")
+
+	// Cleanup flags
+	cmd.Flags().BoolVar(&cleanupFlags.Clean, "clean", false, "Clean all existing objects before hydrating")
+	cmd.Flags().BoolVar(&cleanupFlags.CleanIssues, "clean-issues", false, "Clean existing issues before hydrating")
+	cmd.Flags().BoolVar(&cleanupFlags.CleanDiscussions, "clean-discussions", false, "Clean existing discussions before hydrating")
+	cmd.Flags().BoolVar(&cleanupFlags.CleanPRs, "clean-prs", false, "Clean existing pull requests before hydrating")
+	cmd.Flags().BoolVar(&cleanupFlags.CleanLabels, "clean-labels", false, "Clean existing labels before hydrating")
+	cmd.Flags().BoolVar(&cleanupFlags.DryRun, "dry-run", false, "Preview what would be deleted without actually deleting")
+	cmd.Flags().StringVar(&cleanupFlags.PreserveConfig, "preserve-config", "", "Path to preserve configuration file (default: .github/demos/preserve.json)")
 
 	return cmd
 }
