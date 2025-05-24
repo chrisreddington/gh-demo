@@ -3,6 +3,7 @@
 package errors
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -156,4 +157,23 @@ func (ec *ErrorCollector) Result() error {
 		errorStrings[i] = err.Error()
 	}
 	return NewPartialFailureError(errorStrings)
+}
+
+// Context error handling functions
+
+// IsContextError checks if error is context-related (canceled or deadline exceeded).
+func IsContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// ContextError creates user-friendly context error messages for timeout and cancellation scenarios.
+// It wraps context errors with LayeredError to provide consistent error handling.
+func ContextError(operation string, cause error) error {
+	if errors.Is(cause, context.Canceled) {
+		return NewLayeredError("context", operation, "operation was cancelled (interrupted by user)", cause)
+	}
+	if errors.Is(cause, context.DeadlineExceeded) {
+		return NewLayeredError("context", operation, "operation timed out (exceeded 30 second limit)", cause)
+	}
+	return cause
 }

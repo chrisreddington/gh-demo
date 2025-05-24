@@ -47,6 +47,11 @@ type graphQLClientWrapper struct {
 }
 
 func (w *graphQLClientWrapper) Do(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+	// Check if context is already cancelled before making the request
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	// Note: go-gh GraphQL client doesn't support context directly
 	// In a real implementation, we would need to handle context timeout/cancellation at a higher level
 	return w.client.Do(query, variables, response)
@@ -146,6 +151,11 @@ func (c *RESTClient) Request(ctx context.Context, method string, path string, bo
 		requestBody = bytes.NewBuffer(jsonData)
 	}
 
+	// Check if context is already cancelled before making the request
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	// Note: go-gh client doesn't directly support context, but we accept it for interface compatibility
 	// In a real implementation, we would need to handle context timeout/cancellation at a higher level
 	resp, err := c.client.Request(method, path, requestBody)
@@ -242,6 +252,9 @@ func (c *GHClient) ListLabels(ctx context.Context) ([]string, error) {
 	err := c.gqlClient.Do(apiCtx, labelsQuery, variables, &response)
 	if err != nil {
 		c.debugLog("Failed to fetch labels: %v", err)
+		if errors.IsContextError(err) {
+			return nil, errors.ContextError("list_labels", err)
+		}
 		return nil, errors.APIError("list_labels", "failed to fetch labels", err)
 	}
 
@@ -283,6 +296,9 @@ func (c *GHClient) CreateLabel(ctx context.Context, label types.Label) error {
 	err := c.restClient.Request(apiCtx, "POST", path, payload, nil)
 	if err != nil {
 		c.debugLog("Failed to create label '%s': %v", label.Name, err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("create_label", err)
+		}
 		layeredErr := errors.NewLayeredError("api", "create_label", "failed to create GitHub label", err)
 		return layeredErr.WithContext("name", label.Name).WithContext("color", label.Color)
 	}
@@ -316,6 +332,9 @@ func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 	err := c.restClient.Request(apiCtx, "POST", path, payload, nil)
 	if err != nil {
 		c.debugLog("Failed to create issue '%s': %v", issue.Title, err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("create_issue", err)
+		}
 		layeredErr := errors.NewLayeredError("api", "create_issue", "failed to create GitHub issue", err)
 		return layeredErr.WithContext("title", issue.Title)
 	}

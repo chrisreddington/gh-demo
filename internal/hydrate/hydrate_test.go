@@ -3,6 +3,7 @@ package hydrate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -339,6 +340,59 @@ func TestHydrateFromFiles_NonExistentFile(t *testing.T) {
 	_, _, _, err = HydrateFromFiles(context.Background(), validIssuesPath, validDiscussionsPath, "/non/existent/prs.json", true, true, true)
 	if err == nil {
 		t.Error("Expected error for non-existent prs file")
+	}
+}
+
+// TestHydrateFromFiles_ContextCancellation tests that file operations respect context cancellation
+func TestHydrateFromFiles_ContextCancellation(t *testing.T) {
+	// Create a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	tempDir := t.TempDir()
+	issuesPath := filepath.Join(tempDir, "issues.json")
+	if err := os.WriteFile(issuesPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create issues file: %v", err)
+	}
+
+	_, _, _, err := HydrateFromFiles(ctx, issuesPath, "", "", true, false, false)
+	if err == nil {
+		t.Error("Expected context cancellation error")
+		return
+	}
+
+	// Should return context.Canceled error
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context.Canceled, got: %v", err)
+	}
+}
+
+// TestHydrateWithLabels_ContextCancellation tests that hydration respects context cancellation
+func TestHydrateWithLabels_ContextCancellation(t *testing.T) {
+	// Create a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	client := &MockGitHubClient{
+		ExistingLabels: map[string]bool{},
+	}
+
+	// Use temporary files
+	tempDir := t.TempDir()
+	issuesPath := filepath.Join(tempDir, "issues.json")
+	if err := os.WriteFile(issuesPath, []byte("[]"), 0644); err != nil {
+		t.Fatalf("Failed to create issues file: %v", err)
+	}
+
+	err := HydrateWithLabels(ctx, client, issuesPath, "", "", true, false, false, false)
+	if err == nil {
+		t.Error("Expected context cancellation error")
+		return
+	}
+
+	// Should return context.Canceled error
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context.Canceled, got: %v", err)
 	}
 }
 

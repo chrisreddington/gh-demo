@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
@@ -1021,5 +1022,52 @@ func TestNewGHClient_Integration(t *testing.T) {
 	}
 	if client.Repo != "testrepo" {
 		t.Errorf("Expected repo to be 'testrepo', got '%s'", client.Repo)
+	}
+}
+
+// TestCreateIssue_ContextTimeout tests that context timeout is handled correctly
+func TestCreateIssue_ContextTimeout(t *testing.T) {
+	// Create a context that times out immediately
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer cancel()
+	
+	// Wait for context to timeout
+	time.Sleep(2 * time.Millisecond)
+
+	gqlClient := &MockGraphQLClient{}
+	restClient := &RESTClient{client: &MockRESTClient{
+		RequestFunc: func(method string, path string, body io.Reader) (*http.Response, error) {
+			// Check if context is already cancelled
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+				return &http.Response{
+					StatusCode: 201,
+					Body:       io.NopCloser(strings.NewReader(`{"number": 1}`)),
+				}, nil
+			}
+		},
+	}}
+
+	client, err := NewGHClientWithClients("testowner", "testrepo", gqlClient, restClient)
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	err = client.CreateIssue(ctx, types.Issue{
+		Title: "Test Issue",
+		Body:  "Test body",
+	})
+
+	if err == nil {
+		t.Error("Expected context timeout error, got nil")
+		return
+	}
+
+	// Check if the error message is user-friendly for context timeout
+	errStr := err.Error()
+	if !strings.Contains(errStr, "timed out") && !strings.Contains(errStr, "cancelled") {
+		t.Errorf("Expected user-friendly timeout message, got: %v", err)
 	}
 }
