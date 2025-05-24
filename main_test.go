@@ -39,38 +39,102 @@ func TestMainImports(t *testing.T) {
 	}
 }
 
-// TestRunFunction tests the run() function
+// TestRunFunction tests the run() function with different argument scenarios
 func TestRunFunction(t *testing.T) {
-	// Test that run() function can be called and returns an error
-	// when Execute() would fail (no arguments provided)
+	tests := []struct {
+		name        string
+		args        []string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "help command success",
+			args:        []string{"gh-demo", "--help"},
+			expectError: false,
+			description: "Help command should not return an error",
+		},
+		{
+			name:        "invalid command error",
+			args:        []string{"gh-demo", "invalid-command"},
+			expectError: true,
+			description: "Invalid command should return an error",
+		},
+		{
+			name:        "nonexistent command error",
+			args:        []string{"gh-demo", "nonexistent-command"},
+			expectError: true,
+			description: "Nonexistent command should return error with unknown command message",
+		},
+	}
 
-	// Save original args and restore afterwards
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original args and restore afterwards
+			originalArgs := os.Args
+			defer func() { os.Args = originalArgs }()
 
-	// Set args to show help (which should not return an error)
-	os.Args = []string{"gh-demo", "--help"}
+			// Set test args
+			os.Args = tt.args
 
-	err := run()
-	// Help command should not return an error
-	if err != nil {
-		t.Errorf("run() with --help should not return error, got: %v", err)
+			err := run()
+			
+			if tt.expectError && err == nil {
+				t.Errorf("%s: expected error but got none", tt.description)
+			}
+			
+			if !tt.expectError && err != nil {
+				t.Errorf("%s: expected no error but got: %v", tt.description, err)
+			}
+
+			// For the nonexistent command case, verify error message
+			if tt.name == "nonexistent command error" && err != nil {
+				if !strings.Contains(err.Error(), "unknown command") {
+					t.Errorf("Expected 'unknown command' error, got: %v", err)
+				}
+			}
+		})
 	}
 }
 
-// TestRunFunctionWithInvalidArgs tests run() with invalid arguments
-func TestRunFunctionWithInvalidArgs(t *testing.T) {
-	// Save original args and restore afterwards
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
+// TestMainFunctionDirect tests main() function scenarios with different arguments
+func TestMainFunctionDirect(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        []string
+		shouldPanic bool
+		description string
+	}{
+		{
+			name:        "main with help success",
+			args:        []string{"gh-demo", "--help"},
+			shouldPanic: false,
+			description: "Main with help should not call os.Exit()",
+		},
+	}
 
-	// Set invalid args that should cause an error
-	os.Args = []string{"gh-demo", "invalid-command"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original args and restore afterwards
+			originalArgs := os.Args
+			defer func() { os.Args = originalArgs }()
 
-	err := run()
-	// Invalid command should return an error
-	if err == nil {
-		t.Error("run() with invalid command should return an error")
+			// Set test args
+			os.Args = tt.args
+
+			// Capture any panic from os.Exit() and recover
+			defer func() {
+				if r := recover(); r != nil {
+					if !tt.shouldPanic {
+						t.Errorf("%s: main() should not call os.Exit(), but got panic: %v", tt.description, r)
+					}
+				}
+			}()
+
+			// Call main() directly
+			main()
+
+			// If we get here, main() completed successfully without calling os.Exit()
+		})
 	}
 }
 
@@ -83,33 +147,6 @@ func TestMainFunctionExists(t *testing.T) {
 
 	// The existence of this test and successful compilation verifies main() exists
 	// This is a structural test to ensure the main function is present
-}
-
-// TestMainFunctionDirect tests main() function directly with success case
-func TestMainFunctionDirect(t *testing.T) {
-	// This test actually calls main() directly for the success case where it doesn't call os.Exit()
-	// We use the --help flag which should not cause os.Exit(1)
-
-	// Save original args and restore afterwards
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
-
-	// Set args to show help (should exit with code 0, which doesn't call os.Exit in our implementation)
-	os.Args = []string{"gh-demo", "--help"}
-
-	// Capture any panic from os.Exit() and recover
-	defer func() {
-		if r := recover(); r != nil {
-			// If os.Exit was called, we'll get here
-			// Help should not cause os.Exit, so this would be unexpected
-			t.Errorf("main() with --help should not call os.Exit(), but got panic: %v", r)
-		}
-	}()
-
-	// Call main() directly - this will execute the help command
-	main()
-
-	// If we get here, main() completed successfully without calling os.Exit()
 }
 
 // TestMainFunctionIntegration tests main() indirectly through subprocess
@@ -156,29 +193,6 @@ func TestMainFunctionWithErrorSubprocess(t *testing.T) {
 	outputStr := string(output)
 	if !strings.Contains(outputStr, "Error:") || !strings.Contains(outputStr, "unknown command") {
 		t.Errorf("main() should show error for invalid input, got: %s", outputStr)
-	}
-}
-
-// TestMainFunctionErrorPath tests main() error handling by mocking
-func TestMainFunctionErrorPath(t *testing.T) {
-	// We can't easily test main() directly due to os.Exit(), but we can test
-	// the error path by testing the run() function that main() calls
-
-	// Save original args and restore afterwards
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
-
-	// Test with an invalid subcommand to trigger error in run()
-	os.Args = []string{"gh-demo", "nonexistent-command"}
-
-	err := run()
-	if err == nil {
-		t.Error("run() should return error for invalid command")
-	}
-
-	// Verify error message
-	if !strings.Contains(err.Error(), "unknown command") {
-		t.Errorf("Expected 'unknown command' error, got: %v", err)
 	}
 }
 
