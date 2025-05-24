@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/testutil"
 )
 
 // TestLogger captures debug and info messages for testing
@@ -54,10 +55,8 @@ func TestGitHubClientDebugLogging(t *testing.T) {
 	testLogger := &TestLogger{}
 
 	// Create a mock client and set the logger
-	client := &MockGitHubClient{
-		ExistingLabels: map[string]bool{"existing": true},
-		CreatedLabels:  []string{},
-	}
+	client := testutil.NewMockGitHubClient()
+	client.ExistingLabels["existing"] = true
 
 	// The mock client doesn't actually use the logger, but we test the interface
 	client.SetLogger(testLogger)

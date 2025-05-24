@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chrisreddington/gh-demo/internal/testutil"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
@@ -556,7 +557,7 @@ func TestSetLogger(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	logger := &MockLogger{}
+	logger := &testutil.MockLogger{}
 	client.SetLogger(logger)
 
 	if client.logger != logger {
@@ -564,17 +565,7 @@ func TestSetLogger(t *testing.T) {
 	}
 }
 
-type MockLogger struct {
-	lastMessage string
-}
 
-func (m *MockLogger) Debug(format string, args ...interface{}) {
-	m.lastMessage = fmt.Sprintf(format, args...)
-}
-
-func (m *MockLogger) Info(format string, args ...interface{}) {
-	m.lastMessage = fmt.Sprintf(format, args...)
-}
 
 func TestDebugLog(t *testing.T) {
 	mockGQL := &MockGraphQLClient{}
@@ -583,13 +574,13 @@ func TestDebugLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	mockLogger := &MockLogger{}
+	mockLogger := &testutil.MockLogger{}
 	client.SetLogger(mockLogger)
 
 	client.debugLog("test message: %s", "value")
 
-	if mockLogger.lastMessage != "test message: value" {
-		t.Errorf("Expected 'test message: value', got '%s'", mockLogger.lastMessage)
+	if mockLogger.LastMessage != "test message: value" {
+		t.Errorf("Expected 'test message: value', got '%s'", mockLogger.LastMessage)
 	}
 }
 
