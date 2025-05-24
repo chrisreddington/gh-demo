@@ -19,12 +19,14 @@ package githubapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/errors"
@@ -34,7 +36,20 @@ import (
 
 // GraphQLClient interface for testability
 type GraphQLClient interface {
-	Do(query string, variables map[string]interface{}, response interface{}) error
+	Do(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error
+}
+
+// graphQLClientWrapper wraps the go-gh GraphQL client to implement our interface
+type graphQLClientWrapper struct {
+	client interface {
+		Do(string, map[string]interface{}, interface{}) error
+	}
+}
+
+func (w *graphQLClientWrapper) Do(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+	// Note: go-gh GraphQL client doesn't support context directly
+	// In a real implementation, we would need to handle context timeout/cancellation at a higher level
+	return w.client.Do(query, variables, response)
 }
 
 // GHClient is the main client for all GitHub API operations
@@ -82,7 +97,7 @@ func NewGHClient(owner, repo string) (*GHClient, error) {
 	return &GHClient{
 		Owner:      strings.TrimSpace(owner),
 		Repo:       strings.TrimSpace(repo),
-		gqlClient:  gqlClient,
+		gqlClient:  &graphQLClientWrapper{client: gqlClient},
 		restClient: restClient,
 		logger:     nil, // Will be set when SetLogger is called
 	}, nil
@@ -121,7 +136,7 @@ func (c *GHClient) debugLog(format string, args ...interface{}) {
 }
 
 // Request makes an HTTP request to the REST API
-func (c *RESTClient) Request(method string, path string, body interface{}, response interface{}) error {
+func (c *RESTClient) Request(ctx context.Context, method string, path string, body interface{}, response interface{}) error {
 	var requestBody io.Reader
 	if body != nil {
 		jsonData, err := json.Marshal(body)
@@ -131,6 +146,8 @@ func (c *RESTClient) Request(method string, path string, body interface{}, respo
 		requestBody = bytes.NewBuffer(jsonData)
 	}
 
+	// Note: go-gh client doesn't directly support context, but we accept it for interface compatibility
+	// In a real implementation, we would need to handle context timeout/cancellation at a higher level
 	resp, err := c.client.Request(method, path, requestBody)
 	if err != nil {
 		return err
@@ -176,7 +193,7 @@ func (c *RESTClient) Request(method string, path string, body interface{}, respo
 }
 
 // Label operations
-func (c *GHClient) ListLabels() ([]string, error) {
+func (c *GHClient) ListLabels(ctx context.Context) ([]string, error) {
 	if c.gqlClient == nil {
 		return nil, errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
@@ -218,7 +235,11 @@ func (c *GHClient) ListLabels() ([]string, error) {
 		"name":  c.Repo,
 	}
 
-	err := c.gqlClient.Do(labelsQuery, variables, &response)
+	// Create timeout context for API call
+	apiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	err := c.gqlClient.Do(apiCtx, labelsQuery, variables, &response)
 	if err != nil {
 		c.debugLog("Failed to fetch labels: %v", err)
 		return nil, errors.APIError("list_labels", "failed to fetch labels", err)
@@ -236,7 +257,7 @@ func (c *GHClient) ListLabels() ([]string, error) {
 // CreateLabel creates a new label in the repository using the provided label data.
 // It validates that the REST client is initialized and creates the label with
 // the specified name, description, and color.
-func (c *GHClient) CreateLabel(label types.Label) error {
+func (c *GHClient) CreateLabel(ctx context.Context, label types.Label) error {
 	if c.restClient == nil {
 		return errors.ValidationError("create_label", "REST client is not initialized")
 	}
@@ -255,7 +276,11 @@ func (c *GHClient) CreateLabel(label types.Label) error {
 		payload["description"] = label.Description
 	}
 
-	err := c.restClient.Request("POST", path, payload, nil)
+	// Create timeout context for API call
+	apiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	err := c.restClient.Request(apiCtx, "POST", path, payload, nil)
 	if err != nil {
 		c.debugLog("Failed to create label '%s': %v", label.Name, err)
 		layeredErr := errors.NewLayeredError("api", "create_label", "failed to create GitHub label", err)
@@ -269,7 +294,7 @@ func (c *GHClient) CreateLabel(label types.Label) error {
 // CreateIssue creates a new issue in the repository using the provided issue data.
 // It validates that the REST client is initialized and creates the issue with
 // the specified title, body, labels, and assignees.
-func (c *GHClient) CreateIssue(issue types.Issue) error {
+func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 	if c.restClient == nil {
 		return errors.ValidationError("create_issue", "REST client is not initialized")
 	}
@@ -284,7 +309,11 @@ func (c *GHClient) CreateIssue(issue types.Issue) error {
 		"assignees": issue.Assignees,
 	}
 
-	err := c.restClient.Request("POST", path, payload, nil)
+	// Create timeout context for API call
+	apiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	err := c.restClient.Request(apiCtx, "POST", path, payload, nil)
 	if err != nil {
 		c.debugLog("Failed to create issue '%s': %v", issue.Title, err)
 		layeredErr := errors.NewLayeredError("api", "create_issue", "failed to create GitHub issue", err)
@@ -298,7 +327,7 @@ func (c *GHClient) CreateIssue(issue types.Issue) error {
 // CreateDiscussion creates a new discussion in the repository using the provided discussion data.
 // It uses GraphQL to create the discussion with the specified title, body, category, and labels.
 // The method automatically finds the correct category ID and adds labels after creation.
-func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
+func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discussion) error {
 	if c.gqlClient == nil {
 		return errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
@@ -337,7 +366,11 @@ func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 		"name":  c.Repo,
 	}
 
-	err := c.gqlClient.Do(repoQuery, repoVariables, &repoResponse)
+	// Create timeout context for API call
+	apiCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	err := c.gqlClient.Do(apiCtx, repoQuery, repoVariables, &repoResponse)
 	if err != nil {
 		c.debugLog("Failed to fetch repository info for discussion: %v", err)
 		return errors.APIError("fetch_repository_info", "failed to fetch repository info", err)
@@ -410,7 +443,11 @@ func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 	inputData, _ := json.MarshalIndent(mutationVariables, "", "  ")
 	c.debugLog("Mutation input: %s", string(inputData))
 
-	err = c.gqlClient.Do(createMutation, mutationVariables, &mutationResponse)
+	// Create timeout context for the creation mutation
+	createCtx, createCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer createCancel()
+
+	err = c.gqlClient.Do(createCtx, createMutation, mutationVariables, &mutationResponse)
 	if err != nil {
 		c.debugLog("Failed to create discussion '%s': %v", discussion.Title, err)
 		return errors.APIError("create_discussion", "failed to create discussion", err)
@@ -440,7 +477,7 @@ func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 
 		// Add labels to the discussion using the discussion ID
 		for _, label := range discussion.Labels {
-			err := c.addLabelToDiscussion(mutationResponse.CreateDiscussion.Discussion.ID, label)
+			err := c.addLabelToDiscussion(ctx, mutationResponse.CreateDiscussion.Discussion.ID, label)
 			if err != nil {
 				c.debugLog("Failed to add label '%s' to discussion: %v", label, err)
 				// Continue with other labels even if one fails
@@ -455,7 +492,7 @@ func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 }
 
 // addLabelToDiscussion is a helper method to add a label to a discussion
-func (c *GHClient) addLabelToDiscussion(discussionID, labelName string) error {
+func (c *GHClient) addLabelToDiscussion(ctx context.Context, discussionID, labelName string) error {
 	// First, find the label ID for the label name
 	labelQuery := `
 		query($owner: String!, $repo: String!, $name: String!) {
@@ -481,7 +518,11 @@ func (c *GHClient) addLabelToDiscussion(discussionID, labelName string) error {
 		"name":  labelName,
 	}
 
-	err := c.gqlClient.Do(labelQuery, labelVariables, &labelResponse)
+	// Create timeout context for the label query
+	labelCtx, labelCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer labelCancel()
+
+	err := c.gqlClient.Do(labelCtx, labelQuery, labelVariables, &labelResponse)
 	if err != nil {
 		return errors.APIError("find_label", fmt.Sprintf("failed to find label '%s'", labelName), err)
 	}
@@ -513,7 +554,11 @@ func (c *GHClient) addLabelToDiscussion(discussionID, labelName string) error {
 		},
 	}
 
-	err = c.gqlClient.Do(addLabelMutation, labelMutationVariables, &labelMutationResponse)
+	// Create timeout context for the add label mutation
+	addLabelCtx, addLabelCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer addLabelCancel()
+
+	err = c.gqlClient.Do(addLabelCtx, addLabelMutation, labelMutationVariables, &labelMutationResponse)
 	if err != nil {
 		return errors.APIError("add_label_to_discussion", fmt.Sprintf("failed to add label '%s' to discussion", labelName), err)
 	}
@@ -523,7 +568,7 @@ func (c *GHClient) addLabelToDiscussion(discussionID, labelName string) error {
 
 // CreatePR creates a new pull request in the repository using the provided pull request data.
 // It validates the head and base branches, creates the PR via REST API, and adds labels/assignees if specified.
-func (c *GHClient) CreatePR(pullRequest types.PullRequest) error {
+func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) error {
 	if c.restClient == nil {
 		return errors.ValidationError("validate_client", "REST client is not initialized")
 	}
@@ -552,8 +597,12 @@ func (c *GHClient) CreatePR(pullRequest types.PullRequest) error {
 		"base":  pullRequest.Base,
 	}
 
+	// Create timeout context for the PR creation
+	prCtx, prCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer prCancel()
+
 	var response map[string]interface{}
-	err := c.restClient.Request("POST", path, payload, &response)
+	err := c.restClient.Request(prCtx, "POST", path, payload, &response)
 	if err != nil {
 		c.debugLog("Failed to create pull request '%s': %v", pullRequest.Title, err)
 		layeredErr := errors.APIError("create_pull_request", "failed to create pull request", err)
@@ -568,8 +617,12 @@ func (c *GHClient) CreatePR(pullRequest types.PullRequest) error {
 			"assignees": pullRequest.Assignees,
 		}
 
+		// Create timeout context for adding labels/assignees
+		labelCtx, labelCancel := context.WithTimeout(ctx, 30*time.Second)
+		defer labelCancel()
+
 		issuePath := fmt.Sprintf("repos/%s/%s/issues/%d", c.Owner, c.Repo, int(prNumber))
-		if err := c.restClient.Request("PATCH", issuePath, issuePayload, nil); err != nil {
+		if err := c.restClient.Request(labelCtx, "PATCH", issuePath, issuePayload, nil); err != nil {
 			c.debugLog("Failed to add labels/assignees to PR '%s': %v", pullRequest.Title, err)
 			layeredErr := errors.APIError("add_pr_labels_assignees", "created PR but failed to add labels/assignees", err)
 			return layeredErr.(*errors.LayeredError).WithContext("title", pullRequest.Title)

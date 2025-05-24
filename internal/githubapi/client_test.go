@@ -1,6 +1,7 @@
 package githubapi
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,12 +13,12 @@ import (
 
 // MockGraphQLClient implements the GraphQLClient interface for testing
 type MockGraphQLClient struct {
-	DoFunc func(string, map[string]interface{}, interface{}) error
+	DoFunc func(context.Context, string, map[string]interface{}, interface{}) error
 }
 
-func (m *MockGraphQLClient) Do(query string, variables map[string]interface{}, response interface{}) error {
+func (m *MockGraphQLClient) Do(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 	if m.DoFunc != nil {
-		return m.DoFunc(query, variables, response)
+		return m.DoFunc(ctx, query, variables, response)
 	}
 	return nil
 }
@@ -145,7 +146,7 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	gqlClient := &MockGraphQLClient{
-		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			// Mock successful responses for GraphQL queries
 			return nil
 		},
@@ -159,7 +160,7 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	// Test CreateLabel
-	err := client.CreateLabel(types.Label{
+	err := client.CreateLabel(context.Background(), types.Label{
 		Name:        "test-label",
 		Description: "A test label",
 		Color:       "ff0000",
@@ -169,7 +170,7 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	// Test CreateIssue
-	err = client.CreateIssue(types.Issue{
+	err = client.CreateIssue(context.Background(), types.Issue{
 		Title:     "Test Issue",
 		Body:      "This is a test issue",
 		Labels:    []string{"bug"},
@@ -180,7 +181,7 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	// Test CreatePR
-	err = client.CreatePR(types.PullRequest{
+	err = client.CreatePR(context.Background(), types.PullRequest{
 		Title:     "Test PR",
 		Body:      "This is a test PR",
 		Head:      "feature-branch",
@@ -196,7 +197,7 @@ func TestGHClientWithMockClients(t *testing.T) {
 // GraphQL tests
 func TestListLabels(t *testing.T) {
 	gqlClient := &MockGraphQLClient{
-		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			// Mock successful labels response
 			resp := response.(*struct {
 				Repository struct {
@@ -228,7 +229,7 @@ func TestListLabels(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	labels, err := client.ListLabels()
+	labels, err := client.ListLabels(context.Background())
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -242,7 +243,7 @@ func TestListLabels(t *testing.T) {
 
 func TestCreateDiscussion(t *testing.T) {
 	gqlClient := &MockGraphQLClient{
-		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			// Handle both repository query and create discussion mutation
 			if strings.Contains(query, "discussionCategories") {
 				// Repository info query
@@ -292,7 +293,7 @@ func TestCreateDiscussion(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(types.Discussion{
+	err := client.CreateDiscussion(context.Background(), types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -304,7 +305,7 @@ func TestCreateDiscussion(t *testing.T) {
 
 func TestCreateDiscussion_CategoryNotFound(t *testing.T) {
 	gqlClient := &MockGraphQLClient{
-		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "discussionCategories") {
 				// Repository info query with different categories
 				resp := response.(*struct {
@@ -337,7 +338,7 @@ func TestCreateDiscussion_CategoryNotFound(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(types.Discussion{
+	err := client.CreateDiscussion(context.Background(), types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "NonExistent",
@@ -352,7 +353,7 @@ func TestCreateDiscussion_CategoryNotFound(t *testing.T) {
 
 func TestCreateDiscussion_GraphQLError(t *testing.T) {
 	gqlClient := &MockGraphQLClient{
-		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			return fmt.Errorf("GraphQL error: network timeout")
 		},
 	}
@@ -363,7 +364,7 @@ func TestCreateDiscussion_GraphQLError(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(types.Discussion{
+	err := client.CreateDiscussion(context.Background(), types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -375,7 +376,7 @@ func TestCreateDiscussion_GraphQLError(t *testing.T) {
 
 func TestListLabelsError(t *testing.T) {
 	gqlClient := &MockGraphQLClient{
-		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			return fmt.Errorf("GraphQL error: unauthorized")
 		},
 	}
@@ -386,7 +387,7 @@ func TestListLabelsError(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	_, err := client.ListLabels()
+	_, err := client.ListLabels(context.Background())
 	if err == nil {
 		t.Error("Expected an error from GraphQL client")
 	}
@@ -399,7 +400,7 @@ func TestCreateDiscussionError(t *testing.T) {
 		gqlClient: nil, // This will cause an error
 	}
 
-	err := client.CreateDiscussion(types.Discussion{
+	err := client.CreateDiscussion(context.Background(), types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -416,7 +417,7 @@ func TestListLabelsNilClient(t *testing.T) {
 		gqlClient: nil, // This will cause an error
 	}
 
-	_, err := client.ListLabels()
+	_, err := client.ListLabels(context.Background())
 	if err == nil {
 		t.Error("Expected an error when GraphQL client is nil")
 	}
@@ -444,7 +445,7 @@ func TestRESTClientRequest(t *testing.T) {
 
 	wrappedClient := &RESTClient{client: restClient}
 	var response map[string]interface{}
-	err := wrappedClient.Request("GET", "test/path", nil, &response)
+	err := wrappedClient.Request(context.Background(), "GET", "test/path", nil, &response)
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -470,7 +471,7 @@ func TestCreatePR(t *testing.T) {
 		gqlClient:  nil, // PR creation uses REST API
 	}
 
-	err := client.CreatePR(types.PullRequest{
+	err := client.CreatePR(context.Background(), types.PullRequest{
 		Title: "Test PR",
 		Body:  "This is a test PR",
 		Head:  "feature-branch",
@@ -498,7 +499,7 @@ func TestCreatePRValidation(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreatePR(types.PullRequest{
+	err := client.CreatePR(context.Background(), types.PullRequest{
 		Title: "Test PR",
 		Body:  "This is a test PR",
 		Head:  "feature-branch",
@@ -563,7 +564,7 @@ func TestCreateLabelError(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreateLabel(types.Label{
+	err := client.CreateLabel(context.Background(), types.Label{
 		Name:  "test-label",
 		Color: "ff0000",
 	})
@@ -580,7 +581,7 @@ func TestCreateIssueError(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreateIssue(types.Issue{Title: "Test", Body: "Test"})
+	err := client.CreateIssue(context.Background(), types.Issue{Title: "Test", Body: "Test"})
 	if err == nil {
 		t.Error("Expected an error when REST client is nil")
 	}
@@ -594,7 +595,7 @@ func TestCreatePRError(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreatePR(types.PullRequest{Title: "Test", Head: "feature", Base: "main"})
+	err := client.CreatePR(context.Background(), types.PullRequest{Title: "Test", Head: "feature", Base: "main"})
 	if err == nil {
 		t.Error("Expected an error when REST client is nil")
 	}
@@ -603,7 +604,7 @@ func TestCreatePRError(t *testing.T) {
 // TestCreateDiscussionWithLabels tests the addLabelToDiscussion function through CreateDiscussion
 func TestCreateDiscussionWithLabels(t *testing.T) {
 	gqlClient := &MockGraphQLClient{
-		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "discussionCategories") {
 				// Repository info query
 				resp := response.(*struct {
@@ -669,7 +670,7 @@ func TestCreateDiscussionWithLabels(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(types.Discussion{
+	err := client.CreateDiscussion(context.Background(), types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -683,7 +684,7 @@ func TestCreateDiscussionWithLabels(t *testing.T) {
 // TestAddLabelToDiscussion_LabelNotFound tests error handling in addLabelToDiscussion
 func TestAddLabelToDiscussion_LabelNotFound(t *testing.T) {
 	gqlClient := &MockGraphQLClient{
-		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "discussionCategories") {
 				// Repository info query
 				resp := response.(*struct {
@@ -742,7 +743,7 @@ func TestAddLabelToDiscussion_LabelNotFound(t *testing.T) {
 	}
 
 	// This should still succeed, but the label addition will fail silently
-	err := client.CreateDiscussion(types.Discussion{
+	err := client.CreateDiscussion(context.Background(), types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -756,7 +757,7 @@ func TestAddLabelToDiscussion_LabelNotFound(t *testing.T) {
 // TestAddLabelToDiscussion_GraphQLError tests GraphQL error handling
 func TestAddLabelToDiscussion_GraphQLError(t *testing.T) {
 	gqlClient := &MockGraphQLClient{
-		DoFunc: func(query string, variables map[string]interface{}, response interface{}) error {
+		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "discussionCategories") {
 				// Repository info query
 				resp := response.(*struct {
@@ -808,7 +809,7 @@ func TestAddLabelToDiscussion_GraphQLError(t *testing.T) {
 	}
 
 	// This should still succeed overall, but label addition will fail
-	err := client.CreateDiscussion(types.Discussion{
+	err := client.CreateDiscussion(context.Background(), types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -837,7 +838,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 	}
 
 	// Test empty head branch
-	err := client.CreatePR(types.PullRequest{
+	err := client.CreatePR(context.Background(), types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "", // Empty head should cause error
@@ -851,7 +852,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 	}
 
 	// Test empty base branch
-	err = client.CreatePR(types.PullRequest{
+	err = client.CreatePR(context.Background(), types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "feature",
@@ -865,7 +866,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 	}
 
 	// Test head and base are the same
-	err = client.CreatePR(types.PullRequest{
+	err = client.CreatePR(context.Background(), types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "main",
@@ -909,7 +910,7 @@ func TestCreatePR_WithLabelsAndAssignees(t *testing.T) {
 		restClient: &RESTClient{client: restClient},
 	}
 
-	err := client.CreatePR(types.PullRequest{
+	err := client.CreatePR(context.Background(), types.PullRequest{
 		Title:     "Test PR",
 		Body:      "Test body",
 		Head:      "feature",
@@ -952,7 +953,7 @@ func TestCreatePR_LabelsAssigneesFailure(t *testing.T) {
 		restClient: &RESTClient{client: restClient},
 	}
 
-	err := client.CreatePR(types.PullRequest{
+	err := client.CreatePR(context.Background(), types.PullRequest{
 		Title:     "Test PR",
 		Body:      "Test body",
 		Head:      "feature",
@@ -985,7 +986,7 @@ func TestCreatePR_RequestFailure(t *testing.T) {
 		restClient: &RESTClient{client: restClient},
 	}
 
-	err := client.CreatePR(types.PullRequest{
+	err := client.CreatePR(context.Background(), types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "feature",

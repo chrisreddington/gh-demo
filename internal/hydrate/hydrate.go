@@ -4,6 +4,7 @@
 package hydrate
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -30,10 +31,10 @@ type SectionSummary struct {
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
 // It supports both explicit label definitions from labels.json and auto-generated labels with defaults.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
-func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
+func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
 	logger := common.NewLogger(debug)
 
-	issues, discussions, pullRequests, err := HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath, includeIssues, includeDiscussions, includePullRequests)
+	issues, discussions, pullRequests, err := HydrateFromFiles(ctx, issuesPath, discussionsPath, pullRequestsPath, includeIssues, includeDiscussions, includePullRequests)
 	if err != nil {
 		return errors.ConfigError("load_config_files", "failed to load configuration files", err)
 	}
@@ -81,7 +82,7 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 	}
 	logger.Debug("Found %d total labels to ensure exist", len(labelsToEnsure))
 
-	if err := EnsureDefinedLabelsExist(client, labelsToEnsure, logger, labelSummary); err != nil {
+	if err := EnsureDefinedLabelsExist(ctx, client, labelsToEnsure, logger, labelSummary); err != nil {
 		return errors.APIError("ensure_labels", "failed to ensure labels exist", err)
 	}
 
@@ -96,7 +97,12 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 		logger.Debug("Creating %d issues", len(issues))
 
 		for i, issue := range issues {
-			if err := client.CreateIssue(issue); err != nil {
+			// Check for cancellation before each issue creation
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+
+			if err := client.CreateIssue(ctx, issue); err != nil {
 				errorMsg := fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err)
 				allErrors = append(allErrors, errorMsg)
 				issueSummary.Errors = append(issueSummary.Errors, errorMsg)
@@ -116,7 +122,12 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 		logger.Debug("Creating %d discussions", len(discussions))
 
 		for i, discussion := range discussions {
-			if err := client.CreateDiscussion(discussion); err != nil {
+			// Check for cancellation before each discussion creation
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+
+			if err := client.CreateDiscussion(ctx, discussion); err != nil {
 				errorMsg := fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err)
 				allErrors = append(allErrors, errorMsg)
 				discussionSummary.Errors = append(discussionSummary.Errors, errorMsg)
@@ -136,7 +147,12 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 		logger.Debug("Creating %d pull requests", len(pullRequests))
 
 		for i, pullRequest := range pullRequests {
-			if err := client.CreatePR(pullRequest); err != nil {
+			// Check for cancellation before each pull request creation
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+
+			if err := client.CreatePR(ctx, pullRequest); err != nil {
 				errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pullRequest.Title, err)
 				allErrors = append(allErrors, errorMsg)
 				pullRequestSummary.Errors = append(pullRequestSummary.Errors, errorMsg)
@@ -161,13 +177,13 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 // EnsureDefinedLabelsExist creates any missing labels in the repository.
 // It checks which labels already exist and only creates those that are missing.
 // This function works with full Label objects that include color and description.
-func EnsureDefinedLabelsExist(client githubapi.GitHubClient, labels []types.Label, logger common.Logger, summary *SectionSummary) error {
+func EnsureDefinedLabelsExist(ctx context.Context, client githubapi.GitHubClient, labels []types.Label, logger common.Logger, summary *SectionSummary) error {
 	if len(labels) == 0 {
 		return nil
 	}
 
 	logger.Debug("Fetching existing labels from repository")
-	existing, err := client.ListLabels()
+	existing, err := client.ListLabels(ctx)
 	if err != nil {
 		return err
 	}
@@ -180,10 +196,15 @@ func EnsureDefinedLabelsExist(client githubapi.GitHubClient, labels []types.Labe
 	logger.Debug("Found %d existing labels in repository", len(existing))
 
 	for _, label := range labels {
+		// Check for cancellation before each label creation
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		if _, ok := existSet[label.Name]; !ok {
 			logger.Debug("Creating missing label '%s' (color: %s)", label.Name, label.Color)
 
-			if err := client.CreateLabel(label); err != nil {
+			if err := client.CreateLabel(ctx, label); err != nil {
 				errorMsg := fmt.Sprintf("Label '%s': %v", label.Name, err)
 				summary.Errors = append(summary.Errors, errorMsg)
 				summary.Failures++
@@ -203,12 +224,17 @@ func EnsureDefinedLabelsExist(client githubapi.GitHubClient, labels []types.Labe
 
 // HydrateFromFiles loads issues, discussions, and pull requests from their respective JSON files.
 // It only loads files for content types that are included (enabled by the respective boolean flags).
-func HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests bool) ([]types.Issue, []types.Discussion, []types.PullRequest, error) {
+func HydrateFromFiles(ctx context.Context, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests bool) ([]types.Issue, []types.Discussion, []types.PullRequest, error) {
 	var issues []types.Issue
 	var discussions []types.Discussion
 	var pullRequests []types.PullRequest
 
 	if includeIssues {
+		// Check for cancellation before reading issues file
+		if err := ctx.Err(); err != nil {
+			return nil, nil, nil, err
+		}
+
 		data, err := os.ReadFile(issuesPath)
 		if err != nil {
 			layeredErr := errors.NewLayeredError("file", "read_issues", "failed to read issues file", err)
@@ -221,6 +247,11 @@ func HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath string, incl
 	}
 
 	if includeDiscussions {
+		// Check for cancellation before reading discussions file
+		if err := ctx.Err(); err != nil {
+			return nil, nil, nil, err
+		}
+
 		data, err := os.ReadFile(discussionsPath)
 		if err != nil {
 			layeredErr := errors.NewLayeredError("file", "read_discussions", "failed to read discussions file", err)
@@ -233,6 +264,10 @@ func HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath string, incl
 	}
 
 	if includePullRequests {
+		// Check for cancellation before reading pull requests file
+		if err := ctx.Err(); err != nil {
+			return nil, nil, nil, err
+		}
 		data, err := os.ReadFile(pullRequestsPath)
 		if err != nil {
 			layeredErr := errors.NewLayeredError("file", "read_pull_requests", "failed to read pull requests file", err)

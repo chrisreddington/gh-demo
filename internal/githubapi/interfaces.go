@@ -1,6 +1,8 @@
 package githubapi
 
 import (
+	"context"
+
 	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
@@ -10,15 +12,15 @@ import (
 // All methods should return appropriate errors when operations fail.
 type GitHubClient interface {
 	// ListLabels retrieves all existing labels from the repository
-	ListLabels() ([]string, error)
+	ListLabels(ctx context.Context) ([]string, error)
 	// CreateLabel creates a new label in the repository using the provided label data
-	CreateLabel(label types.Label) error
+	CreateLabel(ctx context.Context, label types.Label) error
 	// CreateIssue creates a new issue in the repository using the provided issue data
-	CreateIssue(issue types.Issue) error
+	CreateIssue(ctx context.Context, issue types.Issue) error
 	// CreateDiscussion creates a new discussion in the repository using the provided discussion data
-	CreateDiscussion(discussion types.Discussion) error
+	CreateDiscussion(ctx context.Context, discussion types.Discussion) error
 	// CreatePR creates a new pull request in the repository using the provided pull request data
-	CreatePR(pullRequest types.PullRequest) error
+	CreatePR(ctx context.Context, pullRequest types.PullRequest) error
 	// SetLogger sets the logger for debug output during API operations
 	SetLogger(logger common.Logger)
 }
