@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -50,27 +49,6 @@ func resolveRepositoryInfo(owner, repo string) (*repositoryInfo, error) {
 	return &repositoryInfo{
 		Owner: resolvedOwner,
 		Repo:  resolvedRepo,
-	}, nil
-}
-
-// configurationPaths holds the paths to all configuration files
-type configurationPaths struct {
-	Issues       string
-	Discussions  string
-	PullRequests string
-}
-
-// buildConfigurationPaths constructs the full paths to configuration files.
-func buildConfigurationPaths(ctx context.Context, configPath string) (*configurationPaths, error) {
-	root, err := hydrate.FindProjectRoot(ctx)
-	if err != nil {
-		return nil, errors.FileError("find_project_root", "could not find project root", err)
-	}
-
-	return &configurationPaths{
-		Issues:       filepath.Join(root, configPath, "issues.json"),
-		Discussions:  filepath.Join(root, configPath, "discussions.json"),
-		PullRequests: filepath.Join(root, configPath, "prs.json"),
 	}, nil
 }
 
@@ -121,11 +99,14 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 		return err
 	}
 
-	// Build configuration file paths
-	paths, err := buildConfigurationPaths(ctx, configPath)
+	// Find project root
+	root, err := hydrate.FindProjectRoot(ctx)
 	if err != nil {
-		return err
+		return errors.FileError("find_project_root", "could not find project root", err)
 	}
+
+	// Create configuration object
+	cfg := config.NewConfigurationWithRoot(ctx, root, configPath)
 
 	// Create and configure GitHub client
 	client, err := createGitHubClient(repoInfo, debug)
@@ -134,7 +115,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	}
 
 	// Perform hydration
-	err = hydrate.HydrateWithLabels(ctx, client, paths.Issues, paths.Discussions, paths.PullRequests, issues, discussions, pullRequests, debug)
+	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, debug)
 
 	// Handle the result
 	return handleHydrationResult(err, logger)

@@ -31,20 +31,19 @@ type SectionSummary struct {
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
 // It supports both explicit label definitions from labels.json and auto-generated labels with defaults.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
-func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
+func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *config.Configuration, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
 	logger := common.NewLogger(debug)
 
-	issues, discussions, pullRequests, err := HydrateFromFiles(ctx, issuesPath, discussionsPath, pullRequestsPath, includeIssues, includeDiscussions, includePullRequests)
+	issues, discussions, pullRequests, err := HydrateFromConfiguration(ctx, cfg, includeIssues, includeDiscussions, includePullRequests)
 	if err != nil {
 		return errors.ConfigError("load_config_files", "failed to load configuration files", err)
 	}
 
 	// Try to read explicit label definitions from labels.json
-	labelsPath := filepath.Join(filepath.Dir(issuesPath), "labels.json")
-	explicitLabels, err := ReadLabelsJSON(ctx, labelsPath)
+	explicitLabels, err := ReadLabelsJSON(ctx, cfg.LabelsPath)
 	if err != nil {
 		layeredErr := errors.NewLayeredError("config", "read_labels_config", "failed to read labels configuration", err)
-		return layeredErr.WithContext("path", labelsPath)
+		return layeredErr.WithContext("path", cfg.LabelsPath)
 	}
 
 	// Collect label names referenced in content
@@ -56,7 +55,7 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, issue
 	labelSummary := &SectionSummary{Name: "Labels", Total: len(labelsToEnsure)}
 
 	if len(explicitLabels) > 0 {
-		logger.Debug("Found %d explicit label definitions from %s", len(explicitLabels), labelsPath)
+		logger.Debug("Found %d explicit label definitions from %s", len(explicitLabels), cfg.LabelsPath)
 	}
 	logger.Debug("Found %d total labels to ensure exist", len(labelsToEnsure))
 
@@ -281,6 +280,29 @@ func EnsureDefinedLabelsExist(ctx context.Context, client githubapi.GitHubClient
 	}
 
 	return nil
+}
+
+// HydrateFromConfiguration loads issues, discussions, and pull requests from their respective JSON files
+// using a Configuration object. It only loads files for content types that are included.
+func HydrateFromConfiguration(ctx context.Context, cfg *config.Configuration, includeIssues, includeDiscussions, includePullRequests bool) ([]types.Issue, []types.Discussion, []types.PullRequest, error) {
+	return HydrateFromFiles(ctx, cfg.IssuesPath, cfg.DiscussionsPath, cfg.PullRequestsPath, includeIssues, includeDiscussions, includePullRequests)
+}
+
+// HydrateWithLabelsFromPaths is a backward compatibility wrapper for tests.
+// New code should use HydrateWithLabels with Configuration instead.
+func HydrateWithLabelsFromPaths(ctx context.Context, client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
+	// Create a configuration object from the individual paths
+	// Extract the base directory from the issues path
+	basePath := filepath.Dir(issuesPath)
+	cfg := config.NewConfiguration(basePath)
+
+	// Override the computed paths with the actual provided paths
+	cfg.IssuesPath = issuesPath
+	cfg.DiscussionsPath = discussionsPath
+	cfg.PullRequestsPath = pullRequestsPath
+	cfg.LabelsPath = filepath.Join(basePath, config.LabelsFilename)
+
+	return HydrateWithLabels(ctx, client, cfg, includeIssues, includeDiscussions, includePullRequests, debug)
 }
 
 // HydrateFromFiles loads issues, discussions, and pull requests from their respective JSON files.
