@@ -311,23 +311,6 @@ func HydrateFromConfiguration(ctx context.Context, cfg *config.Configuration, in
 	return HydrateFromFiles(ctx, cfg.IssuesPath, cfg.DiscussionsPath, cfg.PullRequestsPath, includeIssues, includeDiscussions, includePullRequests)
 }
 
-// HydrateWithLabelsFromPaths is a backward compatibility wrapper for tests.
-// New code should use HydrateWithLabels with Configuration instead.
-func HydrateWithLabelsFromPaths(ctx context.Context, client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
-	// Create a configuration object from the individual paths
-	// Extract the base directory from the issues path
-	basePath := filepath.Dir(issuesPath)
-	cfg := config.NewConfiguration(basePath)
-
-	// Override the computed paths with the actual provided paths
-	cfg.IssuesPath = issuesPath
-	cfg.DiscussionsPath = discussionsPath
-	cfg.PullRequestsPath = pullRequestsPath
-	cfg.LabelsPath = filepath.Join(basePath, config.LabelsFilename)
-
-	return HydrateWithLabels(ctx, client, cfg, includeIssues, includeDiscussions, includePullRequests, debug)
-}
-
 // CleanupBeforeHydration performs cleanup operations before hydration
 func CleanupBeforeHydration(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, logger common.Logger) (*CleanupSummary, error) {
 	summary := &CleanupSummary{

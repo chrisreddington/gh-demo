@@ -27,18 +27,16 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
-	issuesPath := filepath.Join(root, ".github", "demos", "issues.json")
-	discussionsPath := filepath.Join(root, ".github", "demos", "discussions.json")
-	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
+	cfg := config.NewConfigurationWithRoot(context.Background(), root, ".github/demos")
 
 	// Should not error with stubbed methods
-	err = HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err = HydrateWithLabels(context.Background(), client, cfg, true, true, true, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels with real GHClient failed: %v", err)
 	}
 }
 
-func TestHydrateWithLabelsFromPaths(t *testing.T) {
+func TestHydrateWithLabels(t *testing.T) {
 	// Setup mock client with only "bug" and "demo" existing
 	client := NewSuccessfulMockGitHubClient("bug", "demo")
 
@@ -47,12 +45,10 @@ func TestHydrateWithLabelsFromPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not find project root: %v", err)
 	}
-	issuesPath := filepath.Join(root, ".github", "demos", "issues.json")
-	discussionsPath := filepath.Join(root, ".github", "demos", "discussions.json")
-	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
+	cfg := config.NewConfigurationWithRoot(context.Background(), root, ".github/demos")
 
 	// Hydrate and ensure labels
-	err = HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err = HydrateWithLabels(context.Background(), client, cfg, true, true, true, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels failed: %v", err)
 	}
@@ -74,7 +70,7 @@ func TestHydrateOperations(t *testing.T) {
 	tests := []struct {
 		name        string
 		setupClient func() *ConfigurableMockGitHubClient
-		setupFiles  func(tempDir string) (issues, discussions, prs string)
+		setupFiles  func(tempDir string) *config.Configuration
 		expectError bool
 		errorText   string
 	}{
@@ -83,7 +79,7 @@ func TestHydrateOperations(t *testing.T) {
 			setupClient: func() *ConfigurableMockGitHubClient {
 				return NewSuccessfulMockGitHubClient("existing")
 			},
-			setupFiles: func(tempDir string) (string, string, string) {
+			setupFiles: func(tempDir string) *config.Configuration {
 				issues := `[{"title": "Test Issue", "body": "Test", "labels": ["bug"], "assignees": []}]`
 				discussions := `[{"title": "Test Discussion", "body": "Test", "category": "General", "labels": []}]`
 				prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
@@ -102,7 +98,7 @@ func TestHydrateOperations(t *testing.T) {
 					t.Fatalf("Failed to write PRs file: %v", err)
 				}
 
-				return issuesPath, discussionsPath, prsPath
+				return config.NewConfiguration(tempDir)
 			},
 			expectError: false,
 		},
@@ -114,13 +110,17 @@ func TestHydrateOperations(t *testing.T) {
 					IssueErrorMsg: "failed to create issue",
 				})
 			},
-			setupFiles: func(tempDir string) (string, string, string) {
+			setupFiles: func(tempDir string) *config.Configuration {
 				issues := `[{"title": "Test Issue", "body": "Test", "labels": [], "assignees": []}]`
 				issuesPath := filepath.Join(tempDir, "issues.json")
 				if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
 					t.Fatalf("Failed to write issues file: %v", err)
 				}
-				return issuesPath, "", ""
+				cfg := config.NewConfiguration(tempDir)
+				// Only create issues file, discussions and PRs paths will not exist
+				cfg.DiscussionsPath = ""
+				cfg.PullRequestsPath = ""
+				return cfg
 			},
 			expectError: true,
 			errorText:   "some items failed to create",
@@ -133,13 +133,17 @@ func TestHydrateOperations(t *testing.T) {
 					PRErrorMsg: "failed to create PR",
 				})
 			},
-			setupFiles: func(tempDir string) (string, string, string) {
+			setupFiles: func(tempDir string) *config.Configuration {
 				prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
 				prsPath := filepath.Join(tempDir, "prs.json")
 				if err := os.WriteFile(prsPath, []byte(prs), 0644); err != nil {
 					t.Fatalf("Failed to write PRs file: %v", err)
 				}
-				return "", "", prsPath
+				cfg := config.NewConfiguration(tempDir)
+				// Only create PRs file, issues and discussions paths will not exist
+				cfg.IssuesPath = ""
+				cfg.DiscussionsPath = ""
+				return cfg
 			},
 			expectError: true,
 			errorText:   "some items failed to create",
@@ -152,13 +156,17 @@ func TestHydrateOperations(t *testing.T) {
 					ListLabelsErrorMsg: "failed to list labels",
 				})
 			},
-			setupFiles: func(tempDir string) (string, string, string) {
+			setupFiles: func(tempDir string) *config.Configuration {
 				issues := `[{"title": "Test Issue", "body": "Test", "labels": ["new-label"], "assignees": []}]`
 				issuesPath := filepath.Join(tempDir, "issues.json")
 				if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
 					t.Fatalf("Failed to write issues file: %v", err)
 				}
-				return issuesPath, "", ""
+				cfg := config.NewConfiguration(tempDir)
+				// Only create issues file, discussions and PRs paths will not exist
+				cfg.DiscussionsPath = ""
+				cfg.PullRequestsPath = ""
+				return cfg
 			},
 			expectError: true,
 			errorText:   "failed to list labels",
@@ -170,11 +178,10 @@ func TestHydrateOperations(t *testing.T) {
 			client := tt.setupClient()
 			tempDir := t.TempDir()
 
-			issuesPath, discussionsPath, prsPath := tt.setupFiles(tempDir)
+			cfg := tt.setupFiles(tempDir)
 
-			err := HydrateWithLabelsFromPaths(context.Background(), client,
-				issuesPath, discussionsPath, prsPath,
-				issuesPath != "", discussionsPath != "", prsPath != "", false)
+			err := HydrateWithLabels(context.Background(), client, cfg,
+				cfg.IssuesPath != "", cfg.DiscussionsPath != "", cfg.PullRequestsPath != "", false)
 
 			if tt.expectError && err == nil {
 				t.Errorf("Expected error for %s but got none", tt.name)
@@ -238,29 +245,28 @@ func TestGracefulErrorHandling(t *testing.T) {
 
 	// Create temporary test files
 	tempDir := t.TempDir()
+	cfg := config.NewConfiguration(tempDir)
+
 	// Create issues.json
-	issuesPath := filepath.Join(tempDir, "issues.json")
 	issues := []types.Issue{{Title: "Test Issue", Body: "Test body", Labels: []string{"enhancement"}}}
 	issuesData, _ := json.Marshal(issues)
-	if err := os.WriteFile(issuesPath, issuesData, 0644); err != nil {
+	if err := os.WriteFile(cfg.IssuesPath, issuesData, 0644); err != nil {
 		t.Fatalf("failed to write test issues file: %v", err)
 	}
 	// Create prs.json
-	prsPath := filepath.Join(tempDir, "prs.json")
 	prs := []types.PullRequest{{Title: "Test PR", Body: "Test body", Head: "demo-branch", Base: "main", Labels: []string{"demo"}}}
 	prsData, _ := json.Marshal(prs)
-	if err := os.WriteFile(prsPath, prsData, 0644); err != nil {
+	if err := os.WriteFile(cfg.PullRequestsPath, prsData, 0644); err != nil {
 		t.Fatalf("failed to write test prs file: %v", err)
 	}
 
 	// Create empty discussions.json
-	discussionsPath := filepath.Join(tempDir, "discussions.json")
-	if err := os.WriteFile(discussionsPath, []byte("[]"), 0644); err != nil {
+	if err := os.WriteFile(cfg.DiscussionsPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("failed to write test discussions file: %v", err)
 	}
 
 	// Test that the function continues processing despite PR failure
-	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, false, true, false)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, false, true, false)
 
 	// Should return error mentioning the PR failure, but should have succeeded with issues
 	if err == nil {
@@ -284,22 +290,20 @@ func TestPRValidation(t *testing.T) {
 	// Use the real GHClient to test validation logic, but with no actual REST client
 	// since validation happens before the REST call
 	tempDir := t.TempDir()
+	cfg := config.NewConfiguration(tempDir)
 
 	// Create prs.json with invalid PR (empty head)
-	prsPath := filepath.Join(tempDir, "prs.json")
 	prs := []types.PullRequest{{Title: "Invalid PR", Body: "Test body", Head: "", Base: "main"}}
 	prsData, _ := json.Marshal(prs)
-	if err := os.WriteFile(prsPath, prsData, 0644); err != nil {
+	if err := os.WriteFile(cfg.PullRequestsPath, prsData, 0644); err != nil {
 		t.Fatalf("failed to write test prs file: %v", err)
 	}
 
 	// Create empty issues and discussions files
-	issuesPath := filepath.Join(tempDir, "issues.json")
-	discussionsPath := filepath.Join(tempDir, "discussions.json")
-	if err := os.WriteFile(issuesPath, []byte("[]"), 0644); err != nil {
+	if err := os.WriteFile(cfg.IssuesPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("failed to write test issues file: %v", err)
 	}
-	if err := os.WriteFile(discussionsPath, []byte("[]"), 0644); err != nil {
+	if err := os.WriteFile(cfg.DiscussionsPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("failed to write test discussions file: %v", err)
 	}
 
@@ -307,7 +311,7 @@ func TestPRValidation(t *testing.T) {
 	client := NewSuccessfulMockGitHubClient()
 
 	// Should fail gracefully with validation error
-	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, false, false, true, false)
+	err := HydrateWithLabels(context.Background(), client, cfg, false, false, true, false)
 
 	if err == nil {
 		// The MockGitHubClient doesn't implement validation, so this test won't work as expected
@@ -442,12 +446,15 @@ func TestHydrateWithLabels_ContextCancellation(t *testing.T) {
 
 	// Use temporary files
 	tempDir := t.TempDir()
-	issuesPath := filepath.Join(tempDir, "issues.json")
-	if err := os.WriteFile(issuesPath, []byte("[]"), 0644); err != nil {
+	cfg := config.NewConfiguration(tempDir)
+	if err := os.WriteFile(cfg.IssuesPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("Failed to create issues file: %v", err)
 	}
+	// Set other paths to empty to indicate not to process them
+	cfg.DiscussionsPath = ""
+	cfg.PullRequestsPath = ""
 
-	err := HydrateWithLabelsFromPaths(ctx, client, issuesPath, "", "", true, false, false, false)
+	err := HydrateWithLabels(ctx, client, cfg, true, false, false, false)
 	if err == nil {
 		t.Error("Expected context cancellation error")
 		return
@@ -714,24 +721,21 @@ func TestHydrateWithLabels_DebugMode(t *testing.T) {
 	client := NewSuccessfulMockGitHubClient()
 
 	tempDir := t.TempDir()
+	cfg := config.NewConfiguration(tempDir)
 
 	// Create minimal test files
-	issuesPath := filepath.Join(tempDir, "issues.json")
-	discussionsPath := filepath.Join(tempDir, "discussions.json")
-	prsPath := filepath.Join(tempDir, "prs.json")
-
-	if err := os.WriteFile(issuesPath, []byte("[]"), 0644); err != nil {
+	if err := os.WriteFile(cfg.IssuesPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("failed to write issues file: %v", err)
 	}
-	if err := os.WriteFile(discussionsPath, []byte("[]"), 0644); err != nil {
+	if err := os.WriteFile(cfg.DiscussionsPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("failed to write discussions file: %v", err)
 	}
-	if err := os.WriteFile(prsPath, []byte("[]"), 0644); err != nil {
+	if err := os.WriteFile(cfg.PullRequestsPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("failed to write prs file: %v", err)
 	}
 
 	// Test with debug mode enabled
-	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, true)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, true)
 	if err != nil {
 		t.Errorf("Expected no error with debug mode, got: %v", err)
 	}
@@ -741,8 +745,15 @@ func TestHydrateWithLabels_DebugMode(t *testing.T) {
 func TestHydrateWithLabels_FileReadError(t *testing.T) {
 	client := NewSuccessfulMockGitHubClient()
 
-	// Use non-existent files
-	err := HydrateWithLabelsFromPaths(context.Background(), client, "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, true, true, false)
+	// Use non-existent files in configuration
+	cfg := &config.Configuration{
+		BasePath:         "/non/existent",
+		IssuesPath:       "/non/existent/issues.json",
+		DiscussionsPath:  "/non/existent/discussions.json",
+		PullRequestsPath: "/non/existent/prs.json",
+		LabelsPath:       "/non/existent/labels.json",
+	}
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, false)
 	if err == nil {
 		t.Error("Expected error when files don't exist")
 	}
@@ -757,25 +768,23 @@ func TestHydrateWithLabels_EnsureLabelsExistError(t *testing.T) {
 	})
 
 	tempDir := t.TempDir()
+	cfg := config.NewConfiguration(tempDir)
 
 	// Create files with labels to trigger EnsureLabelsExist call
-	issuesPath := filepath.Join(tempDir, "issues.json")
 	issuesJSON := `[{"title": "Test Issue", "body": "Test body", "labels": ["bug"], "assignees": []}]`
-	if err := os.WriteFile(issuesPath, []byte(issuesJSON), 0644); err != nil {
+	if err := os.WriteFile(cfg.IssuesPath, []byte(issuesJSON), 0644); err != nil {
 		t.Fatalf("Failed to create issues file: %v", err)
 	}
 
-	discussionsPath := filepath.Join(tempDir, "discussions.json")
-	if err := os.WriteFile(discussionsPath, []byte("[]"), 0644); err != nil {
+	if err := os.WriteFile(cfg.DiscussionsPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("Failed to create discussions file: %v", err)
 	}
 
-	prsPath := filepath.Join(tempDir, "prs.json")
-	if err := os.WriteFile(prsPath, []byte("[]"), 0644); err != nil {
+	if err := os.WriteFile(cfg.PullRequestsPath, []byte("[]"), 0644); err != nil {
 		t.Fatalf("Failed to create prs file: %v", err)
 	}
 
-	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, false, false, false)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, false, false, false)
 
 	if err == nil {
 		t.Error("Expected error when EnsureLabelsExist fails")
@@ -796,27 +805,25 @@ func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
 	})
 
 	tempDir := t.TempDir()
+	cfg := config.NewConfiguration(tempDir)
 
 	// Create files with content that will fail
-	issuesPath := filepath.Join(tempDir, "issues.json")
 	issuesJSON := `[{"title": "Test Issue", "body": "Test body", "labels": [], "assignees": []}]`
-	if err := os.WriteFile(issuesPath, []byte(issuesJSON), 0644); err != nil {
+	if err := os.WriteFile(cfg.IssuesPath, []byte(issuesJSON), 0644); err != nil {
 		t.Fatalf("Failed to create issues file: %v", err)
 	}
 
-	discussionsPath := filepath.Join(tempDir, "discussions.json")
 	discussionsJSON := `[{"title": "Test Discussion", "body": "Test body", "category": "General", "labels": []}]`
-	if err := os.WriteFile(discussionsPath, []byte(discussionsJSON), 0644); err != nil {
+	if err := os.WriteFile(cfg.DiscussionsPath, []byte(discussionsJSON), 0644); err != nil {
 		t.Fatalf("Failed to create discussions file: %v", err)
 	}
 
-	prsPath := filepath.Join(tempDir, "prs.json")
 	prsJSON := `[{"title": "Test PR", "body": "Test body", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
-	if err := os.WriteFile(prsPath, []byte(prsJSON), 0644); err != nil {
+	if err := os.WriteFile(cfg.PullRequestsPath, []byte(prsJSON), 0644); err != nil {
 		t.Fatalf("Failed to create prs file: %v", err)
 	}
 
-	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, false)
 
 	// Should return aggregated errors
 	if err == nil {
@@ -841,31 +848,31 @@ func TestConfigurablePaths(t *testing.T) {
 	}
 
 	// Setup basic test files
-	issuesPath := filepath.Join(configDir, "issues.json")
 	issuesJSON := `[{"title": "Test Issue", "body": "Test body", "labels": ["bug"], "assignees": []}]`
-	if err := os.WriteFile(issuesPath, []byte(issuesJSON), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "issues.json"), []byte(issuesJSON), 0644); err != nil {
 		t.Fatalf("Failed to create issues.json: %v", err)
 	}
 
-	discussionsPath := filepath.Join(configDir, "discussions.json")
 	discussionsJSON := `[{"title": "Test Discussion", "body": "Test body", "category": "General", "labels": ["question"]}]`
-	if err := os.WriteFile(discussionsPath, []byte(discussionsJSON), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "discussions.json"), []byte(discussionsJSON), 0644); err != nil {
 		t.Fatalf("Failed to create discussions.json: %v", err)
 	}
 
-	prsPath := filepath.Join(configDir, "prs.json")
 	prsJSON := `[{"title": "Test PR", "body": "Test body", "head": "feature", "base": "main", "labels": ["enhancement"], "assignees": []}]`
-	if err := os.WriteFile(prsPath, []byte(prsJSON), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "prs.json"), []byte(prsJSON), 0644); err != nil {
 		t.Fatalf("Failed to create prs.json: %v", err)
 	}
+
+	// Create configuration object
+	cfg := config.NewConfigurationWithRoot(context.Background(), tempRoot, configPath)
 
 	// Create mock client
 	client := NewSuccessfulMockGitHubClient()
 
-	// Test hydration with the custom paths
-	err := HydrateWithLabelsFromPaths(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)
+	// Test hydration with the Configuration approach
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, false)
 	if err != nil {
-		t.Errorf("HydrateWithLabels failed with custom config path: %v", err)
+		t.Errorf("HydrateWithLabels failed with Configuration: %v", err)
 	}
 
 	// Verify that the mock client was called correctly
