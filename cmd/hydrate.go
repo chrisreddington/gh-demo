@@ -98,7 +98,7 @@ func handleHydrationResult(err error) error {
 			return nil // Partial failures are considered success for CLI purposes
 		} else {
 			// Complete failure
-			return fmt.Errorf("hydration failed: %v", err)
+			return errors.APIError("hydrate_repository", "hydration failed", err)
 		}
 	} else {
 		fmt.Println("Repository hydrated successfully!")

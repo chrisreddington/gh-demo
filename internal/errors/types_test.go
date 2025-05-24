@@ -9,12 +9,12 @@ import (
 // TestLayeredError_Error tests the Error() method formatting
 func TestLayeredError_Error(t *testing.T) {
 	tests := []struct {
-		name     string
-		layer    string
+		name      string
+		layer     string
 		operation string
-		message  string
-		cause    error
-		expected string
+		message   string
+		cause     error
+		expected  string
 	}{
 		{
 			name:      "error without cause",
@@ -56,7 +56,7 @@ func TestLayeredError_Error(t *testing.T) {
 func TestLayeredError_Unwrap(t *testing.T) {
 	cause := fmt.Errorf("underlying error")
 	err := NewLayeredError("api", "test", "test message", cause)
-	
+
 	if unwrapped := err.Unwrap(); unwrapped != cause {
 		t.Errorf("LayeredError.Unwrap() = %v, want %v", unwrapped, cause)
 	}
@@ -70,11 +70,11 @@ func TestLayeredError_Unwrap(t *testing.T) {
 // TestLayeredError_WithContext tests the WithContext() method
 func TestLayeredError_WithContext(t *testing.T) {
 	err := NewLayeredError("file", "read_config", "file not found", nil)
-	
+
 	// Add context
 	err.WithContext("path", "/path/to/config.json")
 	err.WithContext("expected_format", "JSON")
-	
+
 	if err.Context["path"] != "/path/to/config.json" {
 		t.Errorf("Expected context path = '/path/to/config.json', got %q", err.Context["path"])
 	}
@@ -86,9 +86,9 @@ func TestLayeredError_WithContext(t *testing.T) {
 // TestConvenienceFunctions tests the layer-specific error creation functions
 func TestConvenienceFunctions(t *testing.T) {
 	tests := []struct {
-		name     string
-		fn       func() error
-		layer    string
+		name      string
+		fn        func() error
+		layer     string
 		operation string
 	}{
 		{
@@ -231,21 +231,21 @@ func TestErrorCollector(t *testing.T) {
 // TestErrorCollector_IgnoreNil tests that nil errors are ignored
 func TestErrorCollector_IgnoreNil(t *testing.T) {
 	collector := NewErrorCollector("test_operation")
-	
+
 	collector.Add(nil)
 	collector.Add(fmt.Errorf("real error"))
 	collector.Add(nil)
-	
+
 	result := collector.Result()
 	if result == nil {
 		t.Error("Should return the non-nil error")
 	}
-	
+
 	// Should return single error, not partial failure
 	if IsPartialFailure(result) {
 		t.Error("Should return single error when only one non-nil error exists")
 	}
-	
+
 	if result.Error() != "real error" {
 		t.Errorf("Expected 'real error', got %q", result.Error())
 	}
@@ -255,16 +255,16 @@ func TestErrorCollector_IgnoreNil(t *testing.T) {
 func TestPartialFailureError_Compatibility(t *testing.T) {
 	errors := []string{"error 1", "error 2", "error 3"}
 	err := NewPartialFailureError(errors)
-	
+
 	if !IsPartialFailure(err) {
 		t.Error("IsPartialFailure should detect PartialFailureError")
 	}
-	
+
 	errMsg := err.Error()
 	if !strings.Contains(errMsg, "some items failed to create") {
 		t.Error("PartialFailureError should contain expected message")
 	}
-	
+
 	for _, errStr := range errors {
 		if !strings.Contains(errMsg, errStr) {
 			t.Errorf("PartialFailureError should contain error: %s", errStr)

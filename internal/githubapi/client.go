@@ -162,14 +162,14 @@ func (c *RESTClient) Request(method string, path string, body interface{}, respo
 			}
 			if jsonErr := json.Unmarshal(bodyBytes, &apiError); jsonErr == nil && apiError.Message != "" {
 				if len(apiError.Errors) > 0 {
-					return fmt.Errorf("HTTP %d: %s - %s", resp.StatusCode, apiError.Message, apiError.Errors[0].Message)
+					return errors.APIError("http_request", fmt.Sprintf("HTTP %d: %s - %s", resp.StatusCode, apiError.Message, apiError.Errors[0].Message), nil)
 				}
-				return fmt.Errorf("HTTP %d: %s", resp.StatusCode, apiError.Message)
+				return errors.APIError("http_request", fmt.Sprintf("HTTP %d: %s", resp.StatusCode, apiError.Message), nil)
 			}
 			// If not parseable as JSON, return raw body
-			return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+			return errors.APIError("http_request", fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(bodyBytes)), nil)
 		}
-		return fmt.Errorf("API request failed with status %d", resp.StatusCode)
+		return errors.APIError("http_request", fmt.Sprintf("API request failed with status %d", resp.StatusCode), nil)
 	}
 
 	return nil
@@ -178,7 +178,7 @@ func (c *RESTClient) Request(method string, path string, body interface{}, respo
 // Label operations
 func (c *GHClient) ListLabels() ([]string, error) {
 	if c.gqlClient == nil {
-		return nil, fmt.Errorf("GraphQL client is not initialized")
+		return nil, errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
 
 	c.debugLog("Fetching labels from repository %s/%s", c.Owner, c.Repo)
@@ -300,7 +300,7 @@ func (c *GHClient) CreateIssue(issue types.Issue) error {
 // The method automatically finds the correct category ID and adds labels after creation.
 func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 	if c.gqlClient == nil {
-		return fmt.Errorf("GraphQL client is not initialized")
+		return errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
 
 	c.debugLog("Creating discussion '%s' in repository %s/%s", discussion.Title, c.Owner, c.Repo)
@@ -340,7 +340,7 @@ func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 	err := c.gqlClient.Do(repoQuery, repoVariables, &repoResponse)
 	if err != nil {
 		c.debugLog("Failed to fetch repository info for discussion: %v", err)
-		return fmt.Errorf("failed to fetch repository info: %w", err)
+		return errors.APIError("fetch_repository_info", "failed to fetch repository info", err)
 	}
 
 	// Get available categories for debugging
@@ -365,8 +365,8 @@ func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 	if categoryID == "" {
 		c.debugLog("Discussion category '%s' not found in available categories: %v",
 			discussion.Category, availableCategories)
-		return fmt.Errorf("discussion category '%s' not found in available categories: %v",
-			discussion.Category, availableCategories)
+		layeredErr := errors.ValidationError("validate_discussion_category", fmt.Sprintf("discussion category '%s' not found in available categories", discussion.Category))
+		return layeredErr.(*errors.LayeredError).WithContext("requested_category", discussion.Category).WithContext("available_categories", fmt.Sprintf("%v", availableCategories))
 	}
 
 	c.debugLog("Found matching category ID for '%s': %s (actual: '%s')",
@@ -413,7 +413,7 @@ func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 	err = c.gqlClient.Do(createMutation, mutationVariables, &mutationResponse)
 	if err != nil {
 		c.debugLog("Failed to create discussion '%s': %v", discussion.Title, err)
-		return fmt.Errorf("failed to create discussion: %w", err)
+		return errors.APIError("create_discussion", "failed to create discussion", err)
 	}
 
 	// Debug: Log what we got back from GitHub
@@ -426,7 +426,8 @@ func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 	// Verify discussion was created by checking for a valid ID and URL
 	if mutationResponse.CreateDiscussion.Discussion.ID == "" {
 		c.debugLog("Discussion creation for '%s' failed - no Discussion ID returned", discussion.Title)
-		return fmt.Errorf("discussion creation for '%s' failed - no Discussion ID returned from GitHub API", discussion.Title)
+		layeredErr := errors.APIError("create_discussion", "discussion creation failed - no Discussion ID returned from GitHub API", nil)
+		return layeredErr.(*errors.LayeredError).WithContext("title", discussion.Title)
 	}
 
 	discussionID := mutationResponse.CreateDiscussion.Discussion.ID
@@ -482,11 +483,12 @@ func (c *GHClient) addLabelToDiscussion(discussionID, labelName string) error {
 
 	err := c.gqlClient.Do(labelQuery, labelVariables, &labelResponse)
 	if err != nil {
-		return fmt.Errorf("failed to find label '%s': %w", labelName, err)
+		return errors.APIError("find_label", fmt.Sprintf("failed to find label '%s'", labelName), err)
 	}
 
 	if labelResponse.Repository.Label.ID == "" {
-		return fmt.Errorf("label '%s' not found in repository", labelName)
+		layeredErr := errors.ValidationError("validate_label", fmt.Sprintf("label '%s' not found in repository", labelName))
+		return layeredErr.(*errors.LayeredError).WithContext("label_name", labelName)
 	}
 
 	// Add the label to the discussion
@@ -513,7 +515,7 @@ func (c *GHClient) addLabelToDiscussion(discussionID, labelName string) error {
 
 	err = c.gqlClient.Do(addLabelMutation, labelMutationVariables, &labelMutationResponse)
 	if err != nil {
-		return fmt.Errorf("failed to add label '%s' to discussion: %w", labelName, err)
+		return errors.APIError("add_label_to_discussion", fmt.Sprintf("failed to add label '%s' to discussion", labelName), err)
 	}
 
 	return nil
@@ -523,7 +525,7 @@ func (c *GHClient) addLabelToDiscussion(discussionID, labelName string) error {
 // It validates the head and base branches, creates the PR via REST API, and adds labels/assignees if specified.
 func (c *GHClient) CreatePR(pullRequest types.PullRequest) error {
 	if c.restClient == nil {
-		return fmt.Errorf("REST client is not initialized")
+		return errors.ValidationError("validate_client", "REST client is not initialized")
 	}
 
 	c.debugLog("Creating pull request '%s' in repository %s/%s (head: %s, base: %s)", pullRequest.Title, c.Owner, c.Repo, pullRequest.Head, pullRequest.Base)
@@ -554,7 +556,8 @@ func (c *GHClient) CreatePR(pullRequest types.PullRequest) error {
 	err := c.restClient.Request("POST", path, payload, &response)
 	if err != nil {
 		c.debugLog("Failed to create pull request '%s': %v", pullRequest.Title, err)
-		return fmt.Errorf("failed to create pull request '%s' (head: %s, base: %s): %w", pullRequest.Title, pullRequest.Head, pullRequest.Base, err)
+		layeredErr := errors.APIError("create_pull_request", "failed to create pull request", err)
+		return layeredErr.(*errors.LayeredError).WithContext("title", pullRequest.Title).WithContext("head", pullRequest.Head).WithContext("base", pullRequest.Base)
 	}
 
 	// If the PR was created successfully and has labels/assignees, add them
@@ -568,7 +571,8 @@ func (c *GHClient) CreatePR(pullRequest types.PullRequest) error {
 		issuePath := fmt.Sprintf("repos/%s/%s/issues/%d", c.Owner, c.Repo, int(prNumber))
 		if err := c.restClient.Request("PATCH", issuePath, issuePayload, nil); err != nil {
 			c.debugLog("Failed to add labels/assignees to PR '%s': %v", pullRequest.Title, err)
-			return fmt.Errorf("created PR '%s' but failed to add labels/assignees: %w", pullRequest.Title, err)
+			layeredErr := errors.APIError("add_pr_labels_assignees", "created PR but failed to add labels/assignees", err)
+			return layeredErr.(*errors.LayeredError).WithContext("title", pullRequest.Title)
 		}
 	}
 
