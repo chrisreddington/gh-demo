@@ -61,8 +61,8 @@ type configurationPaths struct {
 }
 
 // buildConfigurationPaths constructs the full paths to configuration files.
-func buildConfigurationPaths(configPath string) (*configurationPaths, error) {
-	root, err := hydrate.FindProjectRoot()
+func buildConfigurationPaths(ctx context.Context, configPath string) (*configurationPaths, error) {
+	root, err := hydrate.FindProjectRoot(ctx)
 	if err != nil {
 		return nil, errors.FileError("find_project_root", "could not find project root", err)
 	}
@@ -91,19 +91,19 @@ func createGitHubClient(repoInfo *repositoryInfo, debug bool) (githubapi.GitHubC
 
 // handleHydrationResult processes the result of the hydration operation.
 // It handles both complete failures and partial failures with appropriate user feedback.
-func handleHydrationResult(err error) error {
+func handleHydrationResult(err error, logger common.Logger) error {
 	if err != nil {
 		// Check if this is a partial failure using proper error type detection
 		if errors.IsPartialFailure(err) {
+			logger.Info("Repository hydration completed with some failures")
 			fmt.Fprintf(os.Stderr, "Hydration completed with some failures:\n%v\n", err)
-			fmt.Println("Repository hydration completed with some failures. Check the errors above for details.")
 			return nil // Partial failures are considered success for CLI purposes
 		} else {
 			// Complete failure
 			return errors.APIError("hydrate_repository", "hydration failed", err)
 		}
 	} else {
-		fmt.Println("Repository hydrated successfully!")
+		logger.Info("Repository hydrated successfully")
 	}
 	return nil
 }
@@ -112,6 +112,9 @@ func handleHydrationResult(err error) error {
 // executeHydrate performs the hydration operation with the given parameters.
 // It validates required parameters, resolves git context if needed, and orchestrates the hydration process.
 func executeHydrate(ctx context.Context, owner, repo, configPath string, issues, discussions, pullRequests, debug bool) error {
+	// Create logger for operations
+	logger := common.NewLogger(false) // Always create logger for user feedback
+
 	// Resolve repository information
 	repoInfo, err := resolveRepositoryInfo(owner, repo)
 	if err != nil {
@@ -119,7 +122,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	}
 
 	// Build configuration file paths
-	paths, err := buildConfigurationPaths(configPath)
+	paths, err := buildConfigurationPaths(ctx, configPath)
 	if err != nil {
 		return err
 	}
@@ -134,7 +137,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	err = hydrate.HydrateWithLabels(ctx, client, paths.Issues, paths.Discussions, paths.PullRequests, issues, discussions, pullRequests, debug)
 
 	// Handle the result
-	return handleHydrationResult(err)
+	return handleHydrationResult(err, logger)
 }
 
 // NewHydrateCmd returns the Cobra command for repository hydration

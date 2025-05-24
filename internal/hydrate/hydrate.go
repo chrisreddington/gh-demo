@@ -41,7 +41,7 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, issue
 
 	// Try to read explicit label definitions from labels.json
 	labelsPath := filepath.Join(filepath.Dir(issuesPath), "labels.json")
-	explicitLabels, err := ReadLabelsJSON(labelsPath)
+	explicitLabels, err := ReadLabelsJSON(ctx, labelsPath)
 	if err != nil {
 		layeredErr := errors.NewLayeredError("config", "read_labels_config", "failed to read labels configuration", err)
 		return layeredErr.WithContext("path", labelsPath)
@@ -311,10 +311,20 @@ func CollectLabels(issues []types.Issue, discussions []types.Discussion, pullReq
 // ReadLabelsJSON reads label definitions from a JSON file.
 // This allows users to define labels with specific colors and descriptions.
 // Returns an empty slice if the file doesn't exist (not an error condition).
-func ReadLabelsJSON(labelsPath string) ([]types.Label, error) {
+func ReadLabelsJSON(ctx context.Context, labelsPath string) ([]types.Label, error) {
+	// Check for cancellation before starting file operations
+	if err := ctx.Err(); err != nil {
+		return nil, errors.ContextError("read_labels", err)
+	}
+
 	if _, err := os.Stat(labelsPath); os.IsNotExist(err) {
 		// File doesn't exist, return empty slice (not an error)
 		return []types.Label{}, nil
+	}
+
+	// Check for cancellation before reading file
+	if err := ctx.Err(); err != nil {
+		return nil, errors.ContextError("read_labels", err)
 	}
 
 	content, err := os.ReadFile(labelsPath)
@@ -333,16 +343,26 @@ func ReadLabelsJSON(labelsPath string) ([]types.Label, error) {
 }
 
 // FindProjectRoot traverses up from the current file to find the directory containing go.mod
-func FindProjectRoot() (string, error) {
+func FindProjectRoot(ctx context.Context) (string, error) {
+	// Check for cancellation before starting directory traversal
+	if err := ctx.Err(); err != nil {
+		return "", errors.ContextError("find_project_root", err)
+	}
+
 	_, filename, _, _ := runtime.Caller(0)
 	dir := filepath.Dir(filename)
 	for {
+		// Check for cancellation during each iteration
+		if err := ctx.Err(); err != nil {
+			return "", errors.ContextError("find_project_root", err)
+		}
+
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
 			return dir, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", os.ErrNotExist
+			return "", errors.FileError("find_project_root", "could not find project root (no go.mod found)", os.ErrNotExist)
 		}
 		dir = parent
 	}
