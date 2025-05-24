@@ -28,6 +28,29 @@ type SectionSummary struct {
 	Errors   []string // Detailed error messages for failed operations
 }
 
+// CleanupOptions defines the options for cleanup operations
+type CleanupOptions struct {
+	CleanIssues      bool
+	CleanDiscussions bool
+	CleanPRs         bool
+	CleanLabels      bool
+	DryRun           bool
+	PreserveConfig   *PreserveConfig
+}
+
+// CleanupSummary holds statistics for cleanup operations
+type CleanupSummary struct {
+	IssuesDeleted        int
+	IssuesPreserved      int
+	DiscussionsDeleted   int
+	DiscussionsPreserved int
+	PRsDeleted           int
+	PRsPreserved         int
+	LabelsDeleted        int
+	LabelsPreserved      int
+	Errors               []string
+}
+
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
 // It supports both explicit label definitions from labels.json and auto-generated labels with defaults.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
@@ -303,6 +326,215 @@ func HydrateWithLabelsFromPaths(ctx context.Context, client githubapi.GitHubClie
 	cfg.LabelsPath = filepath.Join(basePath, config.LabelsFilename)
 
 	return HydrateWithLabels(ctx, client, cfg, includeIssues, includeDiscussions, includePullRequests, debug)
+}
+
+// CleanupBeforeHydration performs cleanup operations before hydration
+func CleanupBeforeHydration(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, logger common.Logger) (*CleanupSummary, error) {
+	summary := &CleanupSummary{
+		Errors: make([]string, 0),
+	}
+
+	logger.Info("Starting cleanup operations (dry-run: %v)", options.DryRun)
+
+	var allErrors []string
+
+	// Clean issues
+	if options.CleanIssues {
+		issueErrors := cleanupIssues(ctx, client, options, summary, logger)
+		if len(issueErrors) > 0 {
+			allErrors = append(allErrors, issueErrors...)
+		}
+	}
+
+	// Clean discussions
+	if options.CleanDiscussions {
+		discussionErrors := cleanupDiscussions(ctx, client, options, summary, logger)
+		if len(discussionErrors) > 0 {
+			allErrors = append(allErrors, discussionErrors...)
+		}
+	}
+
+	// Clean pull requests
+	if options.CleanPRs {
+		prErrors := cleanupPRs(ctx, client, options, summary, logger)
+		if len(prErrors) > 0 {
+			allErrors = append(allErrors, prErrors...)
+		}
+	}
+
+	// Clean labels
+	if options.CleanLabels {
+		labelErrors := cleanupLabels(ctx, client, options, summary, logger)
+		if len(labelErrors) > 0 {
+			allErrors = append(allErrors, labelErrors...)
+		}
+	}
+
+	summary.Errors = allErrors
+
+	// Log summary
+	logger.Info("Cleanup summary: Issues(%d deleted, %d preserved), Discussions(%d deleted, %d preserved), PRs(%d deleted, %d preserved), Labels(%d deleted, %d preserved)",
+		summary.IssuesDeleted, summary.IssuesPreserved,
+		summary.DiscussionsDeleted, summary.DiscussionsPreserved,
+		summary.PRsDeleted, summary.PRsPreserved,
+		summary.LabelsDeleted, summary.LabelsPreserved)
+
+	if len(allErrors) > 0 {
+		logger.Info("Cleanup completed with %d errors", len(allErrors))
+		// Return partial failure error if there were errors
+		return summary, errors.NewPartialFailureError(allErrors)
+	}
+
+	logger.Info("Cleanup completed successfully")
+	return summary, nil
+}
+
+// cleanupIssues handles cleanup of issues
+func cleanupIssues(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
+	var errs []string
+
+	issues, err := client.ListIssues(ctx)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to list issues: %v", err)
+		logger.Info(errMsg)
+		return []string{errMsg}
+	}
+
+	logger.Debug("Found %d issues to evaluate for cleanup", len(issues))
+
+	for _, issue := range issues {
+		if options.PreserveConfig != nil && options.PreserveConfig.ShouldPreserveIssue(issue) {
+			summary.IssuesPreserved++
+			logger.Debug("Preserving issue: %s", issue.Title)
+			continue
+		}
+
+		if options.DryRun {
+			logger.Info("Would delete issue: %s", issue.Title)
+		} else {
+			logger.Debug("Deleting issue: %s", issue.Title)
+			if err := client.DeleteIssue(ctx, issue.NodeID); err != nil {
+				errMsg := fmt.Sprintf("failed to delete issue '%s': %v", issue.Title, err)
+				logger.Info(errMsg)
+				errs = append(errs, errMsg)
+				continue
+			}
+		}
+		summary.IssuesDeleted++
+	}
+
+	return errs
+}
+
+// cleanupDiscussions handles cleanup of discussions
+func cleanupDiscussions(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
+	var errs []string
+
+	discussions, err := client.ListDiscussions(ctx)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to list discussions: %v", err)
+		logger.Info(errMsg)
+		return []string{errMsg}
+	}
+
+	logger.Debug("Found %d discussions to evaluate for cleanup", len(discussions))
+
+	for _, discussion := range discussions {
+		if options.PreserveConfig != nil && options.PreserveConfig.ShouldPreserveDiscussion(discussion) {
+			summary.DiscussionsPreserved++
+			logger.Debug("Preserving discussion: %s", discussion.Title)
+			continue
+		}
+
+		if options.DryRun {
+			logger.Info("Would delete discussion: %s", discussion.Title)
+		} else {
+			logger.Debug("Deleting discussion: %s", discussion.Title)
+			if err := client.DeleteDiscussion(ctx, discussion.NodeID); err != nil {
+				errMsg := fmt.Sprintf("failed to delete discussion '%s': %v", discussion.Title, err)
+				logger.Info(errMsg)
+				errs = append(errs, errMsg)
+				continue
+			}
+		}
+		summary.DiscussionsDeleted++
+	}
+
+	return errs
+}
+
+// cleanupPRs handles cleanup of pull requests
+func cleanupPRs(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
+	var errs []string
+
+	prs, err := client.ListPRs(ctx)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to list pull requests: %v", err)
+		logger.Info(errMsg)
+		return []string{errMsg}
+	}
+
+	logger.Debug("Found %d pull requests to evaluate for cleanup", len(prs))
+
+	for _, pr := range prs {
+		if options.PreserveConfig != nil && options.PreserveConfig.ShouldPreservePR(pr) {
+			summary.PRsPreserved++
+			logger.Debug("Preserving PR: %s", pr.Title)
+			continue
+		}
+
+		if options.DryRun {
+			logger.Info("Would delete PR: %s", pr.Title)
+		} else {
+			logger.Debug("Deleting PR: %s", pr.Title)
+			if err := client.DeletePR(ctx, pr.NodeID); err != nil {
+				errMsg := fmt.Sprintf("failed to delete PR '%s': %v", pr.Title, err)
+				logger.Info(errMsg)
+				errs = append(errs, errMsg)
+				continue
+			}
+		}
+		summary.PRsDeleted++
+	}
+
+	return errs
+}
+
+// cleanupLabels handles cleanup of labels
+func cleanupLabels(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
+	var errs []string
+
+	labelNames, err := client.ListLabels(ctx)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to list labels: %v", err)
+		logger.Info(errMsg)
+		return []string{errMsg}
+	}
+
+	logger.Debug("Found %d labels to evaluate for cleanup", len(labelNames))
+
+	for _, labelName := range labelNames {
+		if options.PreserveConfig != nil && options.PreserveConfig.ShouldPreserveLabel(labelName) {
+			summary.LabelsPreserved++
+			logger.Debug("Preserving label: %s", labelName)
+			continue
+		}
+
+		if options.DryRun {
+			logger.Info("Would delete label: %s", labelName)
+		} else {
+			logger.Debug("Deleting label: %s", labelName)
+			if err := client.DeleteLabel(ctx, labelName); err != nil {
+				errMsg := fmt.Sprintf("failed to delete label '%s': %v", labelName, err)
+				logger.Info(errMsg)
+				errs = append(errs, errMsg)
+				continue
+			}
+		}
+		summary.LabelsDeleted++
+	}
+
+	return errs
 }
 
 // HydrateFromFiles loads issues, discussions, and pull requests from their respective JSON files.
