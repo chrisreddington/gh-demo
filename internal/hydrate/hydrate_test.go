@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,64 +37,10 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 	}
 }
 
-// MockGitHubClient is a mock for label operations
-type MockGitHubClient struct {
-	ExistingLabels     map[string]bool
-	CreatedLabels      []string
-	FailPRs            bool // If true, CreatePR will fail
-	FailIssues         bool // If true, CreateIssue will fail
-	FailListLabels     bool // If true, ListLabels will fail
-	CreatedIssues      []types.Issue
-	CreatedDiscussions []types.Discussion
-	CreatedPRs         []types.PullRequest
-}
-
-// Add stubs for the rest of the interface
-func (m *MockGitHubClient) CreateIssue(ctx context.Context, issue types.Issue) error {
-	if m.FailIssues {
-		return fmt.Errorf("simulated issue creation failure for: %s", issue.Title)
-	}
-	m.CreatedIssues = append(m.CreatedIssues, issue)
-	return nil
-}
-
-func (m *MockGitHubClient) CreateDiscussion(ctx context.Context, discussion types.Discussion) error {
-	m.CreatedDiscussions = append(m.CreatedDiscussions, discussion)
-	return nil
-}
-
-func (m *MockGitHubClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) error {
-	if m.FailPRs {
-		return fmt.Errorf("simulated PR creation failure for: %s (head: %s, base: %s)", pullRequest.Title, pullRequest.Head, pullRequest.Base)
-	}
-	m.CreatedPRs = append(m.CreatedPRs, pullRequest)
-	return nil
-}
-
-func (m *MockGitHubClient) ListLabels(ctx context.Context) ([]string, error) {
-	if m.FailListLabels {
-		return nil, fmt.Errorf("simulated list labels failure")
-	}
-	labels := make([]string, 0, len(m.ExistingLabels))
-	for l := range m.ExistingLabels {
-		labels = append(labels, l)
-	}
-	return labels, nil
-}
-
-func (m *MockGitHubClient) CreateLabel(ctx context.Context, label types.Label) error {
-	m.CreatedLabels = append(m.CreatedLabels, label.Name)
-	m.ExistingLabels[label.Name] = true
-	return nil
-}
-
-func (m *MockGitHubClient) SetLogger(logger common.Logger) {
-	// Mock implementation - does nothing
-}
 
 func TestHydrateWithLabels(t *testing.T) {
 	// Setup mock client with only "bug" and "demo" existing
-	client := &MockGitHubClient{ExistingLabels: map[string]bool{"bug": true, "demo": true}}
+	client := NewSuccessfulMockGitHubClient("bug", "demo")
 
 	// Use demo files for content
 	root, err := FindProjectRoot(context.Background())
@@ -121,6 +66,128 @@ func TestHydrateWithLabels(t *testing.T) {
 	// Should not create "bug" or "demo" again
 	if created["bug"] || created["demo"] {
 		t.Error("should not create labels that already exist")
+	}
+}
+
+// TestHydrateOperations provides comprehensive testing of hydrate operations with table-driven approach
+func TestHydrateOperations(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupClient func() *ConfigurableMockGitHubClient
+		setupFiles  func(tempDir string) (issues, discussions, prs string)
+		expectError bool
+		errorText   string
+	}{
+		{
+			name: "successful hydration",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				return NewSuccessfulMockGitHubClient("existing")
+			},
+			setupFiles: func(tempDir string) (string, string, string) {
+				issues := `[{"title": "Test Issue", "body": "Test", "labels": ["bug"], "assignees": []}]`
+				discussions := `[{"title": "Test Discussion", "body": "Test", "category": "General", "labels": []}]`
+				prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
+				
+				issuesPath := filepath.Join(tempDir, "issues.json")
+				discussionsPath := filepath.Join(tempDir, "discussions.json")
+				prsPath := filepath.Join(tempDir, "prs.json")
+				
+				if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
+					t.Fatalf("Failed to write issues file: %v", err)
+				}
+				if err := os.WriteFile(discussionsPath, []byte(discussions), 0644); err != nil {
+					t.Fatalf("Failed to write discussions file: %v", err)
+				}
+				if err := os.WriteFile(prsPath, []byte(prs), 0644); err != nil {
+					t.Fatalf("Failed to write PRs file: %v", err)
+				}
+				
+				return issuesPath, discussionsPath, prsPath
+			},
+			expectError: false,
+		},
+		{
+			name: "issue creation failure",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				return NewFailingMockGitHubClient(MockConfig{
+					FailIssues: true,
+					IssueErrorMsg: "failed to create issue",
+				})
+			},
+			setupFiles: func(tempDir string) (string, string, string) {
+				issues := `[{"title": "Test Issue", "body": "Test", "labels": [], "assignees": []}]`
+				issuesPath := filepath.Join(tempDir, "issues.json")
+				if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
+					t.Fatalf("Failed to write issues file: %v", err)
+				}
+				return issuesPath, "", ""
+			},
+			expectError: true,
+			errorText:   "some items failed to create",
+		},
+		{
+			name: "PR creation failure",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				return NewFailingMockGitHubClient(MockConfig{
+					FailPRs: true,
+					PRErrorMsg: "failed to create PR",
+				})
+			},
+			setupFiles: func(tempDir string) (string, string, string) {
+				prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": [], "assignees": []}]`
+				prsPath := filepath.Join(tempDir, "prs.json")
+				if err := os.WriteFile(prsPath, []byte(prs), 0644); err != nil {
+					t.Fatalf("Failed to write PRs file: %v", err)
+				}
+				return "", "", prsPath
+			},
+			expectError: true,
+			errorText:   "some items failed to create",
+		},
+		{
+			name: "label listing failure",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				return NewFailingMockGitHubClient(MockConfig{
+					FailListLabels: true,
+					ListLabelsErrorMsg: "failed to list labels",
+				})
+			},
+			setupFiles: func(tempDir string) (string, string, string) {
+				issues := `[{"title": "Test Issue", "body": "Test", "labels": ["new-label"], "assignees": []}]`
+				issuesPath := filepath.Join(tempDir, "issues.json")
+				if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
+					t.Fatalf("Failed to write issues file: %v", err)
+				}
+				return issuesPath, "", ""
+			},
+			expectError: true,
+			errorText:   "failed to list labels",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := tt.setupClient()
+			tempDir := t.TempDir()
+			
+			issuesPath, discussionsPath, prsPath := tt.setupFiles(tempDir)
+			
+			err := HydrateWithLabels(context.Background(), client, 
+				issuesPath, discussionsPath, prsPath, 
+				issuesPath != "", discussionsPath != "", prsPath != "", false)
+
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error for %s but got none", tt.name)
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error for %s: %v", tt.name, err)
+			}
+			if tt.expectError && err != nil && tt.errorText != "" {
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain '%s', got: %v", tt.errorText, err)
+				}
+			}
+		})
 	}
 }
 
@@ -164,10 +231,10 @@ func TestReadDiscussionsJSON(t *testing.T) {
 
 func TestGracefulErrorHandling(t *testing.T) {
 	// Create a mock client that fails PR creation but succeeds for everything else
-	client := &MockGitHubClient{
+	client := NewFailingMockGitHubClient(MockConfig{
 		ExistingLabels: map[string]bool{"enhancement": true, "demo": true},
 		FailPRs:        true, // Simulate PR creation failures
-	}
+	})
 
 	// Create temporary test files
 	tempDir := t.TempDir()
@@ -237,9 +304,7 @@ func TestPRValidation(t *testing.T) {
 	}
 
 	// Use real GHClient with mock that has no REST client to test validation
-	client := &MockGitHubClient{
-		ExistingLabels: map[string]bool{},
-	}
+	client := NewSuccessfulMockGitHubClient()
 
 	// Should fail gracefully with validation error
 	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, false, false, true, false)
@@ -373,9 +438,7 @@ func TestHydrateWithLabels_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	client := &MockGitHubClient{
-		ExistingLabels: map[string]bool{},
-	}
+	client := NewSuccessfulMockGitHubClient()
 
 	// Use temporary files
 	tempDir := t.TempDir()
@@ -586,12 +649,7 @@ func TestFindProjectRoot(t *testing.T) {
 // Test EnsureLabelsExist with different scenarios
 func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 	// Create a mock client that implements the interface properly
-	client := &MockGitHubClient{
-		ExistingLabels: map[string]bool{
-			"existing": true,
-		},
-		CreatedLabels: []string{},
-	}
+	client := NewSuccessfulMockGitHubClient("existing")
 
 	// The mock should be configured to fail for "fail" label and succeed for others
 	// Let's test with a successful case first to ensure the basic flow works
@@ -613,11 +671,10 @@ func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 // TestEnsureLabelsExist_ListLabelsError tests error handling when ListLabels fails
 func TestEnsureLabelsExist_ListLabelsError(t *testing.T) {
 	// Create a mock client that fails on ListLabels
-	client := &MockGitHubClient{
-		FailListLabels: true, // This will cause ListLabels to return an error
+	client := NewFailingMockGitHubClient(MockConfig{
+		FailListLabels: true,
 		ExistingLabels: map[string]bool{},
-		CreatedLabels:  []string{},
-	}
+	})
 
 	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
@@ -638,10 +695,7 @@ func TestEnsureLabelsExist_ListLabelsError(t *testing.T) {
 
 // TestEnsureLabelsExist_EmptyLabels tests the early return when no labels provided
 func TestEnsureLabelsExist_EmptyLabels(t *testing.T) {
-	client := &MockGitHubClient{
-		ExistingLabels: map[string]bool{},
-		CreatedLabels:  []string{},
-	}
+	client := NewSuccessfulMockGitHubClient()
 
 	logger := common.NewLogger(false)
 	summary := &SectionSummary{}
@@ -657,10 +711,7 @@ func TestEnsureLabelsExist_EmptyLabels(t *testing.T) {
 
 // Test HydrateWithLabels with debug mode
 func TestHydrateWithLabels_DebugMode(t *testing.T) {
-	client := &MockGitHubClient{
-		ExistingLabels: map[string]bool{},
-		CreatedLabels:  []string{},
-	}
+	client := NewSuccessfulMockGitHubClient()
 
 	tempDir := t.TempDir()
 
@@ -688,10 +739,7 @@ func TestHydrateWithLabels_DebugMode(t *testing.T) {
 
 // Test error case where file reading fails
 func TestHydrateWithLabels_FileReadError(t *testing.T) {
-	client := &MockGitHubClient{
-		ExistingLabels: map[string]bool{},
-		CreatedLabels:  []string{},
-	}
+	client := NewSuccessfulMockGitHubClient()
 
 	// Use non-existent files
 	err := HydrateWithLabels(context.Background(), client, "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json", true, true, true, false)
@@ -703,11 +751,10 @@ func TestHydrateWithLabels_FileReadError(t *testing.T) {
 // TestHydrateWithLabels_EnsureLabelsExistError tests error handling in EnsureLabelsExist
 func TestHydrateWithLabels_EnsureLabelsExistError(t *testing.T) {
 	// Create a mock client that fails on ListLabels to trigger EnsureLabelsExist error
-	client := &MockGitHubClient{
+	client := NewFailingMockGitHubClient(MockConfig{
 		FailListLabels: true,
 		ExistingLabels: map[string]bool{},
-		CreatedLabels:  []string{},
-	}
+	})
 
 	tempDir := t.TempDir()
 
@@ -742,12 +789,11 @@ func TestHydrateWithLabels_EnsureLabelsExistError(t *testing.T) {
 // TestHydrateWithLabels_AggregatedErrors tests error aggregation when some items fail
 func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
 	// Create a mock client that fails for both issues and PRs
-	client := &MockGitHubClient{
+	client := NewFailingMockGitHubClient(MockConfig{
 		ExistingLabels: map[string]bool{},
-		CreatedLabels:  []string{},
 		FailIssues:     true, // Issues will fail
 		FailPRs:        true, // PRs will fail
-	}
+	})
 
 	tempDir := t.TempDir()
 
@@ -814,10 +860,7 @@ func TestConfigurablePaths(t *testing.T) {
 	}
 
 	// Create mock client
-	client := &MockGitHubClient{
-		ExistingLabels: map[string]bool{},
-		CreatedLabels:  []string{},
-	}
+	client := NewSuccessfulMockGitHubClient()
 
 	// Test hydration with the custom paths
 	err := HydrateWithLabels(context.Background(), client, issuesPath, discussionsPath, prsPath, true, true, true, false)

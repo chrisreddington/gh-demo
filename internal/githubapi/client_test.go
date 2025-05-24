@@ -119,118 +119,7 @@ func TestNewGHClientWithClients_ValidationErrors(t *testing.T) {
 }
 
 func TestGHClientWithMockClients(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
-		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
-			// Handle different GraphQL queries based on query content
-			if strings.Contains(query, "GetRepositoryId") {
-				// Repository ID query
-				resp := response.(*struct {
-					Repository struct {
-						ID string `json:"id"`
-					} `json:"repository"`
-				})
-				resp.Repository.ID = "repo-id-123"
-				return nil
-			} else if strings.Contains(query, "createLabel") {
-				// Create label mutation
-				resp := response.(*struct {
-					CreateLabel struct {
-						Label struct {
-							ID          string `json:"id"`
-							Name        string `json:"name"`
-							Color       string `json:"color"`
-							Description string `json:"description"`
-						} `json:"label"`
-					} `json:"createLabel"`
-				})
-				resp.CreateLabel.Label.ID = "label-id-123"
-				resp.CreateLabel.Label.Name = "test-label"
-				resp.CreateLabel.Label.Color = "ff0000"
-				resp.CreateLabel.Label.Description = "A test label"
-				return nil
-			} else if strings.Contains(query, "GetLabelId") {
-				// Label ID query for issue/PR creation
-				resp := response.(*struct {
-					Repository struct {
-						Label struct {
-							ID string `json:"id"`
-						} `json:"label"`
-					} `json:"repository"`
-				})
-				resp.Repository.Label.ID = "label-id-456"
-				return nil
-			} else if strings.Contains(query, "GetUserId") {
-				// User ID query for assignees
-				resp := response.(*struct {
-					User struct {
-						ID string `json:"id"`
-					} `json:"user"`
-				})
-				resp.User.ID = "user-id-789"
-				return nil
-			} else if strings.Contains(query, "createIssue") {
-				// Create issue mutation
-				resp := response.(*struct {
-					CreateIssue struct {
-						Issue struct {
-							ID     string `json:"id"`
-							Number int    `json:"number"`
-							Title  string `json:"title"`
-							URL    string `json:"url"`
-						} `json:"issue"`
-					} `json:"createIssue"`
-				})
-				resp.CreateIssue.Issue.ID = "issue-id-123"
-				resp.CreateIssue.Issue.Number = 1
-				resp.CreateIssue.Issue.Title = "Test Issue"
-				resp.CreateIssue.Issue.URL = "https://github.com/owner/repo/issues/1"
-				return nil
-			} else if strings.Contains(query, "createPullRequest") {
-				// Create pull request mutation
-				resp := response.(*struct {
-					CreatePullRequest struct {
-						PullRequest struct {
-							ID     string `json:"id"`
-							Number int    `json:"number"`
-							Title  string `json:"title"`
-							URL    string `json:"url"`
-						} `json:"pullRequest"`
-					} `json:"createPullRequest"`
-				})
-				resp.CreatePullRequest.PullRequest.ID = "pr-id-123"
-				resp.CreatePullRequest.PullRequest.Number = 1
-				resp.CreatePullRequest.PullRequest.Title = "Test PR"
-				resp.CreatePullRequest.PullRequest.URL = "https://github.com/owner/repo/pull/1"
-				return nil
-			} else if strings.Contains(query, "addLabelsToLabelable") {
-				// Add labels mutation
-				resp := response.(*struct {
-					AddLabelsToLabelable struct {
-						ClientMutationID string `json:"clientMutationId"`
-					} `json:"addLabelsToLabelable"`
-				})
-				resp.AddLabelsToLabelable.ClientMutationID = "mutation-id-123"
-				return nil
-			} else if strings.Contains(query, "addAssigneesToAssignable") {
-				// Add assignees mutation
-				resp := response.(*struct {
-					AddAssigneesToAssignable struct {
-						ClientMutationID string `json:"clientMutationId"`
-					} `json:"addAssigneesToAssignable"`
-				})
-				resp.AddAssigneesToAssignable.ClientMutationID = "mutation-id-456"
-				return nil
-			}
-			// Default response for other queries
-			return nil
-		},
-	}
-
-	client := &GHClient{
-		Owner:     "testowner",
-		Repo:      "testrepo",
-		gqlClient: gqlClient,
-	}
+	client := CreateTestClient(NewDefaultMockGraphQL())
 
 	// Test CreateLabel
 	err := client.CreateLabel(context.Background(), types.Label{
@@ -269,38 +158,7 @@ func TestGHClientWithMockClients(t *testing.T) {
 
 // GraphQL tests
 func TestListLabels(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
-		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
-			// Mock successful labels response
-			resp := response.(*struct {
-				Repository struct {
-					Labels struct {
-						Nodes []struct {
-							Name string `json:"name"`
-						} `json:"nodes"`
-						PageInfo struct {
-							HasNextPage bool   `json:"hasNextPage"`
-							EndCursor   string `json:"endCursor"`
-						} `json:"pageInfo"`
-					} `json:"labels"`
-				} `json:"repository"`
-			})
-			resp.Repository.Labels.Nodes = []struct {
-				Name string `json:"name"`
-			}{
-				{Name: "bug"},
-				{Name: "enhancement"},
-				{Name: "documentation"},
-			}
-			return nil
-		},
-	}
-
-	client := &GHClient{
-		Owner:     "testowner",
-		Repo:      "testrepo",
-		gqlClient: gqlClient,
-	}
+	client := CreateTestClient(NewDefaultMockGraphQL())
 
 	labels, err := client.ListLabels(context.Background())
 	if err != nil {
@@ -309,62 +167,16 @@ func TestListLabels(t *testing.T) {
 	if len(labels) != 3 {
 		t.Errorf("Expected 3 labels, got %d", len(labels))
 	}
-	if labels[0] != "bug" || labels[1] != "enhancement" || labels[2] != "documentation" {
-		t.Errorf("Expected labels [bug, enhancement, documentation], got %v", labels)
+	expected := []string{"bug", "enhancement", "documentation"}
+	for i, label := range labels {
+		if label != expected[i] {
+			t.Errorf("Expected label %s at position %d, got %s", expected[i], i, label)
+		}
 	}
 }
 
 func TestCreateDiscussion(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
-		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
-			// Handle both repository query and create discussion mutation
-			if strings.Contains(query, "discussionCategories") {
-				// Repository info query
-				resp := response.(*struct {
-					Repository struct {
-						ID         string `json:"id"`
-						Categories struct {
-							Nodes []struct {
-								ID   string `json:"id"`
-								Name string `json:"name"`
-							} `json:"nodes"`
-						} `json:"discussionCategories"`
-					} `json:"repository"`
-				})
-				resp.Repository.ID = "repo-id-123"
-				resp.Repository.Categories.Nodes = []struct {
-					ID   string `json:"id"`
-					Name string `json:"name"`
-				}{
-					{ID: "cat-id-123", Name: "General"},
-					{ID: "cat-id-456", Name: "Q&A"},
-				}
-			} else if strings.Contains(query, "createDiscussion") {
-				// Create discussion mutation
-				resp := response.(*struct {
-					CreateDiscussion struct {
-						Discussion struct {
-							ID     string `json:"id"`
-							Number int    `json:"number"`
-							Title  string `json:"title"`
-							URL    string `json:"url"`
-						} `json:"discussion"`
-					} `json:"createDiscussion"`
-				})
-				resp.CreateDiscussion.Discussion.ID = "disc-id-123"
-				resp.CreateDiscussion.Discussion.Number = 1
-				resp.CreateDiscussion.Discussion.Title = "Test Discussion"
-				resp.CreateDiscussion.Discussion.URL = "https://github.com/testowner/testrepo/discussions/1"
-			}
-			return nil
-		},
-	}
-
-	client := &GHClient{
-		Owner:     "testowner",
-		Repo:      "testrepo",
-		gqlClient: gqlClient,
-	}
+	client := CreateTestClient(NewDefaultMockGraphQL())
 
 	err := client.CreateDiscussion(context.Background(), types.Discussion{
 		Title:    "Test Discussion",
@@ -447,97 +259,85 @@ func TestCreateDiscussion_GraphQLError(t *testing.T) {
 	}
 }
 
-func TestListLabelsError(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
-		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
-			return fmt.Errorf("GraphQL error: unauthorized")
+func TestGHClient_ErrorHandling(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupClient   func() *GHClient
+		testFunc      func(*GHClient) error
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name: "ListLabels GraphQL error",
+			setupClient: func() *GHClient {
+				return CreateTestClient(NewErrorMockGraphQL(map[string]string{
+					"labels": "GraphQL error: unauthorized",
+				}))
+			},
+			testFunc: func(client *GHClient) error {
+				_, err := client.ListLabels(context.Background())
+				return err
+			},
+			expectError:   true,
+			errorContains: "unauthorized",
+		},
+		{
+			name: "ListLabels nil client",
+			setupClient: func() *GHClient {
+				return &GHClient{
+					Owner:     "testowner",
+					Repo:      "testrepo",
+					gqlClient: nil,
+				}
+			},
+			testFunc: func(client *GHClient) error {
+				_, err := client.ListLabels(context.Background())
+				return err
+			},
+			expectError:   true,
+			errorContains: "GraphQL client is not initialized",
+		},
+		{
+			name: "CreateDiscussion nil client",
+			setupClient: func() *GHClient {
+				return &GHClient{
+					Owner:     "testowner",
+					Repo:      "testrepo",
+					gqlClient: nil,
+				}
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreateDiscussion(context.Background(), types.Discussion{
+					Title:    "Test Discussion",
+					Body:     "This is a test discussion",
+					Category: "General",
+				})
+			},
+			expectError:   true,
+			errorContains: "not initialized",
 		},
 	}
 
-	client := &GHClient{
-		Owner:     "testowner",
-		Repo:      "testrepo",
-		gqlClient: gqlClient,
-	}
-
-	_, err := client.ListLabels(context.Background())
-	if err == nil {
-		t.Error("Expected an error from GraphQL client")
-	}
-}
-
-func TestCreateDiscussionError(t *testing.T) {
-	client := &GHClient{
-		Owner:     "testowner",
-		Repo:      "testrepo",
-		gqlClient: nil, // This will cause an error
-	}
-
-	err := client.CreateDiscussion(context.Background(), types.Discussion{
-		Title:    "Test Discussion",
-		Body:     "This is a test discussion",
-		Category: "General",
-	})
-	if err == nil {
-		t.Error("Expected an error when GraphQL client is nil")
-	}
-}
-
-func TestListLabelsNilClient(t *testing.T) {
-	client := &GHClient{
-		Owner:     "testowner",
-		Repo:      "testrepo",
-		gqlClient: nil, // This will cause an error
-	}
-
-	_, err := client.ListLabels(context.Background())
-	if err == nil {
-		t.Error("Expected an error when GraphQL client is nil")
-	}
-	if !strings.Contains(err.Error(), "GraphQL client is not initialized") {
-		t.Errorf("Expected error to mention GraphQL client not initialized, got: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := tt.setupClient()
+			err := tt.testFunc(client)
+			
+			if tt.expectError && err == nil {
+				t.Errorf("Expected an error for %s", tt.name)
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error for %s: %v", tt.name, err)
+			}
+			if tt.expectError && err != nil && !strings.Contains(err.Error(), tt.errorContains) {
+				t.Errorf("Expected error to contain '%s', got: %v", tt.errorContains, err)
+			}
+		})
 	}
 }
 
 func TestCreatePR(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
-		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
-			if strings.Contains(query, "GetRepositoryId") {
-				// Repository ID query
-				resp := response.(*struct {
-					Repository struct {
-						ID string `json:"id"`
-					} `json:"repository"`
-				})
-				resp.Repository.ID = "repo-id-123"
-				return nil
-			} else if strings.Contains(query, "createPullRequest") {
-				// Create pull request mutation
-				resp := response.(*struct {
-					CreatePullRequest struct {
-						PullRequest struct {
-							ID     string `json:"id"`
-							Number int    `json:"number"`
-							Title  string `json:"title"`
-							URL    string `json:"url"`
-						} `json:"pullRequest"`
-					} `json:"createPullRequest"`
-				})
-				resp.CreatePullRequest.PullRequest.ID = "pr-id-123"
-				resp.CreatePullRequest.PullRequest.Number = 1
-				resp.CreatePullRequest.PullRequest.Title = "Test PR"
-				resp.CreatePullRequest.PullRequest.URL = "https://github.com/test/test/pull/1"
-				return nil
-			}
-			return nil
-		},
-	}
-
-	client := &GHClient{
-		Owner:     "testowner",
-		Repo:      "testrepo",
-		gqlClient: gqlClient,
-	}
+	client := CreateTestClient(NewDefaultMockGraphQL())
 
 	err := client.CreatePR(context.Background(), types.PullRequest{
 		Title: "Test PR",
@@ -547,6 +347,146 @@ func TestCreatePR(t *testing.T) {
 	})
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
+	}
+}
+
+// TestGHClient_GraphQLOperations provides comprehensive testing of GraphQL operations with table-driven approach
+func TestGHClient_GraphQLOperations(t *testing.T) {
+	tests := []struct {
+		name        string
+		operation   string
+		setupMock   func() *ConfigurableMockGraphQLClient
+		testFunc    func(*GHClient) error
+		expectError bool
+	}{
+		{
+			name:      "CreateLabel success",
+			operation: "createLabel",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreateLabel(context.Background(), types.Label{
+					Name:        "feature",
+					Description: "New feature",
+					Color:       "00ff00",
+				})
+			},
+			expectError: false,
+		},
+		{
+			name:      "CreateIssue success",
+			operation: "createIssue",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreateIssue(context.Background(), types.Issue{
+					Title:     "Test Issue",
+					Body:      "Test description",
+					Labels:    []string{"bug"},
+					Assignees: []string{"testuser"},
+				})
+			},
+			expectError: false,
+		},
+		{
+			name:      "CreatePR success",
+			operation: "createPR",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreatePR(context.Background(), types.PullRequest{
+					Title:     "Test PR",
+					Body:      "Test description",
+					Head:      "feature-branch",
+					Base:      "main",
+					Labels:    []string{"enhancement"},
+					Assignees: []string{"testuser"},
+				})
+			},
+			expectError: false,
+		},
+		{
+			name:      "CreateDiscussion success",
+			operation: "createDiscussion",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreateDiscussion(context.Background(), types.Discussion{
+					Title:    "Test Discussion",
+					Body:     "Test body",
+					Category: "General",
+					Labels:   []string{"question"},
+				})
+			},
+			expectError: false,
+		},
+		{
+			name:      "ListLabels success",
+			operation: "listLabels",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewDefaultMockGraphQL()
+			},
+			testFunc: func(client *GHClient) error {
+				labels, err := client.ListLabels(context.Background())
+				if err != nil {
+					return err
+				}
+				if len(labels) != 3 {
+					return fmt.Errorf("expected 3 labels, got %d", len(labels))
+				}
+				return nil
+			},
+			expectError: false,
+		},
+		{
+			name:      "CreateLabel error",
+			operation: "createLabel",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewErrorMockGraphQL(map[string]string{
+					"createLabel": "label creation failed",
+				})
+			},
+			testFunc: func(client *GHClient) error {
+				return client.CreateLabel(context.Background(), types.Label{
+					Name: "test",
+				})
+			},
+			expectError: true,
+		},
+		{
+			name:      "ListLabels error",
+			operation: "listLabels",
+			setupMock: func() *ConfigurableMockGraphQLClient {
+				return NewErrorMockGraphQL(map[string]string{
+					"labels": "access denied",
+				})
+			},
+			testFunc: func(client *GHClient) error {
+				_, err := client.ListLabels(context.Background())
+				return err
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockClient := tt.setupMock()
+			client := CreateTestClient(mockClient)
+
+			err := tt.testFunc(client)
+
+			if tt.expectError && err == nil {
+				t.Errorf("Expected error for %s but got none", tt.name)
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Unexpected error for %s: %v", tt.name, err)
+			}
+		})
 	}
 }
 
