@@ -49,8 +49,8 @@ func TestNewHydrateCmd(t *testing.T) {
 		t.Error("Expected discussions flag to be defined")
 	}
 
-	prsFlag := cmd.Flags().Lookup("prs")
-	if prsFlag == nil {
+	pullRequestsFlag := cmd.Flags().Lookup("prs")
+	if pullRequestsFlag == nil {
 		t.Error("Expected prs flag to be defined")
 	}
 
@@ -164,8 +164,8 @@ func TestHydrateCmd_WithValidParams(t *testing.T) {
 		t.Error("Discussions flag should default to true")
 	}
 
-	prsFlag := flags.Lookup("prs")
-	if prsFlag != nil && prsFlag.DefValue != "true" {
+	pullRequestsFlag := flags.Lookup("prs")
+	if pullRequestsFlag != nil && pullRequestsFlag.DefValue != "true" {
 		t.Error("PRs flag should default to true")
 	}
 

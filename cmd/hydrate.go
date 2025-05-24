@@ -14,7 +14,9 @@ import (
 )
 
 // executeHydrate contains the core hydration logic separated from CLI concerns
-func executeHydrate(owner, repo, configPath string, issues, discussions, prs, debug bool) error {
+// executeHydrate performs the hydration operation with the given parameters.
+// It validates required parameters, resolves git context if needed, and orchestrates the hydration process.
+func executeHydrate(owner, repo, configPath string, issues, discussions, pullRequests, debug bool) error {
 	resolvedOwner := strings.TrimSpace(owner)
 	resolvedRepo := strings.TrimSpace(repo)
 	if resolvedOwner == "" || resolvedRepo == "" {
@@ -39,7 +41,7 @@ func executeHydrate(owner, repo, configPath string, issues, discussions, prs, de
 	}
 	issuesPath := filepath.Join(root, configPath, "issues.json")
 	discussionsPath := filepath.Join(root, configPath, "discussions.json")
-	prsPath := filepath.Join(root, configPath, "prs.json")
+	pullRequestsPath := filepath.Join(root, configPath, "prs.json")
 
 	client, err := githubapi.NewGHClient(resolvedOwner, resolvedRepo)
 	if err != nil {
@@ -49,7 +51,7 @@ func executeHydrate(owner, repo, configPath string, issues, discussions, prs, de
 	if debug {
 		client.SetLogger(common.NewLogger(debug))
 	}
-	err = hydrate.HydrateWithLabels(client, issuesPath, discussionsPath, prsPath, issues, discussions, prs, debug)
+	err = hydrate.HydrateWithLabels(client, issuesPath, discussionsPath, pullRequestsPath, issues, discussions, pullRequests, debug)
 	if err != nil {
 		// Check if this is a partial failure (some items succeeded, some failed)
 		if strings.Contains(err.Error(), "some items failed to create:") {
@@ -69,14 +71,14 @@ func executeHydrate(owner, repo, configPath string, issues, discussions, prs, de
 // NewHydrateCmd returns the Cobra command for repository hydration
 func NewHydrateCmd() *cobra.Command {
 	var owner, repo, configPath string
-	var issues, discussions, prs bool
+	var issues, discussions, pullRequests bool
 	var debug bool
 
 	cmd := &cobra.Command{
 		Use:   "hydrate",
 		Short: "Hydrate a repository with demo issues, discussions, and pull requests",
 		Run: func(cmd *cobra.Command, args []string) {
-			err := executeHydrate(owner, repo, configPath, issues, discussions, prs, debug)
+			err := executeHydrate(owner, repo, configPath, issues, discussions, pullRequests, debug)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -89,7 +91,7 @@ func NewHydrateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&configPath, "config-path", ".github/demos", "Path to configuration files relative to project root")
 	cmd.Flags().BoolVar(&issues, "issues", true, "Include issues")
 	cmd.Flags().BoolVar(&discussions, "discussions", true, "Include discussions")
-	cmd.Flags().BoolVar(&prs, "prs", true, "Include pull requests")
+	cmd.Flags().BoolVar(&pullRequests, "prs", true, "Include pull requests")
 	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug mode for detailed logging")
 
 	return cmd

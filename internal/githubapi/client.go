@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/types"
 	"github.com/cli/go-gh/v2/pkg/api"
 )
 
@@ -34,6 +35,10 @@ type RESTClient struct {
 	}
 }
 
+// NewGHClient creates a new GitHub API client for the specified owner and repository.
+// It initializes both GraphQL and REST clients using the go-gh library and validates that
+// the owner and repo parameters are not empty. The client is ready to perform operations
+// like creating issues, discussions, pull requests, and managing labels.
 func NewGHClient(owner, repo string) (*GHClient, error) {
 	if strings.TrimSpace(owner) == "" {
 		return nil, fmt.Errorf("owner cannot be empty")
@@ -215,8 +220,10 @@ func (c *GHClient) CreateLabel(label string) error {
 	return nil
 }
 
-// Issue operations
-func (c *GHClient) CreateIssue(issue IssueInput) error {
+// CreateIssue creates a new issue in the repository using the provided issue data.
+// It validates that the REST client is initialized and creates the issue with
+// the specified title, body, labels, and assignees.
+func (c *GHClient) CreateIssue(issue types.Issue) error {
 	if c.restClient == nil {
 		return fmt.Errorf("REST client is not initialized")
 	}
@@ -241,13 +248,15 @@ func (c *GHClient) CreateIssue(issue IssueInput) error {
 	return nil
 }
 
-// Discussion operations
-func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
+// CreateDiscussion creates a new discussion in the repository using the provided discussion data.
+// It uses GraphQL to create the discussion with the specified title, body, category, and labels.
+// The method automatically finds the correct category ID and adds labels after creation.
+func (c *GHClient) CreateDiscussion(discussion types.Discussion) error {
 	if c.gqlClient == nil {
 		return fmt.Errorf("GraphQL client is not initialized")
 	}
 
-	c.debugLog("Creating discussion '%s' in repository %s/%s", disc.Title, c.Owner, c.Repo)
+	c.debugLog("Creating discussion '%s' in repository %s/%s", discussion.Title, c.Owner, c.Repo)
 
 	// First, get the repository ID and discussion categories
 	repoQuery := `
@@ -298,8 +307,8 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 	var categoryID string
 	var matchedCategory string
 	for _, category := range repoResponse.Repository.Categories.Nodes {
-		c.debugLog("Comparing category '%s' with requested '%s'", category.Name, disc.Category)
-		if strings.EqualFold(category.Name, disc.Category) {
+		c.debugLog("Comparing category '%s' with requested '%s'", category.Name, discussion.Category)
+		if strings.EqualFold(category.Name, discussion.Category) {
 			categoryID = category.ID
 			matchedCategory = category.Name
 			break
@@ -308,13 +317,13 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 
 	if categoryID == "" {
 		c.debugLog("Discussion category '%s' not found in available categories: %v",
-			disc.Category, availableCategories)
+			discussion.Category, availableCategories)
 		return fmt.Errorf("discussion category '%s' not found in available categories: %v",
-			disc.Category, availableCategories)
+			discussion.Category, availableCategories)
 	}
 
 	c.debugLog("Found matching category ID for '%s': %s (actual: '%s')",
-		disc.Category, categoryID, matchedCategory)
+		discussion.Category, categoryID, matchedCategory)
 
 	// Create the discussion
 	createMutation := `
@@ -345,8 +354,8 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 		"input": map[string]interface{}{
 			"repositoryId": repoResponse.Repository.ID,
 			"categoryId":   categoryID,
-			"title":        disc.Title,
-			"body":         disc.Body,
+			"title":        discussion.Title,
+			"body":         discussion.Body,
 		},
 	}
 
@@ -356,7 +365,7 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 
 	err = c.gqlClient.Do(createMutation, mutationVariables, &mutationResponse)
 	if err != nil {
-		c.debugLog("Failed to create discussion '%s': %v", disc.Title, err)
+		c.debugLog("Failed to create discussion '%s': %v", discussion.Title, err)
 		return fmt.Errorf("failed to create discussion: %w", err)
 	}
 
@@ -369,8 +378,8 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 
 	// Verify discussion was created by checking for a valid ID and URL
 	if mutationResponse.CreateDiscussion.Discussion.ID == "" {
-		c.debugLog("Discussion creation for '%s' failed - no Discussion ID returned", disc.Title)
-		return fmt.Errorf("discussion creation for '%s' failed - no Discussion ID returned from GitHub API", disc.Title)
+		c.debugLog("Discussion creation for '%s' failed - no Discussion ID returned", discussion.Title)
+		return fmt.Errorf("discussion creation for '%s' failed - no Discussion ID returned from GitHub API", discussion.Title)
 	}
 
 	discussionID := mutationResponse.CreateDiscussion.Discussion.ID
@@ -378,11 +387,11 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 	c.debugLog("Discussion created with ID: %s, URL: %s", discussionID, discussionURL)
 
 	// Add labels if specified
-	if len(disc.Labels) > 0 && mutationResponse.CreateDiscussion.Discussion.ID != "" {
-		c.debugLog("Adding %d labels to discussion '%s'", len(disc.Labels), disc.Title)
+	if len(discussion.Labels) > 0 && mutationResponse.CreateDiscussion.Discussion.ID != "" {
+		c.debugLog("Adding %d labels to discussion '%s'", len(discussion.Labels), discussion.Title)
 
 		// Add labels to the discussion using the discussion ID
-		for _, label := range disc.Labels {
+		for _, label := range discussion.Labels {
 			err := c.addLabelToDiscussion(mutationResponse.CreateDiscussion.Discussion.ID, label)
 			if err != nil {
 				c.debugLog("Failed to add label '%s' to discussion: %v", label, err)
@@ -393,7 +402,7 @@ func (c *GHClient) CreateDiscussion(disc DiscussionInput) error {
 		}
 	}
 
-	c.debugLog("Successfully created discussion '%s' (URL: %s)", disc.Title, discussionURL)
+	c.debugLog("Successfully created discussion '%s' (URL: %s)", discussion.Title, discussionURL)
 	return nil
 }
 
@@ -463,58 +472,59 @@ func (c *GHClient) addLabelToDiscussion(discussionID, labelName string) error {
 	return nil
 }
 
-// PR operations
-func (c *GHClient) CreatePR(pr PRInput) error {
+// CreatePR creates a new pull request in the repository using the provided pull request data.
+// It validates the head and base branches, creates the PR via REST API, and adds labels/assignees if specified.
+func (c *GHClient) CreatePR(pullRequest types.PullRequest) error {
 	if c.restClient == nil {
 		return fmt.Errorf("REST client is not initialized")
 	}
 
-	c.debugLog("Creating pull request '%s' in repository %s/%s (head: %s, base: %s)", pr.Title, c.Owner, c.Repo, pr.Head, pr.Base)
+	c.debugLog("Creating pull request '%s' in repository %s/%s (head: %s, base: %s)", pullRequest.Title, c.Owner, c.Repo, pullRequest.Head, pullRequest.Base)
 
 	// Basic validation
-	if pr.Head == "" {
+	if pullRequest.Head == "" {
 		c.debugLog("PR head branch is empty")
 		return fmt.Errorf("PR head branch cannot be empty")
 	}
-	if pr.Base == "" {
+	if pullRequest.Base == "" {
 		c.debugLog("PR base branch is empty")
 		return fmt.Errorf("PR base branch cannot be empty")
 	}
-	if pr.Head == pr.Base {
-		c.debugLog("PR head and base branches are the same: %s", pr.Head)
-		return fmt.Errorf("PR head and base branches cannot be the same (%s)", pr.Head)
+	if pullRequest.Head == pullRequest.Base {
+		c.debugLog("PR head and base branches are the same: %s", pullRequest.Head)
+		return fmt.Errorf("PR head and base branches cannot be the same (%s)", pullRequest.Head)
 	}
 
 	path := fmt.Sprintf("repos/%s/%s/pulls", c.Owner, c.Repo)
 	payload := map[string]interface{}{
-		"title": pr.Title,
-		"body":  pr.Body,
-		"head":  pr.Head,
-		"base":  pr.Base,
+		"title": pullRequest.Title,
+		"body":  pullRequest.Body,
+		"head":  pullRequest.Head,
+		"base":  pullRequest.Base,
 	}
 
 	var response map[string]interface{}
 	err := c.restClient.Request("POST", path, payload, &response)
 	if err != nil {
-		c.debugLog("Failed to create pull request '%s': %v", pr.Title, err)
-		return fmt.Errorf("failed to create pull request '%s' (head: %s, base: %s): %w", pr.Title, pr.Head, pr.Base, err)
+		c.debugLog("Failed to create pull request '%s': %v", pullRequest.Title, err)
+		return fmt.Errorf("failed to create pull request '%s' (head: %s, base: %s): %w", pullRequest.Title, pullRequest.Head, pullRequest.Base, err)
 	}
 
 	// If the PR was created successfully and has labels/assignees, add them
-	if prNumber, ok := response["number"].(float64); ok && (len(pr.Labels) > 0 || len(pr.Assignees) > 0) {
-		c.debugLog("Adding labels/assignees to PR '%s'", pr.Title)
+	if prNumber, ok := response["number"].(float64); ok && (len(pullRequest.Labels) > 0 || len(pullRequest.Assignees) > 0) {
+		c.debugLog("Adding labels/assignees to PR '%s'", pullRequest.Title)
 		issuePayload := map[string]interface{}{
-			"labels":    pr.Labels,
-			"assignees": pr.Assignees,
+			"labels":    pullRequest.Labels,
+			"assignees": pullRequest.Assignees,
 		}
 
 		issuePath := fmt.Sprintf("repos/%s/%s/issues/%d", c.Owner, c.Repo, int(prNumber))
 		if err := c.restClient.Request("PATCH", issuePath, issuePayload, nil); err != nil {
-			c.debugLog("Failed to add labels/assignees to PR '%s': %v", pr.Title, err)
-			return fmt.Errorf("created PR '%s' but failed to add labels/assignees: %w", pr.Title, err)
+			c.debugLog("Failed to add labels/assignees to PR '%s': %v", pullRequest.Title, err)
+			return fmt.Errorf("created PR '%s' but failed to add labels/assignees: %w", pullRequest.Title, err)
 		}
 	}
 
-	c.debugLog("Successfully created pull request '%s'", pr.Title)
+	c.debugLog("Successfully created pull request '%s'", pullRequest.Title)
 	return nil
 }

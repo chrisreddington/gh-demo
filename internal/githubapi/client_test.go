@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
 // MockGraphQLClient implements the GraphQLClient interface for testing
@@ -157,7 +159,7 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	// Test CreateIssue
-	err = client.CreateIssue(IssueInput{
+	err = client.CreateIssue(types.Issue{
 		Title:     "Test Issue",
 		Body:      "This is a test issue",
 		Labels:    []string{"bug"},
@@ -168,7 +170,7 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	// Test CreatePR
-	err = client.CreatePR(PRInput{
+	err = client.CreatePR(types.PullRequest{
 		Title:     "Test PR",
 		Body:      "This is a test PR",
 		Head:      "feature-branch",
@@ -280,7 +282,7 @@ func TestCreateDiscussion(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -325,7 +327,7 @@ func TestCreateDiscussion_CategoryNotFound(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "NonExistent",
@@ -351,7 +353,7 @@ func TestCreateDiscussion_GraphQLError(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -387,7 +389,7 @@ func TestCreateDiscussionError(t *testing.T) {
 		gqlClient: nil, // This will cause an error
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -458,7 +460,7 @@ func TestCreatePR(t *testing.T) {
 		gqlClient:  nil, // PR creation uses REST API
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "This is a test PR",
 		Head:  "feature-branch",
@@ -486,7 +488,7 @@ func TestCreatePRValidation(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "This is a test PR",
 		Head:  "feature-branch",
@@ -559,7 +561,7 @@ func TestCreateIssueError(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreateIssue(IssueInput{Title: "Test", Body: "Test"})
+	err := client.CreateIssue(types.Issue{Title: "Test", Body: "Test"})
 	if err == nil {
 		t.Error("Expected an error when REST client is nil")
 	}
@@ -573,7 +575,7 @@ func TestCreatePRError(t *testing.T) {
 		gqlClient:  nil,
 	}
 
-	err := client.CreatePR(PRInput{Title: "Test", Head: "feature", Base: "main"})
+	err := client.CreatePR(types.PullRequest{Title: "Test", Head: "feature", Base: "main"})
 	if err == nil {
 		t.Error("Expected an error when REST client is nil")
 	}
@@ -648,7 +650,7 @@ func TestCreateDiscussionWithLabels(t *testing.T) {
 		gqlClient: gqlClient,
 	}
 
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -721,7 +723,7 @@ func TestAddLabelToDiscussion_LabelNotFound(t *testing.T) {
 	}
 
 	// This should still succeed, but the label addition will fail silently
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -787,7 +789,7 @@ func TestAddLabelToDiscussion_GraphQLError(t *testing.T) {
 	}
 
 	// This should still succeed overall, but label addition will fail
-	err := client.CreateDiscussion(DiscussionInput{
+	err := client.CreateDiscussion(types.Discussion{
 		Title:    "Test Discussion",
 		Body:     "This is a test discussion",
 		Category: "General",
@@ -816,7 +818,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 	}
 
 	// Test empty head branch
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "", // Empty head should cause error
@@ -830,7 +832,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 	}
 
 	// Test empty base branch
-	err = client.CreatePR(PRInput{
+	err = client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "feature",
@@ -844,7 +846,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 	}
 
 	// Test head and base are the same
-	err = client.CreatePR(PRInput{
+	err = client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "main",
@@ -888,7 +890,7 @@ func TestCreatePR_WithLabelsAndAssignees(t *testing.T) {
 		restClient: &RESTClient{client: restClient},
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title:     "Test PR",
 		Body:      "Test body",
 		Head:      "feature",
@@ -931,7 +933,7 @@ func TestCreatePR_LabelsAssigneesFailure(t *testing.T) {
 		restClient: &RESTClient{client: restClient},
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title:     "Test PR",
 		Body:      "Test body",
 		Head:      "feature",
@@ -964,7 +966,7 @@ func TestCreatePR_RequestFailure(t *testing.T) {
 		restClient: &RESTClient{client: restClient},
 	}
 
-	err := client.CreatePR(PRInput{
+	err := client.CreatePR(types.PullRequest{
 		Title: "Test PR",
 		Body:  "Test body",
 		Head:  "feature",

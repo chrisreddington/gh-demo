@@ -10,6 +10,7 @@ import (
 
 	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
+	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
 func TestHydrateWithRealGHClient(t *testing.T) {
@@ -42,30 +43,30 @@ type MockGitHubClient struct {
 	FailPRs            bool // If true, CreatePR will fail
 	FailIssues         bool // If true, CreateIssue will fail
 	FailListLabels     bool // If true, ListLabels will fail
-	CreatedIssues      []Issue
-	CreatedDiscussions []Discussion
-	CreatedPRs         []PullRequest
+	CreatedIssues      []types.Issue
+	CreatedDiscussions []types.Discussion
+	CreatedPRs         []types.PullRequest
 }
 
 // Add stubs for the rest of the interface
-func (m *MockGitHubClient) CreateIssue(issue githubapi.IssueInput) error {
+func (m *MockGitHubClient) CreateIssue(issue types.Issue) error {
 	if m.FailIssues {
 		return fmt.Errorf("simulated issue creation failure for: %s", issue.Title)
 	}
-	m.CreatedIssues = append(m.CreatedIssues, Issue{Title: issue.Title, Body: issue.Body, Labels: issue.Labels, Assignees: issue.Assignees})
+	m.CreatedIssues = append(m.CreatedIssues, issue)
 	return nil
 }
 
-func (m *MockGitHubClient) CreateDiscussion(d githubapi.DiscussionInput) error {
-	m.CreatedDiscussions = append(m.CreatedDiscussions, Discussion{Title: d.Title, Body: d.Body, Category: d.Category, Labels: d.Labels})
+func (m *MockGitHubClient) CreateDiscussion(discussion types.Discussion) error {
+	m.CreatedDiscussions = append(m.CreatedDiscussions, discussion)
 	return nil
 }
 
-func (m *MockGitHubClient) CreatePR(pr githubapi.PRInput) error {
+func (m *MockGitHubClient) CreatePR(pullRequest types.PullRequest) error {
 	if m.FailPRs {
-		return fmt.Errorf("simulated PR creation failure for: %s (head: %s, base: %s)", pr.Title, pr.Head, pr.Base)
+		return fmt.Errorf("simulated PR creation failure for: %s (head: %s, base: %s)", pullRequest.Title, pullRequest.Head, pullRequest.Base)
 	}
-	m.CreatedPRs = append(m.CreatedPRs, PullRequest{Title: pr.Title, Body: pr.Body, Head: pr.Head, Base: pr.Base, Labels: pr.Labels, Assignees: pr.Assignees})
+	m.CreatedPRs = append(m.CreatedPRs, pullRequest)
 	return nil
 }
 
@@ -131,7 +132,7 @@ func TestReadIssuesJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read issues.json: %v", err)
 	}
-	var issues []Issue
+	var issues []types.Issue
 	if err := json.Unmarshal(data, &issues); err != nil {
 		t.Fatalf("failed to unmarshal issues.json: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestReadDiscussionsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read discussions.json: %v", err)
 	}
-	var discussions []Discussion
+	var discussions []types.Discussion
 	if err := json.Unmarshal(data, &discussions); err != nil {
 		t.Fatalf("failed to unmarshal discussions.json: %v", err)
 	}
@@ -168,18 +169,16 @@ func TestGracefulErrorHandling(t *testing.T) {
 
 	// Create temporary test files
 	tempDir := t.TempDir()
-
 	// Create issues.json
 	issuesPath := filepath.Join(tempDir, "issues.json")
-	issues := []Issue{{Title: "Test Issue", Body: "Test body", Labels: []string{"enhancement"}}}
+	issues := []types.Issue{{Title: "Test Issue", Body: "Test body", Labels: []string{"enhancement"}}}
 	issuesData, _ := json.Marshal(issues)
 	if err := os.WriteFile(issuesPath, issuesData, 0644); err != nil {
 		t.Fatalf("failed to write test issues file: %v", err)
 	}
-
 	// Create prs.json
 	prsPath := filepath.Join(tempDir, "prs.json")
-	prs := []PullRequest{{Title: "Test PR", Body: "Test body", Head: "demo-branch", Base: "main", Labels: []string{"demo"}}}
+	prs := []types.PullRequest{{Title: "Test PR", Body: "Test body", Head: "demo-branch", Base: "main", Labels: []string{"demo"}}}
 	prsData, _ := json.Marshal(prs)
 	if err := os.WriteFile(prsPath, prsData, 0644); err != nil {
 		t.Fatalf("failed to write test prs file: %v", err)
@@ -219,7 +218,7 @@ func TestPRValidation(t *testing.T) {
 
 	// Create prs.json with invalid PR (empty head)
 	prsPath := filepath.Join(tempDir, "prs.json")
-	prs := []PullRequest{{Title: "Invalid PR", Body: "Test body", Head: "", Base: "main"}}
+	prs := []types.PullRequest{{Title: "Invalid PR", Body: "Test body", Head: "", Base: "main"}}
 	prsData, _ := json.Marshal(prs)
 	if err := os.WriteFile(prsPath, prsData, 0644); err != nil {
 		t.Fatalf("failed to write test prs file: %v", err)
@@ -260,7 +259,7 @@ func TestReadPRsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read prs.json: %v", err)
 	}
-	var prs []PullRequest
+	var prs []types.PullRequest
 	if err := json.Unmarshal(data, &prs); err != nil {
 		t.Fatalf("failed to unmarshal prs.json: %v", err)
 	}
@@ -393,16 +392,16 @@ func TestHydrateFromFiles_InvalidPRsJSON(t *testing.T) {
 }
 
 func TestCollectLabels_EmptySlices(t *testing.T) {
-	labels := CollectLabels([]Issue{}, []Discussion{}, []PullRequest{})
+	labels := CollectLabels([]types.Issue{}, []types.Discussion{}, []types.PullRequest{})
 	if len(labels) != 0 {
 		t.Errorf("Expected empty labels slice, got %v", labels)
 	}
 }
 
 func TestCollectLabels_WithLabels(t *testing.T) {
-	issues := []Issue{{Labels: []string{"bug", "enhancement"}}}
-	discussions := []Discussion{{Labels: []string{"question", "bug"}}}
-	prs := []PullRequest{{Labels: []string{"feature", "bug"}}}
+	issues := []types.Issue{{Labels: []string{"bug", "enhancement"}}}
+	discussions := []types.Discussion{{Labels: []string{"question", "bug"}}}
+	prs := []types.PullRequest{{Labels: []string{"feature", "bug"}}}
 
 	labels := CollectLabels(issues, discussions, prs)
 

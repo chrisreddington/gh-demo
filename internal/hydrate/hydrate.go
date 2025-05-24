@@ -1,3 +1,6 @@
+// Package hydrate provides functionality for hydrating GitHub repositories with demo content.
+// It handles the creation of issues, discussions, and pull requests based on JSON configuration files,
+// ensuring that all required labels exist before creating content.
 package hydrate
 
 import (
@@ -10,29 +13,31 @@ import (
 
 	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
+	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
-// SectionSummary holds statistics for a section
+// SectionSummary holds statistics for a hydration section (labels, issues, discussions, pull requests).
+// It tracks the total number of items processed, successful operations, failures, and detailed error messages.
 type SectionSummary struct {
-	Name     string
-	Total    int
-	Success  int
-	Failures int
-	Errors   []string
+	Name     string   // Name of the section (e.g., "Issues", "Labels")
+	Total    int      // Total number of items to process
+	Success  int      // Number of successful operations
+	Failures int      // Number of failed operations
+	Errors   []string // Detailed error messages for failed operations
 }
 
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
-func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs, debug bool) error {
+func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
 	logger := common.NewLogger(debug)
 
-	issues, discussions, prs, err := HydrateFromFiles(issuesPath, discussionsPath, prsPath, includeIssues, includeDiscussions, includePRs)
+	issues, discussions, pullRequests, err := HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath, includeIssues, includeDiscussions, includePullRequests)
 	if err != nil {
 		return err
 	}
 
 	// Collect and ensure all labels exist before creating content
-	labels := CollectLabels(issues, discussions, prs)
+	labels := CollectLabels(issues, discussions, pullRequests)
 	labelSummary := &SectionSummary{Name: "Labels", Total: len(labels)}
 
 	logger.Debug("Found %d unique labels to ensure exist: %v", len(labels), labels)
@@ -52,13 +57,7 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 		logger.Debug("Creating %d issues", len(issues))
 
 		for i, issue := range issues {
-			issueInput := githubapi.IssueInput{
-				Title:     issue.Title,
-				Body:      issue.Body,
-				Labels:    issue.Labels,
-				Assignees: issue.Assignees,
-			}
-			if err := client.CreateIssue(issueInput); err != nil {
+			if err := client.CreateIssue(issue); err != nil {
 				errorMsg := fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err)
 				allErrors = append(allErrors, errorMsg)
 				issueSummary.Errors = append(issueSummary.Errors, errorMsg)
@@ -69,7 +68,6 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				logger.Debug("Successfully created issue '%s'", issue.Title)
 			}
 		}
-
 		logger.Info("Issues: %d total, %d successful, %d failed", issueSummary.Total, issueSummary.Success, issueSummary.Failures)
 	}
 
@@ -79,13 +77,7 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 		logger.Debug("Creating %d discussions", len(discussions))
 
 		for i, discussion := range discussions {
-			discussionInput := githubapi.DiscussionInput{
-				Title:    discussion.Title,
-				Body:     discussion.Body,
-				Category: discussion.Category,
-				Labels:   discussion.Labels,
-			}
-			if err := client.CreateDiscussion(discussionInput); err != nil {
+			if err := client.CreateDiscussion(discussion); err != nil {
 				errorMsg := fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err)
 				allErrors = append(allErrors, errorMsg)
 				discussionSummary.Errors = append(discussionSummary.Errors, errorMsg)
@@ -96,37 +88,27 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 				logger.Debug("Successfully created discussion '%s'", discussion.Title)
 			}
 		}
-
 		logger.Info("Discussions: %d total, %d successful, %d failed", discussionSummary.Total, discussionSummary.Success, discussionSummary.Failures)
 	}
 
 	// Create pull requests
-	if includePRs {
-		prSummary := &SectionSummary{Name: "Pull Requests", Total: len(prs)}
-		logger.Debug("Creating %d pull requests", len(prs))
+	if includePullRequests {
+		pullRequestSummary := &SectionSummary{Name: "Pull Requests", Total: len(pullRequests)}
+		logger.Debug("Creating %d pull requests", len(pullRequests))
 
-		for i, pr := range prs {
-			prInput := githubapi.PRInput{
-				Title:     pr.Title,
-				Body:      pr.Body,
-				Head:      pr.Head,
-				Base:      pr.Base,
-				Labels:    pr.Labels,
-				Assignees: pr.Assignees,
-			}
-			if err := client.CreatePR(prInput); err != nil {
-				errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pr.Title, err)
+		for i, pullRequest := range pullRequests {
+			if err := client.CreatePR(pullRequest); err != nil {
+				errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pullRequest.Title, err)
 				allErrors = append(allErrors, errorMsg)
-				prSummary.Errors = append(prSummary.Errors, errorMsg)
-				prSummary.Failures++
-				logger.Debug("Failed to create pull request '%s': %v", pr.Title, err)
+				pullRequestSummary.Errors = append(pullRequestSummary.Errors, errorMsg)
+				pullRequestSummary.Failures++
+				logger.Debug("Failed to create pull request '%s': %v", pullRequest.Title, err)
 			} else {
-				prSummary.Success++
-				logger.Debug("Successfully created pull request '%s'", pr.Title)
+				pullRequestSummary.Success++
+				logger.Debug("Successfully created pull request '%s'", pullRequest.Title)
 			}
 		}
-
-		logger.Info("Pull Requests: %d total, %d successful, %d failed", prSummary.Total, prSummary.Success, prSummary.Failures)
+		logger.Info("Pull Requests: %d total, %d successful, %d failed", pullRequestSummary.Total, pullRequestSummary.Success, pullRequestSummary.Failures)
 	}
 
 	// If any errors occurred, return them as a combined error but don't fail completely
@@ -135,29 +117,6 @@ func HydrateWithLabels(client githubapi.GitHubClient, issuesPath, discussionsPat
 	}
 
 	return nil
-}
-
-type Issue struct {
-	Title     string   `json:"title"`
-	Body      string   `json:"body"`
-	Labels    []string `json:"labels"`
-	Assignees []string `json:"assignees"`
-}
-
-type Discussion struct {
-	Title    string   `json:"title"`
-	Body     string   `json:"body"`
-	Category string   `json:"category"`
-	Labels   []string `json:"labels"`
-}
-
-type PullRequest struct {
-	Title     string   `json:"title"`
-	Body      string   `json:"body"`
-	Head      string   `json:"head"`
-	Base      string   `json:"base"`
-	Labels    []string `json:"labels"`
-	Assignees []string `json:"assignees"`
 }
 
 // EnsureLabelsExist checks if each label exists in the repo, and creates it if not.
@@ -200,10 +159,12 @@ func EnsureLabelsExist(client githubapi.GitHubClient, labels []string, logger co
 	return nil
 }
 
-func HydrateFromFiles(issuesPath, discussionsPath, prsPath string, includeIssues, includeDiscussions, includePRs bool) ([]Issue, []Discussion, []PullRequest, error) {
-	var issues []Issue
-	var discussions []Discussion
-	var prs []PullRequest
+// HydrateFromFiles loads issues, discussions, and pull requests from their respective JSON files.
+// It only loads files for content types that are included (enabled by the respective boolean flags).
+func HydrateFromFiles(issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests bool) ([]types.Issue, []types.Discussion, []types.PullRequest, error) {
+	var issues []types.Issue
+	var discussions []types.Discussion
+	var pullRequests []types.PullRequest
 
 	if includeIssues {
 		data, err := os.ReadFile(issuesPath)
@@ -225,42 +186,43 @@ func HydrateFromFiles(issuesPath, discussionsPath, prsPath string, includeIssues
 		}
 	}
 
-	if includePRs {
-		data, err := os.ReadFile(prsPath)
+	if includePullRequests {
+		data, err := os.ReadFile(pullRequestsPath)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		if err := json.Unmarshal(data, &prs); err != nil {
+		if err := json.Unmarshal(data, &pullRequests); err != nil {
 			return nil, nil, nil, err
 		}
 	}
 
-	return issues, discussions, prs, nil
+	return issues, discussions, pullRequests, nil
 }
 
 // CollectLabels returns a deduplicated list of all labels used in issues, discussions, and PRs.
-func CollectLabels(issues []Issue, discussions []Discussion, prs []PullRequest) []string {
+// CollectLabels returns a deduplicated list of all labels used in issues, discussions, and pull requests.
+func CollectLabels(issues []types.Issue, discussions []types.Discussion, pullRequests []types.PullRequest) []string {
 	labelSet := make(map[string]struct{})
-	for _, i := range issues {
-		for _, l := range i.Labels {
-			labelSet[l] = struct{}{}
+	for _, issue := range issues {
+		for _, label := range issue.Labels {
+			labelSet[label] = struct{}{}
 		}
 	}
-	for _, d := range discussions {
-		for _, l := range d.Labels {
-			labelSet[l] = struct{}{}
+	for _, discussion := range discussions {
+		for _, label := range discussion.Labels {
+			labelSet[label] = struct{}{}
 		}
 	}
-	for _, p := range prs {
-		for _, l := range p.Labels {
-			labelSet[l] = struct{}{}
+	for _, pullRequest := range pullRequests {
+		for _, label := range pullRequest.Labels {
+			labelSet[label] = struct{}{}
 		}
 	}
-	out := make([]string, 0, len(labelSet))
-	for l := range labelSet {
-		out = append(out, l)
+	labels := make([]string, 0, len(labelSet))
+	for label := range labelSet {
+		labels = append(labels, label)
 	}
-	return out
+	return labels
 }
 
 // FindProjectRoot traverses up from the current file to find the directory containing go.mod
