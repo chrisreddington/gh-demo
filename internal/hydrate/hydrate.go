@@ -50,6 +50,67 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, issue
 	// Collect label names referenced in content
 	referencedLabelNames := CollectLabels(issues, discussions, pullRequests)
 
+	// Prepare the final list of labels to ensure exist
+	labelsToEnsure := prepareLabelsToEnsure(explicitLabels, referencedLabelNames)
+
+	labelSummary := &SectionSummary{Name: "Labels", Total: len(labelsToEnsure)}
+
+	if len(explicitLabels) > 0 {
+		logger.Debug("Found %d explicit label definitions from %s", len(explicitLabels), labelsPath)
+	}
+	logger.Debug("Found %d total labels to ensure exist", len(labelsToEnsure))
+
+	if err := EnsureDefinedLabelsExist(ctx, client, labelsToEnsure, logger, labelSummary); err != nil {
+		return errors.APIError("ensure_labels", "failed to ensure labels exist", err)
+	}
+
+	// Report label summary
+	logger.Info("Labels: %d total, %d successful, %d failed", labelSummary.Total, labelSummary.Success, labelSummary.Failures)
+
+	var allErrors []string
+
+	// Create issues, discussions, and pull requests
+	if includeIssues {
+		issueErrors, err := createIssues(ctx, client, issues, logger)
+		if err != nil {
+			return err
+		}
+		if len(issueErrors) > 0 {
+			allErrors = append(allErrors, issueErrors...)
+		}
+	}
+
+	if includeDiscussions {
+		discussionErrors, err := createDiscussions(ctx, client, discussions, logger)
+		if err != nil {
+			return err
+		}
+		if len(discussionErrors) > 0 {
+			allErrors = append(allErrors, discussionErrors...)
+		}
+	}
+
+	if includePullRequests {
+		prErrors, err := createPullRequests(ctx, client, pullRequests, logger)
+		if err != nil {
+			return err
+		}
+		if len(prErrors) > 0 {
+			allErrors = append(allErrors, prErrors...)
+		}
+	}
+
+	// If any errors occurred, return them as a combined error but don't fail completely
+	if len(allErrors) > 0 {
+		return errors.NewPartialFailureError(allErrors)
+	}
+
+	return nil
+}
+
+// prepareLabelsToEnsure builds the final list of labels that need to be ensured to exist.
+// It combines explicit labels from labels.json with auto-generated labels for any referenced labels.
+func prepareLabelsToEnsure(explicitLabels []types.Label, referencedLabelNames []string) []types.Label {
 	// Create a map of explicit labels by name for quick lookup
 	explicitLabelMap := make(map[string]types.Label)
 	for _, label := range explicitLabels {
@@ -75,103 +136,103 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, issue
 		}
 	}
 
-	labelSummary := &SectionSummary{Name: "Labels", Total: len(labelsToEnsure)}
+	return labelsToEnsure
+}
 
-	if len(explicitLabels) > 0 {
-		logger.Debug("Found %d explicit label definitions from %s", len(explicitLabels), labelsPath)
+// createIssues creates all issues and collects any errors that occur.
+// It returns a slice of error messages for any issues that failed to create.
+func createIssues(ctx context.Context, client githubapi.GitHubClient, issues []types.Issue, logger common.Logger) ([]string, error) {
+	if len(issues) == 0 {
+		return nil, nil
 	}
-	logger.Debug("Found %d total labels to ensure exist", len(labelsToEnsure))
 
-	if err := EnsureDefinedLabelsExist(ctx, client, labelsToEnsure, logger, labelSummary); err != nil {
-		return errors.APIError("ensure_labels", "failed to ensure labels exist", err)
-	}
+	var errors []string
+	issueSummary := &SectionSummary{Name: "Issues", Total: len(issues)}
+	logger.Debug("Creating %d issues", len(issues))
 
-	// Report label summary
-	logger.Info("Labels: %d total, %d successful, %d failed", labelSummary.Total, labelSummary.Success, labelSummary.Failures)
-
-	var allErrors []string
-
-	// Create issues
-	if includeIssues {
-		issueSummary := &SectionSummary{Name: "Issues", Total: len(issues)}
-		logger.Debug("Creating %d issues", len(issues))
-
-		for i, issue := range issues {
-			// Check for cancellation before each issue creation
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-
-			if err := client.CreateIssue(ctx, issue); err != nil {
-				errorMsg := fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err)
-				allErrors = append(allErrors, errorMsg)
-				issueSummary.Errors = append(issueSummary.Errors, errorMsg)
-				issueSummary.Failures++
-				logger.Debug("Failed to create issue '%s': %v", issue.Title, err)
-			} else {
-				issueSummary.Success++
-				logger.Debug("Successfully created issue '%s'", issue.Title)
-			}
+	for i, issue := range issues {
+		// Check for cancellation before each issue creation
+		if err := ctx.Err(); err != nil {
+			return errors, err
 		}
-		logger.Info("Issues: %d total, %d successful, %d failed", issueSummary.Total, issueSummary.Success, issueSummary.Failures)
-	}
 
-	// Create discussions
-	if includeDiscussions {
-		discussionSummary := &SectionSummary{Name: "Discussions", Total: len(discussions)}
-		logger.Debug("Creating %d discussions", len(discussions))
-
-		for i, discussion := range discussions {
-			// Check for cancellation before each discussion creation
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-
-			if err := client.CreateDiscussion(ctx, discussion); err != nil {
-				errorMsg := fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err)
-				allErrors = append(allErrors, errorMsg)
-				discussionSummary.Errors = append(discussionSummary.Errors, errorMsg)
-				discussionSummary.Failures++
-				logger.Debug("Failed to create discussion '%s': %v", discussion.Title, err)
-			} else {
-				discussionSummary.Success++
-				logger.Debug("Successfully created discussion '%s'", discussion.Title)
-			}
+		if err := client.CreateIssue(ctx, issue); err != nil {
+			errorMsg := fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err)
+			errors = append(errors, errorMsg)
+			issueSummary.Errors = append(issueSummary.Errors, errorMsg)
+			issueSummary.Failures++
+			logger.Debug("Failed to create issue '%s': %v", issue.Title, err)
+		} else {
+			issueSummary.Success++
+			logger.Debug("Successfully created issue '%s'", issue.Title)
 		}
-		logger.Info("Discussions: %d total, %d successful, %d failed", discussionSummary.Total, discussionSummary.Success, discussionSummary.Failures)
+	}
+	logger.Info("Issues: %d total, %d successful, %d failed", issueSummary.Total, issueSummary.Success, issueSummary.Failures)
+	return errors, nil
+}
+
+// createDiscussions creates all discussions and collects any errors that occur.
+// It returns a slice of error messages for any discussions that failed to create.
+func createDiscussions(ctx context.Context, client githubapi.GitHubClient, discussions []types.Discussion, logger common.Logger) ([]string, error) {
+	if len(discussions) == 0 {
+		return nil, nil
 	}
 
-	// Create pull requests
-	if includePullRequests {
-		pullRequestSummary := &SectionSummary{Name: "Pull Requests", Total: len(pullRequests)}
-		logger.Debug("Creating %d pull requests", len(pullRequests))
+	var errors []string
+	discussionSummary := &SectionSummary{Name: "Discussions", Total: len(discussions)}
+	logger.Debug("Creating %d discussions", len(discussions))
 
-		for i, pullRequest := range pullRequests {
-			// Check for cancellation before each pull request creation
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-
-			if err := client.CreatePR(ctx, pullRequest); err != nil {
-				errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pullRequest.Title, err)
-				allErrors = append(allErrors, errorMsg)
-				pullRequestSummary.Errors = append(pullRequestSummary.Errors, errorMsg)
-				pullRequestSummary.Failures++
-				logger.Debug("Failed to create pull request '%s': %v", pullRequest.Title, err)
-			} else {
-				pullRequestSummary.Success++
-				logger.Debug("Successfully created pull request '%s'", pullRequest.Title)
-			}
+	for i, discussion := range discussions {
+		// Check for cancellation before each discussion creation
+		if err := ctx.Err(); err != nil {
+			return errors, err
 		}
-		logger.Info("Pull Requests: %d total, %d successful, %d failed", pullRequestSummary.Total, pullRequestSummary.Success, pullRequestSummary.Failures)
+
+		if err := client.CreateDiscussion(ctx, discussion); err != nil {
+			errorMsg := fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err)
+			errors = append(errors, errorMsg)
+			discussionSummary.Errors = append(discussionSummary.Errors, errorMsg)
+			discussionSummary.Failures++
+			logger.Debug("Failed to create discussion '%s': %v", discussion.Title, err)
+		} else {
+			discussionSummary.Success++
+			logger.Debug("Successfully created discussion '%s'", discussion.Title)
+		}
+	}
+	logger.Info("Discussions: %d total, %d successful, %d failed", discussionSummary.Total, discussionSummary.Success, discussionSummary.Failures)
+	return errors, nil
+}
+
+// createPullRequests creates all pull requests and collects any errors that occur.
+// It returns a slice of error messages for any pull requests that failed to create.
+func createPullRequests(ctx context.Context, client githubapi.GitHubClient, pullRequests []types.PullRequest, logger common.Logger) ([]string, error) {
+	if len(pullRequests) == 0 {
+		return nil, nil
 	}
 
-	// If any errors occurred, return them as a combined error but don't fail completely
-	if len(allErrors) > 0 {
-		return errors.NewPartialFailureError(allErrors)
-	}
+	var errors []string
+	pullRequestSummary := &SectionSummary{Name: "Pull Requests", Total: len(pullRequests)}
+	logger.Debug("Creating %d pull requests", len(pullRequests))
 
-	return nil
+	for i, pullRequest := range pullRequests {
+		// Check for cancellation before each pull request creation
+		if err := ctx.Err(); err != nil {
+			return errors, err
+		}
+
+		if err := client.CreatePR(ctx, pullRequest); err != nil {
+			errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pullRequest.Title, err)
+			errors = append(errors, errorMsg)
+			pullRequestSummary.Errors = append(pullRequestSummary.Errors, errorMsg)
+			pullRequestSummary.Failures++
+			logger.Debug("Failed to create pull request '%s': %v", pullRequest.Title, err)
+		} else {
+			pullRequestSummary.Success++
+			logger.Debug("Successfully created pull request '%s'", pullRequest.Title)
+		}
+	}
+	logger.Info("Pull Requests: %d total, %d successful, %d failed", pullRequestSummary.Total, pullRequestSummary.Success, pullRequestSummary.Failures)
+	return errors, nil
 }
 
 // EnsureDefinedLabelsExist creates any missing labels in the repository.

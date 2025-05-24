@@ -21,58 +21,58 @@ func TestDebugLogger(t *testing.T) {
 // TestHydrateCmd_FlagProperties tests that all flags are properly configured
 func TestHydrateCmd_FlagProperties(t *testing.T) {
 	tests := []struct {
-		name         string
-		flagName     string
-		shouldExist  bool
+		name            string
+		flagName        string
+		shouldExist     bool
 		expectedDefault string
 		shouldHaveUsage bool
 	}{
 		{
-			name:         "owner flag exists",
-			flagName:     "owner",
-			shouldExist:  true,
+			name:            "owner flag exists",
+			flagName:        "owner",
+			shouldExist:     true,
 			expectedDefault: "",
 			shouldHaveUsage: true,
 		},
 		{
-			name:         "repo flag exists",
-			flagName:     "repo", 
-			shouldExist:  true,
+			name:            "repo flag exists",
+			flagName:        "repo",
+			shouldExist:     true,
 			expectedDefault: "",
 			shouldHaveUsage: true,
 		},
 		{
-			name:         "issues flag exists with default true",
-			flagName:     "issues",
-			shouldExist:  true,
+			name:            "issues flag exists with default true",
+			flagName:        "issues",
+			shouldExist:     true,
 			expectedDefault: "true",
 			shouldHaveUsage: true,
 		},
 		{
-			name:         "discussions flag exists with default true",
-			flagName:     "discussions",
-			shouldExist:  true,
-			expectedDefault: "true", 
-			shouldHaveUsage: true,
-		},
-		{
-			name:         "prs flag exists with default true",
-			flagName:     "prs",
-			shouldExist:  true,
+			name:            "discussions flag exists with default true",
+			flagName:        "discussions",
+			shouldExist:     true,
 			expectedDefault: "true",
 			shouldHaveUsage: true,
 		},
 		{
-			name:         "debug flag exists with default false",
-			flagName:     "debug",
-			shouldExist:  true,
+			name:            "prs flag exists with default true",
+			flagName:        "prs",
+			shouldExist:     true,
+			expectedDefault: "true",
+			shouldHaveUsage: true,
+		},
+		{
+			name:            "debug flag exists with default false",
+			flagName:        "debug",
+			shouldExist:     true,
 			expectedDefault: "false",
 			shouldHaveUsage: true,
 		},
 		{
-			name:         "config-path flag exists with custom default",
-			flagName:     "config-path",
-			shouldExist:  true,
+			name:            "config-path flag exists with custom default",
+			flagName:        "config-path",
+			shouldExist:     true,
 			expectedDefault: ".github/demos",
 			shouldHaveUsage: true,
 		},
@@ -84,12 +84,12 @@ func TestHydrateCmd_FlagProperties(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			flag := flags.Lookup(tt.flagName)
-			
+
 			if tt.shouldExist && flag == nil {
 				t.Errorf("Expected flag %s to be defined", tt.flagName)
 				return
 			}
-			
+
 			if !tt.shouldExist && flag != nil {
 				t.Errorf("Expected flag %s to not be defined", tt.flagName)
 				return
@@ -99,7 +99,7 @@ func TestHydrateCmd_FlagProperties(t *testing.T) {
 				if flag.DefValue != tt.expectedDefault {
 					t.Errorf("Expected flag %s default value to be %q, got %q", tt.flagName, tt.expectedDefault, flag.DefValue)
 				}
-				
+
 				if tt.shouldHaveUsage && flag.Usage == "" {
 					t.Errorf("Expected flag %s to have usage description", tt.flagName)
 				}
@@ -205,8 +205,6 @@ func TestHydrateCmdRun_InvalidProjectRoot(t *testing.T) {
 		t.Error("Flags should be accessible after parsing")
 	}
 }
-
-
 
 // TestHydrateCmdExecution tests the command execution with mocked environment
 func TestHydrateCmdExecution(t *testing.T) {
