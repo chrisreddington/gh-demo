@@ -8,23 +8,23 @@ import (
 // MockResponse represents different types of GraphQL responses that can be configured
 type MockResponse struct {
 	// Repository responses
-	RepositoryID      string
-	Labels            []string
-	Categories        []MockCategory
-	
+	RepositoryID string
+	Labels       []string
+	Categories   []MockCategory
+
 	// Mutation responses
-	LabelID           string
-	IssueID           string
-	IssueNumber       int
-	PRID              string
-	PRNumber          int
-	DiscussionID      string
-	DiscussionNumber  int
-	UserID            string
-	
+	LabelID          string
+	IssueID          string
+	IssueNumber      int
+	PRID             string
+	PRNumber         int
+	DiscussionID     string
+	DiscussionNumber int
+	UserID           string
+
 	// Error simulation
-	ShouldError       bool
-	ErrorMessage      string
+	ShouldError  bool
+	ErrorMessage string
 }
 
 type MockCategory struct {
@@ -43,7 +43,7 @@ func (m *ConfigurableMockGraphQLClient) Do(ctx context.Context, query string, va
 	if m.DoFunc != nil {
 		return m.DoFunc(ctx, query, variables, response)
 	}
-	
+
 	// Otherwise use the configurable response system
 	return m.handleQuery(query, variables, response)
 }
@@ -66,7 +66,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		}
 		return nil
 	}
-	
+
 	// Handle ListLabels query
 	if strings.Contains(query, "labels") && strings.Contains(query, "nodes") {
 		resp := response.(*struct {
@@ -94,7 +94,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		}
 		return nil
 	}
-	
+
 	// Handle createLabel mutation
 	if strings.Contains(query, "createLabel") {
 		resp := response.(*struct {
@@ -129,7 +129,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		}
 		return nil
 	}
-	
+
 	// Handle createIssue mutation
 	if strings.Contains(query, "createIssue") {
 		resp := response.(*struct {
@@ -156,7 +156,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		resp.CreateIssue.Issue.URL = "https://github.com/owner/repo/issues/1"
 		return nil
 	}
-	
+
 	// Handle createPullRequest mutation
 	if strings.Contains(query, "createPullRequest") {
 		resp := response.(*struct {
@@ -183,7 +183,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		resp.CreatePullRequest.PullRequest.URL = "https://github.com/owner/repo/pull/1"
 		return nil
 	}
-	
+
 	// Handle discussionCategories query
 	if strings.Contains(query, "discussionCategories") {
 		resp := response.(*struct {
@@ -219,7 +219,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		}
 		return nil
 	}
-	
+
 	// Handle createDiscussion mutation
 	if strings.Contains(query, "createDiscussion") {
 		resp := response.(*struct {
@@ -246,7 +246,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		resp.CreateDiscussion.Discussion.URL = "https://github.com/owner/repo/discussions/1"
 		return nil
 	}
-	
+
 	// Handle GetLabelId, GetUserId, and other helper queries with default responses
 	if strings.Contains(query, "GetLabelId") {
 		resp := response.(*struct {
@@ -259,7 +259,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		resp.Repository.Label.ID = "default-label-id"
 		return nil
 	}
-	
+
 	if strings.Contains(query, "GetUserId") {
 		resp := response.(*struct {
 			User struct {
@@ -273,7 +273,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		}
 		return nil
 	}
-	
+
 	// Handle addLabelsToLabelable and addAssigneesToAssignable mutations
 	if strings.Contains(query, "addLabelsToLabelable") {
 		resp := response.(*struct {
@@ -284,7 +284,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		resp.AddLabelsToLabelable.ClientMutationID = "mutation-id-123"
 		return nil
 	}
-	
+
 	if strings.Contains(query, "addAssigneesToAssignable") {
 		resp := response.(*struct {
 			AddAssigneesToAssignable struct {
@@ -294,7 +294,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		resp.AddAssigneesToAssignable.ClientMutationID = "mutation-id-456"
 		return nil
 	}
-	
+
 	// Default: return nil for unhandled queries
 	return nil
 }
@@ -352,14 +352,14 @@ func NewDefaultMockGraphQL() *ConfigurableMockGraphQLClient {
 // NewErrorMockGraphQL creates a mock that returns errors for specified operations
 func NewErrorMockGraphQL(errorOperations map[string]string) *ConfigurableMockGraphQLClient {
 	responses := map[string]*MockResponse{}
-	
+
 	for op, errMsg := range errorOperations {
 		responses[op] = &MockResponse{
 			ShouldError:  true,
 			ErrorMessage: errMsg,
 		}
 	}
-	
+
 	return &ConfigurableMockGraphQLClient{Responses: responses}
 }
 

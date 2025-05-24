@@ -154,22 +154,6 @@ func (c *GHClient) ListLabels(ctx context.Context) ([]string, error) {
 
 	c.debugLog("Fetching labels from repository %s/%s", c.Owner, c.Repo)
 
-	labelsQuery := `
-		query($owner: String!, $name: String!) {
-			repository(owner: $owner, name: $name) {
-				labels(first: 100) {
-					nodes {
-						name
-					}
-					pageInfo {
-						hasNextPage
-						endCursor
-					}
-				}
-			}
-		}
-	`
-
 	var response struct {
 		Repository struct {
 			Labels struct {
@@ -193,7 +177,7 @@ func (c *GHClient) ListLabels(ctx context.Context) ([]string, error) {
 	apiCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
 	defer cancel()
 
-	err := c.gqlClient.Do(apiCtx, labelsQuery, variables, &response)
+	err := c.gqlClient.Do(apiCtx, listLabelsQuery, variables, &response)
 	if err != nil {
 		c.debugLog("Failed to fetch labels: %v", err)
 		if errors.IsContextError(err) {
@@ -490,19 +474,6 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	c.debugLog("Creating discussion '%s' in repository %s/%s", discussion.Title, c.Owner, c.Repo)
 
 	// First, get the repository ID and discussion categories
-	repoQuery := `
-		query($owner: String!, $name: String!) {
-			repository(owner: $owner, name: $name) {
-				id
-				discussionCategories(first: 50) {
-					nodes {
-						id
-						name
-					}
-				}
-			}
-		}
-	`
 
 	var repoResponse struct {
 		Repository struct {
@@ -525,7 +496,7 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	apiCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
 	defer cancel()
 
-	err := c.gqlClient.Do(apiCtx, repoQuery, repoVariables, &repoResponse)
+	err := c.gqlClient.Do(apiCtx, repositoryWithDiscussionCategoriesQuery, repoVariables, &repoResponse)
 	if err != nil {
 		c.debugLog("Failed to fetch repository info for discussion: %v", err)
 		return errors.APIError("fetch_repository_info", "failed to fetch repository info", err)
@@ -561,18 +532,6 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 		discussion.Category, categoryID, matchedCategory)
 
 	// Create the discussion
-	createMutation := `
-		mutation($input: CreateDiscussionInput!) {
-			createDiscussion(input: $input) {
-				discussion {
-					id
-					number
-					title
-					url
-				}
-			}
-		}
-	`
 
 	var mutationResponse struct {
 		CreateDiscussion struct {
@@ -602,7 +561,7 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	createCtx, createCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer createCancel()
 
-	err = c.gqlClient.Do(createCtx, createMutation, mutationVariables, &mutationResponse)
+	err = c.gqlClient.Do(createCtx, createDiscussionMutation, mutationVariables, &mutationResponse)
 	if err != nil {
 		c.debugLog("Failed to create discussion '%s': %v", discussion.Title, err)
 		return errors.APIError("create_discussion", "failed to create discussion", err)
@@ -649,15 +608,6 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 // addLabelToDiscussion is a helper method to add a label to a discussion
 func (c *GHClient) addLabelToDiscussion(ctx context.Context, discussionID, labelName string) error {
 	// First, find the label ID for the label name
-	labelQuery := `
-		query($owner: String!, $repo: String!, $name: String!) {
-			repository(owner: $owner, name: $repo) {
-				label(name: $name) {
-					id
-				}
-			}
-		}
-	`
 
 	var labelResponse struct {
 		Repository struct {
@@ -677,7 +627,7 @@ func (c *GHClient) addLabelToDiscussion(ctx context.Context, discussionID, label
 	labelCtx, labelCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer labelCancel()
 
-	err := c.gqlClient.Do(labelCtx, labelQuery, labelVariables, &labelResponse)
+	err := c.gqlClient.Do(labelCtx, labelByNameQuery, labelVariables, &labelResponse)
 	if err != nil {
 		return errors.APIError("find_label", fmt.Sprintf("failed to find label '%s'", labelName), err)
 	}
@@ -688,13 +638,6 @@ func (c *GHClient) addLabelToDiscussion(ctx context.Context, discussionID, label
 	}
 
 	// Add the label to the discussion
-	addLabelMutation := `
-		mutation($input: AddLabelsToLabelableInput!) {
-			addLabelsToLabelable(input: $input) {
-				clientMutationId
-			}
-		}
-	`
 
 	var labelMutationResponse struct {
 		AddLabelsToLabelable struct {
@@ -713,7 +656,7 @@ func (c *GHClient) addLabelToDiscussion(ctx context.Context, discussionID, label
 	addLabelCtx, addLabelCancel := context.WithTimeout(ctx, config.APITimeout)
 	defer addLabelCancel()
 
-	err = c.gqlClient.Do(addLabelCtx, addLabelMutation, labelMutationVariables, &labelMutationResponse)
+	err = c.gqlClient.Do(addLabelCtx, addLabelsToLabelableMutation, labelMutationVariables, &labelMutationResponse)
 	if err != nil {
 		return errors.APIError("add_label_to_discussion", fmt.Sprintf("failed to add label '%s' to discussion", labelName), err)
 	}
@@ -749,16 +692,6 @@ func (c *GHClient) addLabelsAndAssigneesToPR(ctx context.Context, prID string, l
 
 	// Add labels if we have any
 	if len(labelIDs) > 0 {
-		addLabelsMutation := `
-			mutation AddLabelsToPR($labelableId: ID!, $labelIds: [ID!]!) {
-				addLabelsToLabelable(input: {
-					labelableId: $labelableId
-					labelIds: $labelIds
-				}) {
-					clientMutationId
-				}
-			}
-		`
 
 		var labelResponse struct {
 			AddLabelsToLabelable struct {
@@ -774,7 +707,7 @@ func (c *GHClient) addLabelsAndAssigneesToPR(ctx context.Context, prID string, l
 		labelCtx, labelCancel := context.WithTimeout(ctx, config.APITimeout)
 		defer labelCancel()
 
-		err = c.gqlClient.Do(labelCtx, addLabelsMutation, labelVariables, &labelResponse)
+		err = c.gqlClient.Do(labelCtx, addLabelsToLabelableMutationWithParams, labelVariables, &labelResponse)
 		if err != nil {
 			c.debugLog("Failed to add labels to PR: %v", err)
 			return errors.APIError("add_labels_to_pr", "failed to add labels to pull request", err)
@@ -783,16 +716,6 @@ func (c *GHClient) addLabelsAndAssigneesToPR(ctx context.Context, prID string, l
 
 	// Add assignees if we have any
 	if len(assigneeIDs) > 0 {
-		addAssigneesMutation := `
-			mutation AddAssigneesToPR($assignableId: ID!, $assigneeIds: [ID!]!) {
-				addAssigneesToAssignable(input: {
-					assignableId: $assignableId
-					assigneeIds: $assigneeIds
-				}) {
-					clientMutationId
-				}
-			}
-		`
 
 		var assigneeResponse struct {
 			AddAssigneesToAssignable struct {
@@ -808,7 +731,7 @@ func (c *GHClient) addLabelsAndAssigneesToPR(ctx context.Context, prID string, l
 		assigneeCtx, assigneeCancel := context.WithTimeout(ctx, config.APITimeout)
 		defer assigneeCancel()
 
-		err = c.gqlClient.Do(assigneeCtx, addAssigneesMutation, assigneeVariables, &assigneeResponse)
+		err = c.gqlClient.Do(assigneeCtx, addAssigneesToAssignableMutation, assigneeVariables, &assigneeResponse)
 		if err != nil {
 			c.debugLog("Failed to add assignees to PR: %v", err)
 			return errors.APIError("add_assignees_to_pr", "failed to add assignees to pull request", err)

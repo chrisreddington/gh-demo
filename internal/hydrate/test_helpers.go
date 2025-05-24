@@ -10,16 +10,16 @@ import (
 
 // MockConfig allows configuration of the mock GitHubClient behavior
 type MockConfig struct {
-	ExistingLabels     map[string]bool
-	FailIssues         bool
-	FailPRs            bool
-	FailDiscussions    bool
-	FailListLabels     bool
-	FailCreateLabel    bool
-	IssueErrorMsg      string
-	PRErrorMsg         string
-	DiscussionErrorMsg string
-	ListLabelsErrorMsg string
+	ExistingLabels      map[string]bool
+	FailIssues          bool
+	FailPRs             bool
+	FailDiscussions     bool
+	FailListLabels      bool
+	FailCreateLabel     bool
+	IssueErrorMsg       string
+	PRErrorMsg          string
+	DiscussionErrorMsg  string
+	ListLabelsErrorMsg  string
 	CreateLabelErrorMsg string
 }
 
@@ -112,7 +112,7 @@ func NewSuccessfulMockGitHubClient(existingLabels ...string) *ConfigurableMockGi
 	for _, label := range existingLabels {
 		labels[label] = true
 	}
-	
+
 	return &ConfigurableMockGitHubClient{
 		Config: MockConfig{
 			ExistingLabels: labels,
@@ -129,7 +129,7 @@ func NewFailingMockGitHubClient(config MockConfig) *ConfigurableMockGitHubClient
 	if config.ExistingLabels == nil {
 		config.ExistingLabels = make(map[string]bool)
 	}
-	
+
 	return &ConfigurableMockGitHubClient{
 		Config:             config,
 		CreatedIssues:      []types.Issue{},

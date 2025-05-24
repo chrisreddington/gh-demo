@@ -322,7 +322,7 @@ func TestGHClient_ErrorHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := tt.setupClient()
 			err := tt.testFunc(client)
-			
+
 			if tt.expectError && err == nil {
 				t.Errorf("Expected an error for %s", tt.name)
 			}
