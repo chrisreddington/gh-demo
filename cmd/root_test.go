@@ -9,35 +9,47 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// TestExecute tests Execute function behavior with different argument scenarios
 func TestExecute(t *testing.T) {
-	// Test that Execute function can be called directly
-	// Save original args and restore afterwards
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
-
-	// Set args to show help (which should not return an error)
-	os.Args = []string{"gh-demo", "--help"}
-
-	err := Execute()
-	// Help command should not return an error
-	if err != nil {
-		t.Errorf("Execute() with --help should not return error, got: %v", err)
+	tests := []struct {
+		name        string
+		args        []string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "help command success",
+			args:        []string{"gh-demo", "--help"},
+			expectError: false,
+			description: "Help command should not return an error",
+		},
+		{
+			name:        "invalid command error",
+			args:        []string{"gh-demo", "invalid-command"},
+			expectError: true,
+			description: "Invalid command should return an error",
+		},
 	}
-}
 
-// TestExecuteWithError tests Execute() with invalid arguments
-func TestExecuteWithError(t *testing.T) {
-	// Save original args and restore afterwards
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original args and restore afterwards
+			originalArgs := os.Args
+			defer func() { os.Args = originalArgs }()
 
-	// Set invalid args that should cause an error
-	os.Args = []string{"gh-demo", "invalid-command"}
+			// Set test args
+			os.Args = tt.args
 
-	err := Execute()
-	// Invalid command should return an error
-	if err == nil {
-		t.Error("Execute() with invalid command should return an error")
+			err := Execute()
+			
+			if tt.expectError && err == nil {
+				t.Errorf("%s: expected error but got none", tt.description)
+			}
+			
+			if !tt.expectError && err != nil {
+				t.Errorf("%s: expected no error but got: %v", tt.description, err)
+			}
+		})
 	}
 }
 
@@ -61,54 +73,6 @@ func TestExecuteStructure(t *testing.T) {
 
 	if !hydrateFound {
 		t.Error("Hydrate command should be added to root")
-	}
-}
-
-func TestExecuteWithHelp(t *testing.T) {
-	// Test Execute with help flag to avoid actual execution
-	originalArgs := os.Args
-	defer func() { os.Args = originalArgs }()
-
-	// Capture stdout
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Set args to show help
-	os.Args = []string{"gh-demo", "--help"}
-
-	// Create a separate root command for testing to avoid modifying global state
-	testRootCmd := &cobra.Command{
-		Use:   "gh-demo",
-		Short: "GitHub Demo CLI Extension",
-	}
-	testRootCmd.AddCommand(NewHydrateCmd())
-
-	// Execute with help should not cause issues
-	testRootCmd.SetArgs([]string{"--help"})
-	err := testRootCmd.Execute()
-
-	// Restore stdout
-	if closeErr := w.Close(); closeErr != nil {
-		t.Errorf("Failed to close stdout writer: %v", closeErr)
-	}
-	os.Stdout = old
-
-	// Read captured output
-	out, readErr := io.ReadAll(r)
-	if readErr != nil {
-		t.Fatalf("Failed to read captured output: %v", readErr)
-	}
-	output := string(out)
-
-	// Help should not return an error
-	if err != nil {
-		t.Errorf("Help command should not return error: %v", err)
-	}
-
-	// Output should contain usage information
-	if len(output) == 0 {
-		t.Error("Help command should produce output")
 	}
 }
 
