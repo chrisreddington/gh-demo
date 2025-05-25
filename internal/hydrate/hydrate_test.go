@@ -1175,3 +1175,448 @@ func TestHydrateWithLabels_DryRunFalse(t *testing.T) {
 		t.Error("Expected at least one label to be created when dry-run is false")
 	}
 }
+
+// TestCleanupBeforeHydration tests the main cleanup function
+func TestCleanupBeforeHydration(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupClient func() *ConfigurableMockGitHubClient
+		options     CleanupOptions
+		expectError bool
+		errorText   string
+	}{
+		{
+			name: "no cleanup options",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				return NewSuccessfulMockGitHubClient()
+			},
+			options: CleanupOptions{
+				CleanIssues:      false,
+				CleanDiscussions: false,
+				CleanPRs:         false,
+				CleanLabels:      false,
+				DryRun:           false,
+			},
+			expectError: false,
+		},
+		{
+			name: "cleanup all with successful client",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				// Add some mock data to cleanup
+				client.CreatedIssues = []types.Issue{
+					{NodeID: "issue1", Title: "Issue 1", Labels: []string{"bug"}},
+					{NodeID: "issue2", Title: "Issue 2", Labels: []string{"enhancement"}},
+				}
+				client.CreatedDiscussions = []types.Discussion{
+					{NodeID: "discussion1", Title: "Discussion 1"},
+				}
+				client.CreatedPRs = []types.PullRequest{
+					{NodeID: "pr1", Title: "PR 1", Labels: []string{"feature"}},
+				}
+				client.CreatedLabels = []string{"bug", "enhancement", "feature"}
+				return client
+			},
+			options: CleanupOptions{
+				CleanIssues:      true,
+				CleanDiscussions: true,
+				CleanPRs:         true,
+				CleanLabels:      true,
+				DryRun:           false,
+			},
+			expectError: false,
+		},
+		{
+			name: "dry run cleanup",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				// Add some mock data to preview cleanup
+				client.CreatedIssues = []types.Issue{
+					{NodeID: "issue1", Title: "Issue 1", Labels: []string{"bug"}},
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanIssues: true,
+				DryRun:      true,
+			},
+			expectError: false,
+		},
+		{
+			name: "cleanup with preserve config",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				// Add some mock data to cleanup
+				client.CreatedIssues = []types.Issue{
+					{NodeID: "issue1", Title: "Important Issue", Labels: []string{"bug"}},
+					{NodeID: "issue2", Title: "Regular Issue", Labels: []string{"enhancement"}},
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanIssues: true,
+				DryRun:      false,
+				PreserveConfig: &config.PreserveConfig{
+					Issues: struct {
+						PreserveByTitle []string `json:"preserve_by_title,omitempty"`
+						PreserveByLabel []string `json:"preserve_by_label,omitempty"`
+						PreserveByID    []string `json:"preserve_by_id,omitempty"`
+					}{
+						PreserveByTitle: []string{"Important Issue"},
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			client := tt.setupClient()
+			logger := common.NewLogger(false)
+
+			summary, err := CleanupBeforeHydration(ctx, client, tt.options, logger)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if summary == nil {
+				t.Error("Expected non-nil summary")
+				return
+			}
+
+			// Verify summary structure - Errors should be an empty slice, not nil
+			if len(summary.Errors) != 0 {
+				t.Errorf("Expected empty Errors slice in summary, got %d errors", len(summary.Errors))
+			}
+		})
+	}
+}
+
+// TestCleanupBeforeHydration_ContextCancellation tests context cancellation
+func TestCleanupBeforeHydration_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	client := NewSuccessfulMockGitHubClient()
+	options := CleanupOptions{CleanIssues: true}
+	logger := common.NewLogger(false)
+
+	summary, err := CleanupBeforeHydration(ctx, client, options, logger)
+
+	// May or may not error depending on where cancellation is detected
+	// The important thing is that it handles cancellation gracefully
+	if err != nil && !strings.Contains(err.Error(), "context") {
+		t.Errorf("Expected context-related error, got: %v", err)
+	}
+
+	// Summary may be nil or partially filled
+	if summary != nil && len(summary.Errors) != 0 && !strings.Contains(strings.Join(summary.Errors, " "), "context") {
+		t.Errorf("If summary has errors, they should be context-related, got: %v", summary.Errors)
+	}
+}
+
+// TestCleanupIssues tests issue cleanup functionality
+func TestCleanupIssues(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupClient     func() *ConfigurableMockGitHubClient
+		options         CleanupOptions
+		expectedDeleted int
+		expectedErrors  int
+	}{
+		{
+			name: "successful cleanup",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				client.CreatedIssues = []types.Issue{
+					{NodeID: "issue1", Title: "Issue 1"},
+					{NodeID: "issue2", Title: "Issue 2"},
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanIssues: true,
+				DryRun:      false,
+			},
+			expectedDeleted: 2,
+			expectedErrors:  0,
+		},
+		{
+			name: "dry run cleanup",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				client.CreatedIssues = []types.Issue{
+					{NodeID: "issue1", Title: "Issue 1"},
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanIssues: true,
+				DryRun:      true,
+			},
+			expectedDeleted: 0, // No actual deletion in dry run
+			expectedErrors:  0,
+		},
+		{
+			name: "preserve by title",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				client.CreatedIssues = []types.Issue{
+					{NodeID: "issue1", Title: "Important Issue"},
+					{NodeID: "issue2", Title: "Regular Issue"},
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanIssues: true,
+				DryRun:      false,
+				PreserveConfig: &config.PreserveConfig{
+					Issues: struct {
+						PreserveByTitle []string `json:"preserve_by_title,omitempty"`
+						PreserveByLabel []string `json:"preserve_by_label,omitempty"`
+						PreserveByID    []string `json:"preserve_by_id,omitempty"`
+					}{
+						PreserveByTitle: []string{"Important Issue"},
+					},
+				},
+			},
+			expectedDeleted: 1, // Only regular issue should be deleted
+			expectedErrors:  0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			client := tt.setupClient()
+			logger := common.NewLogger(false)
+			summary := &CleanupSummary{}
+
+			errors := cleanupIssues(ctx, client, tt.options, summary, logger)
+
+			if len(errors) != tt.expectedErrors {
+				t.Errorf("Expected %d errors, got %d: %v", tt.expectedErrors, len(errors), errors)
+			}
+
+			if !tt.options.DryRun {
+				if summary.IssuesDeleted != tt.expectedDeleted {
+					t.Errorf("Expected %d issues deleted, got %d", tt.expectedDeleted, summary.IssuesDeleted)
+				}
+			}
+		})
+	}
+}
+
+// TestCleanupDiscussions tests discussion cleanup functionality
+func TestCleanupDiscussions(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupClient     func() *ConfigurableMockGitHubClient
+		options         CleanupOptions
+		expectedDeleted int
+		expectedErrors  int
+	}{
+		{
+			name: "successful cleanup",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				client.CreatedDiscussions = []types.Discussion{
+					{NodeID: "discussion1", Title: "Discussion 1"},
+					{NodeID: "discussion2", Title: "Discussion 2"},
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanDiscussions: true,
+				DryRun:           false,
+			},
+			expectedDeleted: 2,
+			expectedErrors:  0,
+		},
+		{
+			name: "dry run cleanup",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				client.CreatedDiscussions = []types.Discussion{
+					{NodeID: "discussion1", Title: "Discussion 1"},
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanDiscussions: true,
+				DryRun:           true,
+			},
+			expectedDeleted: 0, // No actual deletion in dry run
+			expectedErrors:  0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			client := tt.setupClient()
+			logger := common.NewLogger(false)
+			summary := &CleanupSummary{}
+
+			errors := cleanupDiscussions(ctx, client, tt.options, summary, logger)
+
+			if len(errors) != tt.expectedErrors {
+				t.Errorf("Expected %d errors, got %d: %v", tt.expectedErrors, len(errors), errors)
+			}
+
+			if !tt.options.DryRun {
+				if summary.DiscussionsDeleted != tt.expectedDeleted {
+					t.Errorf("Expected %d discussions deleted, got %d", tt.expectedDeleted, summary.DiscussionsDeleted)
+				}
+			}
+		})
+	}
+}
+
+// TestCleanupPRs tests pull request cleanup functionality
+func TestCleanupPRs(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupClient     func() *ConfigurableMockGitHubClient
+		options         CleanupOptions
+		expectedDeleted int
+		expectedErrors  int
+	}{
+		{
+			name: "successful cleanup",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				client.CreatedPRs = []types.PullRequest{
+					{NodeID: "pr1", Title: "PR 1"},
+					{NodeID: "pr2", Title: "PR 2"},
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanPRs: true,
+				DryRun:   false,
+			},
+			expectedDeleted: 2,
+			expectedErrors:  0,
+		},
+		{
+			name: "dry run cleanup",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				client.CreatedPRs = []types.PullRequest{
+					{NodeID: "pr1", Title: "PR 1"},
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanPRs: true,
+				DryRun:   true,
+			},
+			expectedDeleted: 0, // No actual deletion in dry run
+			expectedErrors:  0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			client := tt.setupClient()
+			logger := common.NewLogger(false)
+			summary := &CleanupSummary{}
+
+			errors := cleanupPRs(ctx, client, tt.options, summary, logger)
+
+			if len(errors) != tt.expectedErrors {
+				t.Errorf("Expected %d errors, got %d: %v", tt.expectedErrors, len(errors), errors)
+			}
+
+			if !tt.options.DryRun {
+				if summary.PRsDeleted != tt.expectedDeleted {
+					t.Errorf("Expected %d PRs deleted, got %d", tt.expectedDeleted, summary.PRsDeleted)
+				}
+			}
+		})
+	}
+}
+
+// TestCleanupLabels tests label cleanup functionality
+func TestCleanupLabels(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupClient     func() *ConfigurableMockGitHubClient
+		options         CleanupOptions
+		expectedDeleted int
+		expectedErrors  int
+	}{
+		{
+			name: "successful cleanup",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				// Set up the client's existing labels through its internal map
+				client.Config.ExistingLabels = map[string]bool{
+					"bug":         true,
+					"enhancement": true,
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanLabels: true,
+				DryRun:      false,
+			},
+			expectedDeleted: 2,
+			expectedErrors:  0,
+		},
+		{
+			name: "dry run cleanup",
+			setupClient: func() *ConfigurableMockGitHubClient {
+				client := NewSuccessfulMockGitHubClient()
+				client.Config.ExistingLabels = map[string]bool{
+					"bug": true,
+				}
+				return client
+			},
+			options: CleanupOptions{
+				CleanLabels: true,
+				DryRun:      true,
+			},
+			expectedDeleted: 0, // No actual deletion in dry run
+			expectedErrors:  0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			client := tt.setupClient()
+			logger := common.NewLogger(false)
+			summary := &CleanupSummary{}
+
+			errors := cleanupLabels(ctx, client, tt.options, summary, logger)
+
+			if len(errors) != tt.expectedErrors {
+				t.Errorf("Expected %d errors, got %d: %v", tt.expectedErrors, len(errors), errors)
+			}
+
+			if !tt.options.DryRun {
+				if summary.LabelsDeleted != tt.expectedDeleted {
+					t.Errorf("Expected %d labels deleted, got %d", tt.expectedDeleted, summary.LabelsDeleted)
+				}
+			}
+		})
+	}
+}

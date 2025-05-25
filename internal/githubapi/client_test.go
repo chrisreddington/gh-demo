@@ -1217,3 +1217,787 @@ func TestDeleteDiscussion_GraphQLError(t *testing.T) {
 		t.Error("Expected an error from GraphQL client")
 	}
 }
+
+// TestListIssues tests the ListIssues function
+func TestListIssues(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupMockClient func() *MockGraphQLClient
+		expectError     bool
+		expectedCount   int
+		errorText       string
+	}{
+		{
+			name: "successful list with multiple pages",
+			setupMockClient: func() *MockGraphQLClient {
+				callCount := 0
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						callCount++
+						resp := response.(*struct {
+							Repository struct {
+								Issues struct {
+									Nodes []struct {
+										ID     string `json:"id"`
+										Number int    `json:"number"`
+										Title  string `json:"title"`
+										Body   string `json:"body"`
+										Labels struct {
+											Nodes []struct {
+												Name string `json:"name"`
+											} `json:"nodes"`
+										} `json:"labels"`
+									} `json:"nodes"`
+									PageInfo struct {
+										HasNextPage bool    `json:"hasNextPage"`
+										EndCursor   *string `json:"endCursor"`
+									} `json:"pageInfo"`
+								} `json:"issues"`
+							} `json:"repository"`
+						})
+
+						if callCount == 1 {
+							// First page
+							cursor := "cursor1"
+							resp.Repository.Issues.Nodes = []struct {
+								ID     string `json:"id"`
+								Number int    `json:"number"`
+								Title  string `json:"title"`
+								Body   string `json:"body"`
+								Labels struct {
+									Nodes []struct {
+										Name string `json:"name"`
+									} `json:"nodes"`
+								} `json:"labels"`
+							}{
+								{
+									ID:     "issue1",
+									Number: 1,
+									Title:  "Issue 1",
+									Body:   "Body 1",
+									Labels: struct {
+										Nodes []struct {
+											Name string `json:"name"`
+										} `json:"nodes"`
+									}{
+										Nodes: []struct {
+											Name string `json:"name"`
+										}{{Name: "bug"}},
+									},
+								},
+							}
+							resp.Repository.Issues.PageInfo.HasNextPage = true
+							resp.Repository.Issues.PageInfo.EndCursor = &cursor
+						} else {
+							// Second page
+							resp.Repository.Issues.Nodes = []struct {
+								ID     string `json:"id"`
+								Number int    `json:"number"`
+								Title  string `json:"title"`
+								Body   string `json:"body"`
+								Labels struct {
+									Nodes []struct {
+										Name string `json:"name"`
+									} `json:"nodes"`
+								} `json:"labels"`
+							}{
+								{
+									ID:     "issue2",
+									Number: 2,
+									Title:  "Issue 2",
+									Body:   "Body 2",
+									Labels: struct {
+										Nodes []struct {
+											Name string `json:"name"`
+										} `json:"nodes"`
+									}{
+										Nodes: []struct {
+											Name string `json:"name"`
+										}{{Name: "enhancement"}},
+									},
+								},
+							}
+							resp.Repository.Issues.PageInfo.HasNextPage = false
+							resp.Repository.Issues.PageInfo.EndCursor = nil
+						}
+						return nil
+					},
+				}
+			},
+			expectError:   false,
+			expectedCount: 2,
+		},
+		{
+			name: "empty repository",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						resp := response.(*struct {
+							Repository struct {
+								Issues struct {
+									Nodes []struct {
+										ID     string `json:"id"`
+										Number int    `json:"number"`
+										Title  string `json:"title"`
+										Body   string `json:"body"`
+										Labels struct {
+											Nodes []struct {
+												Name string `json:"name"`
+											} `json:"nodes"`
+										} `json:"labels"`
+									} `json:"nodes"`
+									PageInfo struct {
+										HasNextPage bool    `json:"hasNextPage"`
+										EndCursor   *string `json:"endCursor"`
+									} `json:"pageInfo"`
+								} `json:"issues"`
+							} `json:"repository"`
+						})
+
+						resp.Repository.Issues.Nodes = []struct {
+							ID     string `json:"id"`
+							Number int    `json:"number"`
+							Title  string `json:"title"`
+							Body   string `json:"body"`
+							Labels struct {
+								Nodes []struct {
+									Name string `json:"name"`
+								} `json:"nodes"`
+							} `json:"labels"`
+						}{}
+						resp.Repository.Issues.PageInfo.HasNextPage = false
+						resp.Repository.Issues.PageInfo.EndCursor = nil
+						return nil
+					},
+				}
+			},
+			expectError:   false,
+			expectedCount: 0,
+		},
+		{
+			name: "graphql client error",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						return fmt.Errorf("network error")
+					},
+				}
+			},
+			expectError: true,
+			errorText:   "failed to fetch issues",
+		},
+		{
+			name: "nil client validation",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{} // Return empty client to test validation
+			},
+			expectError: true,
+			errorText:   "GraphQL client is not initialized",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &GHClient{
+				Owner:     "testowner",
+				Repo:      "testrepo",
+				gqlClient: tt.setupMockClient(),
+				logger:    &MockLogger{},
+			}
+
+			// Special case for nil client test
+			if tt.name == "nil client validation" {
+				client.gqlClient = nil
+			}
+
+			issues, err := client.ListIssues(context.Background())
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if len(issues) != tt.expectedCount {
+				t.Errorf("Expected %d issues, got %d", tt.expectedCount, len(issues))
+			}
+
+			// Validate issue structure if any returned
+			if len(issues) > 0 {
+				issue := issues[0]
+				if issue.NodeID == "" {
+					t.Error("Expected non-empty NodeID")
+				}
+				if issue.Title == "" {
+					t.Error("Expected non-empty Title")
+				}
+			}
+		})
+	}
+}
+
+// TestListDiscussions tests the ListDiscussions function
+func TestListDiscussions(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupMockClient func() *MockGraphQLClient
+		expectError     bool
+		expectedCount   int
+		errorText       string
+	}{
+		{
+			name: "successful list",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						resp := response.(*struct {
+							Repository struct {
+								Discussions struct {
+									Nodes []struct {
+										ID       string `json:"id"`
+										Number   int    `json:"number"`
+										Title    string `json:"title"`
+										Body     string `json:"body"`
+										Category struct {
+											Name string `json:"name"`
+										} `json:"category"`
+									} `json:"nodes"`
+									PageInfo struct {
+										HasNextPage bool    `json:"hasNextPage"`
+										EndCursor   *string `json:"endCursor"`
+									} `json:"pageInfo"`
+								} `json:"discussions"`
+							} `json:"repository"`
+						})
+
+						resp.Repository.Discussions.Nodes = []struct {
+							ID       string `json:"id"`
+							Number   int    `json:"number"`
+							Title    string `json:"title"`
+							Body     string `json:"body"`
+							Category struct {
+								Name string `json:"name"`
+							} `json:"category"`
+						}{
+							{
+								ID:     "discussion1",
+								Number: 1,
+								Title:  "Discussion 1",
+								Body:   "Body 1",
+								Category: struct {
+									Name string `json:"name"`
+								}{Name: "General"},
+							},
+						}
+						resp.Repository.Discussions.PageInfo.HasNextPage = false
+						resp.Repository.Discussions.PageInfo.EndCursor = nil
+						return nil
+					},
+				}
+			},
+			expectError:   false,
+			expectedCount: 1,
+		},
+		{
+			name: "graphql error",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						return fmt.Errorf("api error")
+					},
+				}
+			},
+			expectError: true,
+			errorText:   "failed to fetch discussions",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &GHClient{
+				Owner:     "testowner",
+				Repo:      "testrepo",
+				gqlClient: tt.setupMockClient(),
+				logger:    &MockLogger{},
+			}
+
+			discussions, err := client.ListDiscussions(context.Background())
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if len(discussions) != tt.expectedCount {
+				t.Errorf("Expected %d discussions, got %d", tt.expectedCount, len(discussions))
+			}
+		})
+	}
+}
+
+// TestListPRs tests the ListPRs function
+func TestListPRs(t *testing.T) {
+	tests := []struct {
+		name            string
+		setupMockClient func() *MockGraphQLClient
+		expectError     bool
+		expectedCount   int
+		errorText       string
+	}{
+		{
+			name: "successful list",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						resp := response.(*struct {
+							Repository struct {
+								PullRequests struct {
+									Nodes []struct {
+										ID          string `json:"id"`
+										Number      int    `json:"number"`
+										Title       string `json:"title"`
+										Body        string `json:"body"`
+										HeadRefName string `json:"headRefName"`
+										BaseRefName string `json:"baseRefName"`
+										Labels      struct {
+											Nodes []struct {
+												Name string `json:"name"`
+											} `json:"nodes"`
+										} `json:"labels"`
+									} `json:"nodes"`
+									PageInfo struct {
+										HasNextPage bool    `json:"hasNextPage"`
+										EndCursor   *string `json:"endCursor"`
+									} `json:"pageInfo"`
+								} `json:"pullRequests"`
+							} `json:"repository"`
+						})
+
+						resp.Repository.PullRequests.Nodes = []struct {
+							ID          string `json:"id"`
+							Number      int    `json:"number"`
+							Title       string `json:"title"`
+							Body        string `json:"body"`
+							HeadRefName string `json:"headRefName"`
+							BaseRefName string `json:"baseRefName"`
+							Labels      struct {
+								Nodes []struct {
+									Name string `json:"name"`
+								} `json:"nodes"`
+							} `json:"labels"`
+						}{
+							{
+								ID:          "pr1",
+								Number:      1,
+								Title:       "PR 1",
+								Body:        "Body 1",
+								HeadRefName: "feature",
+								BaseRefName: "main",
+								Labels: struct {
+									Nodes []struct {
+										Name string `json:"name"`
+									} `json:"nodes"`
+								}{
+									Nodes: []struct {
+										Name string `json:"name"`
+									}{{Name: "feature"}},
+								},
+							},
+						}
+						resp.Repository.PullRequests.PageInfo.HasNextPage = false
+						resp.Repository.PullRequests.PageInfo.EndCursor = nil
+						return nil
+					},
+				}
+			},
+			expectError:   false,
+			expectedCount: 1,
+		},
+		{
+			name: "graphql error",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						return fmt.Errorf("api error")
+					},
+				}
+			},
+			expectError: true,
+			errorText:   "failed to fetch pull requests",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &GHClient{
+				Owner:     "testowner",
+				Repo:      "testrepo",
+				gqlClient: tt.setupMockClient(),
+				logger:    &MockLogger{},
+			}
+
+			prs, err := client.ListPRs(context.Background())
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if len(prs) != tt.expectedCount {
+				t.Errorf("Expected %d PRs, got %d", tt.expectedCount, len(prs))
+			}
+		})
+	}
+}
+
+// TestDeleteIssue tests the DeleteIssue function
+func TestDeleteIssue(t *testing.T) {
+	tests := []struct {
+		name            string
+		nodeID          string
+		setupMockClient func() *MockGraphQLClient
+		expectError     bool
+		errorText       string
+	}{
+		{
+			name:   "successful deletion",
+			nodeID: "issue-node-123",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						if !strings.Contains(query, "closeIssue") {
+							t.Error("Expected closeIssue mutation")
+						}
+
+						// Check variables
+						issueID, ok := variables["issueId"].(string)
+						if !ok || issueID != "issue-node-123" {
+							t.Errorf("Expected issueId 'issue-node-123', got %v", variables["issueId"])
+						}
+
+						// Mock response
+						resp := response.(*struct {
+							CloseIssue struct {
+								Issue struct {
+									ID    string `json:"id"`
+									State string `json:"state"`
+								} `json:"issue"`
+							} `json:"closeIssue"`
+						})
+
+						resp.CloseIssue.Issue.ID = "issue-node-123"
+						resp.CloseIssue.Issue.State = "CLOSED"
+						return nil
+					},
+				}
+			},
+			expectError: false,
+		},
+		{
+			name:   "empty node ID",
+			nodeID: "",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{}
+			},
+			expectError: true,
+			errorText:   "node ID cannot be empty",
+		},
+		{
+			name:   "graphql error",
+			nodeID: "issue-node-123",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						return fmt.Errorf("api error")
+					},
+				}
+			},
+			expectError: true,
+			errorText:   "failed to close issue",
+		},
+		{
+			name:   "issue not properly closed",
+			nodeID: "issue-node-123",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						// Mock response with issue still open
+						resp := response.(*struct {
+							CloseIssue struct {
+								Issue struct {
+									ID    string `json:"id"`
+									State string `json:"state"`
+								} `json:"issue"`
+							} `json:"closeIssue"`
+						})
+
+						resp.CloseIssue.Issue.ID = "issue-node-123"
+						resp.CloseIssue.Issue.State = "OPEN" // Still open
+						return nil
+					},
+				}
+			},
+			expectError: true,
+			errorText:   "issue was not properly closed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &GHClient{
+				Owner:     "testowner",
+				Repo:      "testrepo",
+				gqlClient: tt.setupMockClient(),
+				logger:    &MockLogger{},
+			}
+
+			err := client.DeleteIssue(context.Background(), tt.nodeID)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestDeletePR tests the DeletePR function
+func TestDeletePR(t *testing.T) {
+	tests := []struct {
+		name            string
+		nodeID          string
+		setupMockClient func() *MockGraphQLClient
+		expectError     bool
+		errorText       string
+	}{
+		{
+			name:   "successful deletion",
+			nodeID: "pr-node-123",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						if !strings.Contains(query, "closePullRequest") {
+							t.Error("Expected closePullRequest mutation")
+						}
+
+						// Check variables
+						prID, ok := variables["pullRequestId"].(string)
+						if !ok || prID != "pr-node-123" {
+							t.Errorf("Expected pullRequestId 'pr-node-123', got %v", variables["pullRequestId"])
+						}
+
+						// Mock response
+						resp := response.(*struct {
+							ClosePullRequest struct {
+								PullRequest struct {
+									ID    string `json:"id"`
+									State string `json:"state"`
+								} `json:"pullRequest"`
+							} `json:"closePullRequest"`
+						})
+
+						resp.ClosePullRequest.PullRequest.ID = "pr-node-123"
+						resp.ClosePullRequest.PullRequest.State = "CLOSED"
+						return nil
+					},
+				}
+			},
+			expectError: false,
+		},
+		{
+			name:   "empty node ID",
+			nodeID: "",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{}
+			},
+			expectError: true,
+			errorText:   "node ID cannot be empty",
+		},
+		{
+			name:   "graphql error",
+			nodeID: "pr-node-123",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						return fmt.Errorf("api error")
+					},
+				}
+			},
+			expectError: true,
+			errorText:   "failed to close pull request",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &GHClient{
+				Owner:     "testowner",
+				Repo:      "testrepo",
+				gqlClient: tt.setupMockClient(),
+				logger:    &MockLogger{},
+			}
+
+			err := client.DeletePR(context.Background(), tt.nodeID)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestDeleteLabel tests the DeleteLabel function
+func TestDeleteLabel(t *testing.T) {
+	tests := []struct {
+		name            string
+		labelName       string
+		setupMockClient func() *MockGraphQLClient
+		expectError     bool
+		errorText       string
+	}{
+		{
+			name:      "successful deletion",
+			labelName: "test-label",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						if strings.Contains(query, "repository(owner:") && strings.Contains(query, "label(name:") {
+							// First query: get label ID by name
+							resp := response.(*struct {
+								Repository struct {
+									Label struct {
+										ID string `json:"id"`
+									} `json:"label"`
+								} `json:"repository"`
+							})
+							resp.Repository.Label.ID = "label-id-123"
+							return nil
+						} else if strings.Contains(query, "deleteLabel") {
+							// Second query: delete label mutation
+							// Check variables
+							labelID, ok := variables["labelId"].(string)
+							if !ok || labelID != "label-id-123" {
+								t.Errorf("Expected labelId 'label-id-123', got %v", variables["labelId"])
+							}
+
+							// Mock response
+							resp := response.(*struct {
+								DeleteLabel struct {
+									ClientMutationID string `json:"clientMutationId"`
+								} `json:"deleteLabel"`
+							})
+
+							resp.DeleteLabel.ClientMutationID = "test-mutation"
+							return nil
+						}
+						return fmt.Errorf("unexpected query: %s", query)
+					},
+				}
+			},
+			expectError: false,
+		},
+		{
+			name:      "empty label name",
+			labelName: "",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{}
+			},
+			expectError: true,
+			errorText:   "label name cannot be empty",
+		},
+		{
+			name:      "graphql error",
+			labelName: "test-label",
+			setupMockClient: func() *MockGraphQLClient {
+				return &MockGraphQLClient{
+					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+						return fmt.Errorf("api error")
+					},
+				}
+			},
+			expectError: true,
+			errorText:   "failed to find label",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &GHClient{
+				Owner:     "testowner",
+				Repo:      "testrepo",
+				gqlClient: tt.setupMockClient(),
+				logger:    &MockLogger{},
+			}
+
+			err := client.DeleteLabel(context.Background(), tt.labelName)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
