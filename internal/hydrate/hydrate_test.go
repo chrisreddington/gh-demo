@@ -1554,7 +1554,7 @@ func TestCleanupPRs(t *testing.T) {
 	}
 }
 
-// TestCleanupLabels tests label cleanup functionality  
+// TestCleanupLabels tests label cleanup functionality
 func TestCleanupLabels(t *testing.T) {
 	tests := []struct {
 		name            string

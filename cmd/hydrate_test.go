@@ -655,64 +655,77 @@ func TestNewHydrateCmd_ConfigPath(t *testing.T) {
 // TestResolveRepositoryInfo tests the repository information resolution logic
 func TestResolveRepositoryInfo(t *testing.T) {
 	tests := []struct {
-		name        string
-		owner       string
-		repo        string
-		expectError bool
-		errorText   string
+		name          string
+		owner         string
+		repo          string
+		expectError   bool
+		errorText     string
+		expectedOwner string
+		expectedRepo  string
 	}{
 		{
-			name:        "valid owner and repo",
-			owner:       "testowner",
-			repo:        "testrepo",
-			expectError: false,
+			name:          "valid owner and repo",
+			owner:         "testowner",
+			repo:          "testrepo",
+			expectError:   false,
+			expectedOwner: "testowner",
+			expectedRepo:  "testrepo",
 		},
 		{
-			name:        "owner with whitespace",
-			owner:       "  testowner  ",
-			repo:        "testrepo",
-			expectError: false,
+			name:          "owner with whitespace",
+			owner:         "  testowner  ",
+			repo:          "testrepo",
+			expectError:   false,
+			expectedOwner: "testowner",
+			expectedRepo:  "testrepo",
 		},
 		{
-			name:        "repo with whitespace",
-			owner:       "testowner",
-			repo:        "  testrepo  ",
-			expectError: false,
+			name:          "repo with whitespace",
+			owner:         "testowner",
+			repo:          "  testrepo  ",
+			expectError:   false,
+			expectedOwner: "testowner",
+			expectedRepo:  "testrepo",
 		},
 		{
-			name:        "empty owner",
-			owner:       "",
-			repo:        "testrepo",
-			expectError: true,
-			errorText:   "--owner and --repo are required",
+			name:          "empty owner (falls back to git context)",
+			owner:         "",
+			repo:          "testrepo",
+			expectError:   false,
+			expectedOwner: "chrisreddington", // from git context
+			expectedRepo:  "testrepo",
 		},
 		{
-			name:        "empty repo",
-			owner:       "testowner",
-			repo:        "",
-			expectError: true,
-			errorText:   "--owner and --repo are required",
+			name:          "empty repo (falls back to git context)",
+			owner:         "testowner",
+			repo:          "",
+			expectError:   false,
+			expectedOwner: "testowner",
+			expectedRepo:  "gh-demo", // from git context
 		},
 		{
-			name:        "both empty",
-			owner:       "",
-			repo:        "",
-			expectError: true,
-			errorText:   "--owner and --repo are required",
+			name:          "both empty (falls back to git context)",
+			owner:         "",
+			repo:          "",
+			expectError:   false,
+			expectedOwner: "chrisreddington", // from git context
+			expectedRepo:  "gh-demo",         // from git context
 		},
 		{
-			name:        "whitespace only owner",
-			owner:       "   ",
-			repo:        "testrepo",
-			expectError: true,
-			errorText:   "--owner and --repo are required",
+			name:          "whitespace only owner (falls back to git context)",
+			owner:         "   ",
+			repo:          "testrepo",
+			expectError:   false,
+			expectedOwner: "chrisreddington", // from git context
+			expectedRepo:  "testrepo",
 		},
 		{
-			name:        "whitespace only repo",
-			owner:       "testowner",
-			repo:        "   ",
-			expectError: true,
-			errorText:   "--owner and --repo are required",
+			name:          "whitespace only repo (falls back to git context)",
+			owner:         "testowner",
+			repo:          "   ",
+			expectError:   false,
+			expectedOwner: "testowner",
+			expectedRepo:  "gh-demo", // from git context
 		},
 	}
 
@@ -742,8 +755,15 @@ func TestResolveRepositoryInfo(t *testing.T) {
 				return
 			}
 
-			expectedOwner := strings.TrimSpace(tt.owner)
-			expectedRepo := strings.TrimSpace(tt.repo)
+			// Use explicit expected values if provided, otherwise fall back to trimmed input
+			expectedOwner := tt.expectedOwner
+			expectedRepo := tt.expectedRepo
+			if expectedOwner == "" {
+				expectedOwner = strings.TrimSpace(tt.owner)
+			}
+			if expectedRepo == "" {
+				expectedRepo = strings.TrimSpace(tt.repo)
+			}
 
 			if result.Owner != expectedOwner {
 				t.Errorf("Expected owner %q, got %q", expectedOwner, result.Owner)
@@ -936,7 +956,7 @@ func TestHandleHydrationResult_ContextCancellation(t *testing.T) {
 	// Test with partial failure error and cancelled context
 	// We'll create a mock partial failure by using the errors.NewPartialFailureError
 	partialErr := fmt.Errorf("partial failure")
-	
+
 	// Cancel context before calling
 	cancel()
 
@@ -988,19 +1008,21 @@ func TestExecuteHydrate_ParameterValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Use a temporary directory that doesn't have .git to avoid git context fallback
 			tempDir := t.TempDir()
-			
+
 			// Change to temp directory to avoid git context
 			originalDir, err := os.Getwd()
 			if err != nil {
 				t.Fatalf("Failed to get current directory: %v", err)
 			}
-			
+
 			err = os.Chdir(tempDir)
 			if err != nil {
 				t.Fatalf("Failed to change to temp directory: %v", err)
 			}
 			defer func() {
-				os.Chdir(originalDir)
+				if err := os.Chdir(originalDir); err != nil {
+					t.Errorf("Failed to restore original directory: %v", err)
+				}
 			}()
 
 			ctx := context.Background()
@@ -1051,6 +1073,6 @@ func TestPerformCleanup(t *testing.T) {
 	// Note: performCleanup requires a valid GitHub client and config files
 	// Testing this function fully would require complex mocking setup
 	// For now, we test that the function signature is correct and exists
-	
+
 	t.Skip("Skipping performCleanup tests - requires complex GitHub client mocking")
 }

@@ -11,13 +11,13 @@ import (
 func TestGitHubClientInterface(t *testing.T) {
 	// Test that GHClient implements GitHubClient interface
 	var _ GitHubClient = &GHClient{}
-	
+
 	// Test that we can create a client and it satisfies the interface
 	client, err := NewGHClientWithClients("test", "test", &MockGraphQLClient{})
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
-	
+
 	var _ GitHubClient = client
 }
 
@@ -25,14 +25,14 @@ func TestGitHubClientInterface(t *testing.T) {
 func TestGraphQLClientInterface(t *testing.T) {
 	// Test that MockGraphQLClient implements GraphQLClient interface
 	var _ GraphQLClient = &MockGraphQLClient{}
-	
+
 	// Test that the interface methods can be called
 	mock := &MockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			return nil
 		},
 	}
-	
+
 	err := mock.Do(context.Background(), "test query", nil, nil)
 	if err != nil {
 		t.Errorf("Expected no error from mock Do method, got: %v", err)
@@ -48,31 +48,55 @@ func TestGitHubClientInterfaceMethodSignatures(t *testing.T) {
 		gqlClient: &MockGraphQLClient{},
 		logger:    &MockLogger{},
 	}
-	
+
 	// Test method signatures exist (compilation test)
 	// These tests primarily ensure the interface contract is maintained
-	
+
 	// Test context
 	testCtx := context.Background()
-	
-	// Creation methods
-	client.CreateIssue(testCtx, types.Issue{})
-	client.CreateDiscussion(testCtx, types.Discussion{})
-	client.CreatePR(testCtx, types.PullRequest{})
-	client.CreateLabel(testCtx, types.Label{})
-	
-	// List methods
-	client.ListIssues(testCtx)
-	client.ListDiscussions(testCtx)
-	client.ListPRs(testCtx)
-	client.ListLabels(testCtx)
-	
-	// Delete methods
-	client.DeleteIssue(testCtx, "test")
-	client.DeleteDiscussion(testCtx, "test")
-	client.DeletePR(testCtx, "test")
-	client.DeleteLabel(testCtx, "test")
-	
+
+	// Creation methods - test that they don't panic and handle any errors
+	if err := client.CreateIssue(testCtx, types.Issue{}); err != nil {
+		t.Logf("CreateIssue returned error (expected in interface test): %v", err)
+	}
+	if err := client.CreateDiscussion(testCtx, types.Discussion{}); err != nil {
+		t.Logf("CreateDiscussion returned error (expected in interface test): %v", err)
+	}
+	if err := client.CreatePR(testCtx, types.PullRequest{}); err != nil {
+		t.Logf("CreatePR returned error (expected in interface test): %v", err)
+	}
+	if err := client.CreateLabel(testCtx, types.Label{}); err != nil {
+		t.Logf("CreateLabel returned error (expected in interface test): %v", err)
+	}
+
+	// List methods - test that they don't panic and handle any errors
+	if _, err := client.ListIssues(testCtx); err != nil {
+		t.Logf("ListIssues returned error (expected in interface test): %v", err)
+	}
+	if _, err := client.ListDiscussions(testCtx); err != nil {
+		t.Logf("ListDiscussions returned error (expected in interface test): %v", err)
+	}
+	if _, err := client.ListPRs(testCtx); err != nil {
+		t.Logf("ListPRs returned error (expected in interface test): %v", err)
+	}
+	if _, err := client.ListLabels(testCtx); err != nil {
+		t.Logf("ListLabels returned error (expected in interface test): %v", err)
+	}
+
+	// Delete methods - test that they don't panic and handle any errors
+	if err := client.DeleteIssue(testCtx, "test"); err != nil {
+		t.Logf("DeleteIssue returned error (expected in interface test): %v", err)
+	}
+	if err := client.DeleteDiscussion(testCtx, "test"); err != nil {
+		t.Logf("DeleteDiscussion returned error (expected in interface test): %v", err)
+	}
+	if err := client.DeletePR(testCtx, "test"); err != nil {
+		t.Logf("DeletePR returned error (expected in interface test): %v", err)
+	}
+	if err := client.DeleteLabel(testCtx, "test"); err != nil {
+		t.Logf("DeleteLabel returned error (expected in interface test): %v", err)
+	}
+
 	// Configuration methods
 	client.SetLogger(&MockLogger{})
 }
@@ -87,23 +111,23 @@ func TestGitHubClientInterfaceComplianceWithMocks(t *testing.T) {
 			name: "GHClient with MockGraphQL",
 			client: &GHClient{
 				Owner:     "test",
-				Repo:      "test", 
+				Repo:      "test",
 				gqlClient: &MockGraphQLClient{},
 				logger:    &MockLogger{},
 			},
 		},
 	}
-	
+
 	for _, tt := range mocks {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.client == nil {
 				t.Error("Client should not be nil")
 				return
 			}
-			
+
 			// Test SetLogger method
 			tt.client.SetLogger(&MockLogger{})
-			
+
 			// Note: We don't call the other methods because they would require
 			// extensive mocking setup, but the fact that this compiles
 			// verifies the interface compliance
@@ -117,9 +141,9 @@ func TestGraphQLClientWrapperInterface(t *testing.T) {
 	wrapper := &graphQLClientWrapper{
 		client: &MockUnderlyingClient{},
 	}
-	
+
 	var _ GraphQLClient = wrapper
-	
+
 	// Test Do method exists and can be called
 	err := wrapper.Do(context.Background(), "test", nil, nil)
 	if err != nil {
@@ -139,52 +163,68 @@ func TestInterfaceDocumentationCompliance(t *testing.T) {
 	t.Run("GitHubClient interface", func(t *testing.T) {
 		// Verify that GitHubClient interface has all required methods
 		// This is a compile-time check through interface satisfaction
-		
-		var client GitHubClient = &GHClient{
+
+		client := &GHClient{
 			Owner:     "test",
 			Repo:      "test",
 			gqlClient: &MockGraphQLClient{},
 			logger:    &MockLogger{},
 		}
-		
-		if client == nil {
-			t.Error("GitHubClient implementation should not be nil")
-		}
-		
+
 		// Ensure all interface methods are accessible
 		// (This is primarily a compilation check)
 		ctx := context.Background()
-		
-		// Creation operations
-		client.CreateIssue(ctx, types.Issue{Title: "test"})
-		client.CreateDiscussion(ctx, types.Discussion{Title: "test"})
-		client.CreatePR(ctx, types.PullRequest{Title: "test"})
-		client.CreateLabel(ctx, types.Label{Name: "test"})
-		
-		// List operations
-		client.ListIssues(ctx)
-		client.ListDiscussions(ctx)
-		client.ListPRs(ctx)
-		client.ListLabels(ctx)
-		
-		// Delete operations
-		client.DeleteIssue(ctx, "test-id")
-		client.DeleteDiscussion(ctx, "test-id")
-		client.DeletePR(ctx, "test-id")
-		client.DeleteLabel(ctx, "test-label")
-		
+
+		// Creation operations - test interface compliance and handle errors
+		if err := client.CreateIssue(ctx, types.Issue{Title: "test"}); err != nil {
+			t.Logf("CreateIssue returned error (expected in interface compliance test): %v", err)
+		}
+		if err := client.CreateDiscussion(ctx, types.Discussion{Title: "test"}); err != nil {
+			t.Logf("CreateDiscussion returned error (expected in interface compliance test): %v", err)
+		}
+		if err := client.CreatePR(ctx, types.PullRequest{Title: "test"}); err != nil {
+			t.Logf("CreatePR returned error (expected in interface compliance test): %v", err)
+		}
+		if err := client.CreateLabel(ctx, types.Label{Name: "test"}); err != nil {
+			t.Logf("CreateLabel returned error (expected in interface compliance test): %v", err)
+		}
+
+		// List operations - test interface compliance and handle errors
+		if _, err := client.ListIssues(ctx); err != nil {
+			t.Logf("ListIssues returned error (expected in interface compliance test): %v", err)
+		}
+		if _, err := client.ListDiscussions(ctx); err != nil {
+			t.Logf("ListDiscussions returned error (expected in interface compliance test): %v", err)
+		}
+		if _, err := client.ListPRs(ctx); err != nil {
+			t.Logf("ListPRs returned error (expected in interface compliance test): %v", err)
+		}
+		if _, err := client.ListLabels(ctx); err != nil {
+			t.Logf("ListLabels returned error (expected in interface compliance test): %v", err)
+		}
+
+		// Delete operations - test interface compliance and handle errors
+		if err := client.DeleteIssue(ctx, "test-id"); err != nil {
+			t.Logf("DeleteIssue returned error (expected in interface compliance test): %v", err)
+		}
+		if err := client.DeleteDiscussion(ctx, "test-id"); err != nil {
+			t.Logf("DeleteDiscussion returned error (expected in interface compliance test): %v", err)
+		}
+		if err := client.DeletePR(ctx, "test-id"); err != nil {
+			t.Logf("DeletePR returned error (expected in interface compliance test): %v", err)
+		}
+		if err := client.DeleteLabel(ctx, "test-label"); err != nil {
+			t.Logf("DeleteLabel returned error (expected in interface compliance test): %v", err)
+		}
+
 		// Configuration
 		client.SetLogger(&MockLogger{})
 	})
-	
+
 	t.Run("GraphQLClient interface", func(t *testing.T) {
 		// Verify GraphQLClient interface contract
-		var gqlClient GraphQLClient = &MockGraphQLClient{}
-		
-		if gqlClient == nil {
-			t.Error("GraphQLClient implementation should not be nil")
-		}
-		
+		gqlClient := &MockGraphQLClient{}
+
 		// Test Do method signature
 		err := gqlClient.Do(context.Background(), "test query", map[string]interface{}{}, nil)
 		if err != nil {

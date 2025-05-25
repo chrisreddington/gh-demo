@@ -115,7 +115,7 @@ func TestLoadPreserveConfig(t *testing.T) {
 			setupFile: func(t *testing.T) string {
 				tempDir := t.TempDir()
 				configPath := filepath.Join(tempDir, "preserve.json")
-				
+
 				preserveConfig := PreserveConfig{
 					Issues: struct {
 						PreserveByTitle []string `json:"preserve_by_title,omitempty"`
@@ -150,16 +150,16 @@ func TestLoadPreserveConfig(t *testing.T) {
 						PreserveByName: []string{"bug", "enhancement"},
 					},
 				}
-				
+
 				data, err := json.Marshal(preserveConfig)
 				if err != nil {
 					t.Fatalf("Failed to marshal preserve config: %v", err)
 				}
-				
+
 				if err := os.WriteFile(configPath, data, 0644); err != nil {
 					t.Fatalf("Failed to write preserve config file: %v", err)
 				}
-				
+
 				return configPath
 			},
 			expectError: false,
@@ -168,7 +168,7 @@ func TestLoadPreserveConfig(t *testing.T) {
 					t.Error("Expected non-nil config")
 					return
 				}
-				
+
 				// Validate Issues config
 				if len(config.Issues.PreserveByTitle) != 2 {
 					t.Errorf("Expected 2 preserve by title entries, got %d", len(config.Issues.PreserveByTitle))
@@ -182,7 +182,7 @@ func TestLoadPreserveConfig(t *testing.T) {
 				if len(config.Issues.PreserveByID) != 2 {
 					t.Errorf("Expected 2 preserve by ID entries, got %d", len(config.Issues.PreserveByID))
 				}
-				
+
 				// Validate Discussions config
 				if len(config.Discussions.PreserveByTitle) != 1 {
 					t.Errorf("Expected 1 discussion preserve by title entry, got %d", len(config.Discussions.PreserveByTitle))
@@ -190,12 +190,12 @@ func TestLoadPreserveConfig(t *testing.T) {
 				if len(config.Discussions.PreserveByCategory) != 1 {
 					t.Errorf("Expected 1 discussion preserve by category entry, got %d", len(config.Discussions.PreserveByCategory))
 				}
-				
+
 				// Validate PullRequests config
 				if len(config.PullRequests.PreserveByTitle) != 1 {
 					t.Errorf("Expected 1 PR preserve by title entry, got %d", len(config.PullRequests.PreserveByTitle))
 				}
-				
+
 				// Validate Labels config
 				if len(config.Labels.PreserveByName) != 2 {
 					t.Errorf("Expected 2 label preserve by name entries, got %d", len(config.Labels.PreserveByName))
@@ -207,11 +207,11 @@ func TestLoadPreserveConfig(t *testing.T) {
 			setupFile: func(t *testing.T) string {
 				tempDir := t.TempDir()
 				configPath := filepath.Join(tempDir, "invalid.json")
-				
+
 				if err := os.WriteFile(configPath, []byte(`{"invalid": json}`), 0644); err != nil {
 					t.Fatalf("Failed to write invalid JSON file: %v", err)
 				}
-				
+
 				return configPath
 			},
 			expectError: true,
@@ -222,11 +222,11 @@ func TestLoadPreserveConfig(t *testing.T) {
 			setupFile: func(t *testing.T) string {
 				tempDir := t.TempDir()
 				configPath := filepath.Join(tempDir, "empty.json")
-				
+
 				if err := os.WriteFile(configPath, []byte(`{}`), 0644); err != nil {
 					t.Fatalf("Failed to write empty JSON file: %v", err)
 				}
-				
+
 				return configPath
 			},
 			expectError: false,

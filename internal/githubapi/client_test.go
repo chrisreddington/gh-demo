@@ -1353,7 +1353,7 @@ func TestListIssues(t *testing.T) {
 								} `json:"issues"`
 							} `json:"repository"`
 						})
-						
+
 						resp.Repository.Issues.Nodes = []struct {
 							ID     string `json:"id"`
 							Number int    `json:"number"`
@@ -1574,13 +1574,13 @@ func TestListPRs(t *testing.T) {
 							Repository struct {
 								PullRequests struct {
 									Nodes []struct {
-										ID         string `json:"id"`
-										Number     int    `json:"number"`
-										Title      string `json:"title"`
-										Body       string `json:"body"`
+										ID          string `json:"id"`
+										Number      int    `json:"number"`
+										Title       string `json:"title"`
+										Body        string `json:"body"`
 										HeadRefName string `json:"headRefName"`
 										BaseRefName string `json:"baseRefName"`
-										Labels     struct {
+										Labels      struct {
 											Nodes []struct {
 												Name string `json:"name"`
 											} `json:"nodes"`
@@ -1595,23 +1595,23 @@ func TestListPRs(t *testing.T) {
 						})
 
 						resp.Repository.PullRequests.Nodes = []struct {
-							ID         string `json:"id"`
-							Number     int    `json:"number"`
-							Title      string `json:"title"`
-							Body       string `json:"body"`
+							ID          string `json:"id"`
+							Number      int    `json:"number"`
+							Title       string `json:"title"`
+							Body        string `json:"body"`
 							HeadRefName string `json:"headRefName"`
 							BaseRefName string `json:"baseRefName"`
-							Labels     struct {
+							Labels      struct {
 								Nodes []struct {
 									Name string `json:"name"`
 								} `json:"nodes"`
 							} `json:"labels"`
 						}{
 							{
-								ID:         "pr1",
-								Number:     1,
-								Title:      "PR 1",
-								Body:       "Body 1",
+								ID:          "pr1",
+								Number:      1,
+								Title:       "PR 1",
+								Body:        "Body 1",
 								HeadRefName: "feature",
 								BaseRefName: "main",
 								Labels: struct {
@@ -1939,7 +1939,7 @@ func TestDeleteLabel(t *testing.T) {
 									ClientMutationID string `json:"clientMutationId"`
 								} `json:"deleteLabel"`
 							})
-							
+
 							resp.DeleteLabel.ClientMutationID = "test-mutation"
 							return nil
 						}

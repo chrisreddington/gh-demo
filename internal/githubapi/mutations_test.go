@@ -16,7 +16,7 @@ func TestGraphQLMutationSyntax(t *testing.T) {
 			mutation: createIssueMutation,
 		},
 		{
-			name:     "createDiscussionMutation", 
+			name:     "createDiscussionMutation",
 			mutation: createDiscussionMutation,
 		},
 		{
@@ -159,7 +159,7 @@ func TestMutationVariableSubstitution(t *testing.T) {
 			expectedVars: []string{"$repositoryId", "$title", "$body"},
 		},
 		{
-			name:         "createDiscussionMutation variables", 
+			name:         "createDiscussionMutation variables",
 			mutation:     createDiscussionMutation,
 			expectedVars: []string{"$input"},
 		},
@@ -254,7 +254,7 @@ func TestMutationCompleteness(t *testing.T) {
 		{
 			name:               "createDiscussionMutation return fields",
 			mutation:           createDiscussionMutation,
-			expectedReturnType: "createDiscussion", 
+			expectedReturnType: "createDiscussion",
 			expectedFields:     []string{"discussion", "id", "number", "title", "url"},
 		},
 		{
@@ -315,7 +315,7 @@ func TestGraphQLConstantsExist(t *testing.T) {
 			if constant.value == "" {
 				t.Errorf("GraphQL constant %s should not be empty", constant.name)
 			}
-			
+
 			if len(constant.value) < 10 {
 				t.Errorf("GraphQL constant %s seems too short (length: %d)", constant.name, len(constant.value))
 			}
