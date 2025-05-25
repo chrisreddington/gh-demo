@@ -177,3 +177,39 @@ func ContextError(operation string, cause error) error {
 	}
 	return cause
 }
+
+// Type assertion safety helpers
+
+// AsLayeredError safely casts an error to LayeredError, returning nil if the cast fails.
+// This prevents panics from unsafe type assertions.
+func AsLayeredError(err error) *LayeredError {
+	if layeredErr, ok := IsLayeredError(err); ok {
+		return layeredErr
+	}
+	return nil
+}
+
+// WithContextSafe safely adds context to an error if it's a LayeredError.
+// If the error is not a LayeredError, it returns the original error unchanged.
+func WithContextSafe(err error, key, value string) error {
+	if layeredErr := AsLayeredError(err); layeredErr != nil {
+		return layeredErr.WithContext(key, value)
+	}
+	return err
+}
+
+// Error wrapping utilities with standard context patterns
+
+// WrapWithOperation wraps an error with operation context, creating a LayeredError if needed.
+func WrapWithOperation(err error, layer, operation, message string) error {
+	if err == nil {
+		return nil
+	}
+	
+	// If it's already a LayeredError, preserve the chain
+	if layeredErr := AsLayeredError(err); layeredErr != nil {
+		return NewLayeredError(layer, operation, message, err)
+	}
+	
+	return NewLayeredError(layer, operation, message, err)
+}

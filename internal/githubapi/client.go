@@ -275,8 +275,8 @@ func (c *GHClient) CreateLabel(ctx context.Context, label types.Label) error {
 	// Verify label was created
 	if mutationResponse.CreateLabel.Label.ID == "" {
 		c.debugLog("Label creation for '%s' failed - no Label ID returned", label.Name)
-		layeredErr := errors.APIError("create_label", "label creation failed - no Label ID returned from GitHub API", nil)
-		return layeredErr.(*errors.LayeredError).WithContext("name", label.Name)
+		err := errors.APIError("create_label", "label creation failed - no Label ID returned from GitHub API", nil)
+		return errors.WithContextSafe(err, "name", label.Name)
 	}
 
 	c.debugLog("Successfully created label '%s' with color '%s'", label.Name, label.Color)
@@ -459,8 +459,8 @@ func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 	// Verify issue was created
 	if mutationResponse.CreateIssue.Issue.ID == "" {
 		c.debugLog("Issue creation for '%s' failed - no Issue ID returned", issue.Title)
-		layeredErr := errors.APIError("create_issue", "issue creation failed - no Issue ID returned from GitHub API", nil)
-		return layeredErr.(*errors.LayeredError).WithContext("title", issue.Title)
+		err := errors.APIError("create_issue", "issue creation failed - no Issue ID returned from GitHub API", nil)
+		return errors.WithContextSafe(err, "title", issue.Title)
 	}
 
 	c.debugLog("Successfully created issue '%s' (Number: %d, URL: %s)",
@@ -529,8 +529,9 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	if categoryID == "" {
 		c.debugLog("Discussion category '%s' not found in available categories: %v",
 			discussion.Category, availableCategories)
-		layeredErr := errors.ValidationError("validate_discussion_category", fmt.Sprintf("discussion category '%s' not found in available categories", discussion.Category))
-		return layeredErr.(*errors.LayeredError).WithContext("requested_category", discussion.Category).WithContext("available_categories", fmt.Sprintf("%v", availableCategories))
+		err := errors.ValidationError("validate_discussion_category", fmt.Sprintf("discussion category '%s' not found in available categories", discussion.Category))
+		err = errors.WithContextSafe(err, "requested_category", discussion.Category)
+		return errors.WithContextSafe(err, "available_categories", fmt.Sprintf("%v", availableCategories))
 	}
 
 	c.debugLog("Found matching category ID for '%s': %s (actual: '%s')",
@@ -582,8 +583,8 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	// Verify discussion was created by checking for a valid ID and URL
 	if mutationResponse.CreateDiscussion.Discussion.ID == "" {
 		c.debugLog("Discussion creation for '%s' failed - no Discussion ID returned", discussion.Title)
-		layeredErr := errors.APIError("create_discussion", "discussion creation failed - no Discussion ID returned from GitHub API", nil)
-		return layeredErr.(*errors.LayeredError).WithContext("title", discussion.Title)
+		err := errors.APIError("create_discussion", "discussion creation failed - no Discussion ID returned from GitHub API", nil)
+		return errors.WithContextSafe(err, "title", discussion.Title)
 	}
 
 	discussionID := mutationResponse.CreateDiscussion.Discussion.ID
@@ -638,8 +639,8 @@ func (c *GHClient) addLabelToDiscussion(ctx context.Context, discussionID, label
 	}
 
 	if labelResponse.Repository.Label.ID == "" {
-		layeredErr := errors.ValidationError("validate_label", fmt.Sprintf("label '%s' not found in repository", labelName))
-		return layeredErr.(*errors.LayeredError).WithContext("label_name", labelName)
+		err := errors.ValidationError("validate_label", fmt.Sprintf("label '%s' not found in repository", labelName))
+		return errors.WithContextSafe(err, "label_name", labelName)
 	}
 
 	// Add the label to the discussion
@@ -828,15 +829,17 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 		if errors.IsContextError(err) {
 			return errors.ContextError("create_pull_request", err)
 		}
-		layeredErr := errors.APIError("create_pull_request", "failed to create pull request", err)
-		return layeredErr.(*errors.LayeredError).WithContext("title", pullRequest.Title).WithContext("head", pullRequest.Head).WithContext("base", pullRequest.Base)
+		err = errors.APIError("create_pull_request", "failed to create pull request", err)
+		err = errors.WithContextSafe(err, "title", pullRequest.Title)
+		err = errors.WithContextSafe(err, "head", pullRequest.Head)
+		return errors.WithContextSafe(err, "base", pullRequest.Base)
 	}
 
 	// Verify PR was created
 	if mutationResponse.CreatePullRequest.PullRequest.ID == "" {
 		c.debugLog("PR creation for '%s' failed - no PR ID returned", pullRequest.Title)
-		layeredErr := errors.APIError("create_pull_request", "pull request creation failed - no PR ID returned from GitHub API", nil)
-		return layeredErr.(*errors.LayeredError).WithContext("title", pullRequest.Title)
+		err := errors.APIError("create_pull_request", "pull request creation failed - no PR ID returned from GitHub API", nil)
+		return errors.WithContextSafe(err, "title", pullRequest.Title)
 	}
 
 	prID := mutationResponse.CreatePullRequest.PullRequest.ID
@@ -849,8 +852,8 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 		err := c.addLabelsAndAssigneesToPR(ctx, prID, pullRequest.Labels, pullRequest.Assignees)
 		if err != nil {
 			c.debugLog("Failed to add labels/assignees to PR '%s': %v", pullRequest.Title, err)
-			layeredErr := errors.APIError("add_pr_labels_assignees", "created PR but failed to add labels/assignees", err)
-			return layeredErr.(*errors.LayeredError).WithContext("title", pullRequest.Title)
+			err = errors.APIError("add_pr_labels_assignees", "created PR but failed to add labels/assignees", err)
+			return errors.WithContextSafe(err, "title", pullRequest.Title)
 		}
 	}
 
@@ -1143,15 +1146,16 @@ func (c *GHClient) DeleteIssue(ctx context.Context, nodeID string) error {
 		if errors.IsContextError(err) {
 			return errors.ContextError("delete_issue", err)
 		}
-		layeredErr := errors.APIError("delete_issue", "failed to close issue", err)
-		return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID)
+		err = errors.APIError("delete_issue", "failed to close issue", err)
+		return errors.WithContextSafe(err, "node_id", nodeID)
 	}
 
 	// Verify the issue was closed
 	if response.CloseIssue.Issue.State != "CLOSED" {
 		c.debugLog("Issue %s was not properly closed - state: %s", nodeID, response.CloseIssue.Issue.State)
-		layeredErr := errors.APIError("delete_issue", "issue was not properly closed", nil)
-		return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID).WithContext("state", response.CloseIssue.Issue.State)
+		err := errors.APIError("delete_issue", "issue was not properly closed", nil)
+		err = errors.WithContextSafe(err, "node_id", nodeID)
+		return errors.WithContextSafe(err, "state", response.CloseIssue.Issue.State)
 	}
 
 	c.debugLog("Successfully closed issue %s", nodeID)
@@ -1189,7 +1193,8 @@ func (c *GHClient) DeleteDiscussion(ctx context.Context, nodeID string) error {
 	err := c.gqlClient.Do(deleteCtx, deleteDiscussionMutation, mutationVariables, &mutationResponse)
 	if err != nil {
 		c.debugLog("Failed to delete discussion with nodeID %s: %v", nodeID, err)
-		return errors.APIError("delete_discussion", "failed to delete discussion via GraphQL", err).(*errors.LayeredError).WithContext("node_id", nodeID)
+		err = errors.APIError("delete_discussion", "failed to delete discussion via GraphQL", err)
+		return errors.WithContextSafe(err, "node_id", nodeID)
 	}
 
 	c.debugLog("Successfully deleted discussion '%s' (ID: %s)",
@@ -1234,15 +1239,16 @@ func (c *GHClient) DeletePR(ctx context.Context, nodeID string) error {
 		if errors.IsContextError(err) {
 			return errors.ContextError("delete_pr", err)
 		}
-		layeredErr := errors.APIError("delete_pr", "failed to close pull request", err)
-		return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID)
+		err = errors.APIError("delete_pr", "failed to close pull request", err)
+		return errors.WithContextSafe(err, "node_id", nodeID)
 	}
 
 	// Verify the pull request was closed
 	if response.ClosePullRequest.PullRequest.State != "CLOSED" {
 		c.debugLog("Pull request %s was not properly closed - state: %s", nodeID, response.ClosePullRequest.PullRequest.State)
-		layeredErr := errors.APIError("delete_pr", "pull request was not properly closed", nil)
-		return layeredErr.(*errors.LayeredError).WithContext("node_id", nodeID).WithContext("state", response.ClosePullRequest.PullRequest.State)
+		err := errors.APIError("delete_pr", "pull request was not properly closed", nil)
+		err = errors.WithContextSafe(err, "node_id", nodeID)
+		return errors.WithContextSafe(err, "state", response.ClosePullRequest.PullRequest.State)
 	}
 
 	c.debugLog("Successfully closed pull request %s", nodeID)
@@ -1286,14 +1292,14 @@ func (c *GHClient) DeleteLabel(ctx context.Context, name string) error {
 		if errors.IsContextError(err) {
 			return errors.ContextError("find_label", err)
 		}
-		layeredErr := errors.APIError("find_label", fmt.Sprintf("failed to find label '%s'", name), err)
-		return layeredErr.(*errors.LayeredError).WithContext("label_name", name)
+		err = errors.APIError("find_label", fmt.Sprintf("failed to find label '%s'", name), err)
+		return errors.WithContextSafe(err, "label_name", name)
 	}
 
 	if labelResponse.Repository.Label.ID == "" {
 		c.debugLog("Label '%s' not found in repository", name)
-		layeredErr := errors.ValidationError("validate_label", fmt.Sprintf("label '%s' not found in repository", name))
-		return layeredErr.(*errors.LayeredError).WithContext("label_name", name)
+		err := errors.ValidationError("validate_label", fmt.Sprintf("label '%s' not found in repository", name))
+		return errors.WithContextSafe(err, "label_name", name)
 	}
 
 	// Delete the label using its ID
@@ -1317,8 +1323,9 @@ func (c *GHClient) DeleteLabel(ctx context.Context, name string) error {
 		if errors.IsContextError(err) {
 			return errors.ContextError("delete_label", err)
 		}
-		layeredErr := errors.APIError("delete_label", fmt.Sprintf("failed to delete label '%s'", name), err)
-		return layeredErr.(*errors.LayeredError).WithContext("label_name", name).WithContext("label_id", labelResponse.Repository.Label.ID)
+		err = errors.APIError("delete_label", fmt.Sprintf("failed to delete label '%s'", name), err)
+		err = errors.WithContextSafe(err, "label_name", name)
+		return errors.WithContextSafe(err, "label_id", labelResponse.Repository.Label.ID)
 	}
 
 	c.debugLog("Successfully deleted label '%s'", name)
