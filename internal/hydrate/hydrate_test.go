@@ -18,7 +18,7 @@ import (
 func TestHydrateWithRealGHClient(t *testing.T) {
 	t.Skip("Skipping test that requires real GitHub credentials")
 	// This test uses the real (stubbed) GHClient to ensure wiring is correct.
-	client, err := githubapi.NewGHClient("octocat", "demo-repo")
+	client, err := githubapi.NewGHClient(context.Background(), "octocat", "demo-repo")
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}

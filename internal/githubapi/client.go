@@ -93,7 +93,12 @@ type GHClient struct {
 // It initializes the GraphQL client using the go-gh library and validates that
 // the owner and repo parameters are not empty. The client uses GraphQL exclusively
 // for all GitHub operations including creating issues, discussions, pull requests, and managing labels.
-func NewGHClient(owner, repo string) (*GHClient, error) {
+func NewGHClient(ctx context.Context, owner, repo string) (*GHClient, error) {
+	// Check if context is cancelled before operations
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	if strings.TrimSpace(owner) == "" {
 		return nil, errors.ValidationError("validate_client_params", "owner cannot be empty")
 	}

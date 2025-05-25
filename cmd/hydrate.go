@@ -25,7 +25,12 @@ type repositoryInfo struct {
 
 // resolveRepositoryInfo validates and resolves the repository owner and name.
 // It tries to get missing values from the current git context if available.
-func resolveRepositoryInfo(owner, repo string) (*repositoryInfo, error) {
+func resolveRepositoryInfo(ctx context.Context, owner, repo string) (*repositoryInfo, error) {
+	// Check if context is cancelled before operations
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	resolvedOwner := strings.TrimSpace(owner)
 	resolvedRepo := strings.TrimSpace(repo)
 
@@ -53,8 +58,8 @@ func resolveRepositoryInfo(owner, repo string) (*repositoryInfo, error) {
 }
 
 // createGitHubClient creates and configures a GitHub API client.
-func createGitHubClient(repoInfo *repositoryInfo, logger common.Logger) (githubapi.GitHubClient, error) {
-	client, err := githubapi.NewGHClient(repoInfo.Owner, repoInfo.Repo)
+func createGitHubClient(ctx context.Context, repoInfo *repositoryInfo, logger common.Logger) (githubapi.GitHubClient, error) {
+	client, err := githubapi.NewGHClient(ctx, repoInfo.Owner, repoInfo.Repo)
 	if err != nil {
 		return nil, errors.APIError("create_client", "failed to create GitHub client", err)
 	}
@@ -103,7 +108,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	logger := common.NewLogger(debug) // Use debug flag for logger
 
 	// Resolve repository information
-	repoInfo, err := resolveRepositoryInfo(owner, repo)
+	repoInfo, err := resolveRepositoryInfo(ctx, owner, repo)
 	if err != nil {
 		return err
 	}
@@ -118,7 +123,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	cfg := config.NewConfigurationWithRoot(ctx, root, configPath)
 
 	// Create and configure GitHub client
-	client, err := createGitHubClient(repoInfo, logger)
+	client, err := createGitHubClient(ctx, repoInfo, logger)
 	if err != nil {
 		return err
 	}

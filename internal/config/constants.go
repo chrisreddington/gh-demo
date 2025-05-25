@@ -103,10 +103,20 @@ type PreserveConfig struct {
 // LoadPreserveConfig loads the preserve configuration from the specified file path.
 // If the file doesn't exist, it returns an empty configuration (preserve nothing).
 func LoadPreserveConfig(ctx context.Context, filePath string) (*PreserveConfig, error) {
+	// Check if context is cancelled before performing file operations
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		// Return empty config if file doesn't exist
 		return &PreserveConfig{}, nil
+	}
+
+	// Check context again before reading file
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	// Read file contents
