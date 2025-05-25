@@ -12,6 +12,7 @@ import (
 	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/config"
 	"github.com/chrisreddington/gh-demo/internal/githubapi"
+	"github.com/chrisreddington/gh-demo/internal/testutil"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
@@ -118,8 +119,10 @@ func TestHydrateOperations(t *testing.T) {
 			name: "issue creation failure",
 			setupClient: func() *ConfigurableMockGitHubClient {
 				return NewFailingMockGitHubClient(MockConfig{
-					FailIssues:    true,
-					IssueErrorMsg: "failed to create issue",
+					Issues: testutil.ErrorConfig{
+						ShouldError:  true,
+						ErrorMessage: "failed to create issue",
+					},
 				})
 			},
 			setupFiles: func(tempDir string) (string, string, string) {
@@ -137,8 +140,10 @@ func TestHydrateOperations(t *testing.T) {
 			name: "PR creation failure",
 			setupClient: func() *ConfigurableMockGitHubClient {
 				return NewFailingMockGitHubClient(MockConfig{
-					FailPRs:    true,
-					PRErrorMsg: "failed to create PR",
+					PRs: testutil.ErrorConfig{
+						ShouldError:  true,
+						ErrorMessage: "failed to create PR",
+					},
 				})
 			},
 			setupFiles: func(tempDir string) (string, string, string) {
@@ -156,8 +161,10 @@ func TestHydrateOperations(t *testing.T) {
 			name: "label listing failure",
 			setupClient: func() *ConfigurableMockGitHubClient {
 				return NewFailingMockGitHubClient(MockConfig{
-					FailListLabels:     true,
-					ListLabelsErrorMsg: "failed to list labels",
+					ListLabels: testutil.ErrorConfig{
+						ShouldError:  true,
+						ErrorMessage: "failed to list labels",
+					},
 				})
 			},
 			setupFiles: func(tempDir string) (string, string, string) {
@@ -244,7 +251,9 @@ func TestGracefulErrorHandling(t *testing.T) {
 	// Create a mock client that fails PR creation but succeeds for everything else
 	client := NewFailingMockGitHubClient(MockConfig{
 		ExistingLabels: map[string]bool{"enhancement": true, "demo": true},
-		FailPRs:        true, // Simulate PR creation failures
+		PRs: testutil.ErrorConfig{
+			ShouldError: true, // Simulate PR creation failures
+		},
 	})
 
 	// Create temporary test files
@@ -695,7 +704,9 @@ func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 func TestEnsureLabelsExist_ListLabelsError(t *testing.T) {
 	// Create a mock client that fails on ListLabels
 	client := NewFailingMockGitHubClient(MockConfig{
-		FailListLabels: true,
+		ListLabels: testutil.ErrorConfig{
+			ShouldError: true,
+		},
 		ExistingLabels: map[string]bool{},
 	})
 
@@ -782,7 +793,9 @@ func TestHydrateWithLabels_FileReadError(t *testing.T) {
 func TestHydrateWithLabels_EnsureLabelsExistError(t *testing.T) {
 	// Create a mock client that fails on ListLabels to trigger EnsureLabelsExist error
 	client := NewFailingMockGitHubClient(MockConfig{
-		FailListLabels: true,
+		ListLabels: testutil.ErrorConfig{
+			ShouldError: true,
+		},
 		ExistingLabels: map[string]bool{},
 	})
 
@@ -825,8 +838,12 @@ func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
 	// Create a mock client that fails for both issues and PRs
 	client := NewFailingMockGitHubClient(MockConfig{
 		ExistingLabels: map[string]bool{},
-		FailIssues:     true, // Issues will fail
-		FailPRs:        true, // PRs will fail
+		Issues: testutil.ErrorConfig{
+			ShouldError: true, // Issues will fail
+		},
+		PRs: testutil.ErrorConfig{
+			ShouldError: true, // PRs will fail
+		},
 	})
 
 	tempDir := t.TempDir()
