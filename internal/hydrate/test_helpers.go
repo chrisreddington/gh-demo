@@ -5,22 +5,18 @@ import (
 	"fmt"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/testutil"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
 // MockConfig allows configuration of the mock GitHubClient behavior
 type MockConfig struct {
-	ExistingLabels      map[string]bool
-	FailIssues          bool
-	FailPRs             bool
-	FailDiscussions     bool
-	FailListLabels      bool
-	FailCreateLabel     bool
-	IssueErrorMsg       string
-	PRErrorMsg          string
-	DiscussionErrorMsg  string
-	ListLabelsErrorMsg  string
-	CreateLabelErrorMsg string
+	ExistingLabels map[string]bool
+	Issues         testutil.ErrorConfig
+	PRs            testutil.ErrorConfig
+	Discussions    testutil.ErrorConfig
+	ListLabels     testutil.ErrorConfig
+	CreateLabel    testutil.ErrorConfig
 }
 
 // ConfigurableMockGitHubClient provides a configurable mock implementation of GitHubClient
@@ -34,48 +30,32 @@ type ConfigurableMockGitHubClient struct {
 }
 
 func (m *ConfigurableMockGitHubClient) CreateIssue(ctx context.Context, issue types.Issue) error {
-	if m.Config.FailIssues {
-		msg := m.Config.IssueErrorMsg
-		if msg == "" {
-			msg = fmt.Sprintf("simulated issue creation failure for: %s", issue.Title)
-		}
-		return fmt.Errorf("%s", msg)
+	if err := m.Config.Issues.GetErrorOrDefault(fmt.Sprintf("simulated issue creation failure for: %s", issue.Title)); err != nil {
+		return err
 	}
 	m.CreatedIssues = append(m.CreatedIssues, issue)
 	return nil
 }
 
 func (m *ConfigurableMockGitHubClient) CreateDiscussion(ctx context.Context, discussion types.Discussion) error {
-	if m.Config.FailDiscussions {
-		msg := m.Config.DiscussionErrorMsg
-		if msg == "" {
-			msg = fmt.Sprintf("simulated discussion creation failure for: %s", discussion.Title)
-		}
-		return fmt.Errorf("%s", msg)
+	if err := m.Config.Discussions.GetErrorOrDefault(fmt.Sprintf("simulated discussion creation failure for: %s", discussion.Title)); err != nil {
+		return err
 	}
 	m.CreatedDiscussions = append(m.CreatedDiscussions, discussion)
 	return nil
 }
 
 func (m *ConfigurableMockGitHubClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) error {
-	if m.Config.FailPRs {
-		msg := m.Config.PRErrorMsg
-		if msg == "" {
-			msg = fmt.Sprintf("simulated PR creation failure for: %s (head: %s, base: %s)", pullRequest.Title, pullRequest.Head, pullRequest.Base)
-		}
-		return fmt.Errorf("%s", msg)
+	if err := m.Config.PRs.GetErrorOrDefault(fmt.Sprintf("simulated PR creation failure for: %s (head: %s, base: %s)", pullRequest.Title, pullRequest.Head, pullRequest.Base)); err != nil {
+		return err
 	}
 	m.CreatedPRs = append(m.CreatedPRs, pullRequest)
 	return nil
 }
 
 func (m *ConfigurableMockGitHubClient) ListLabels(ctx context.Context) ([]string, error) {
-	if m.Config.FailListLabels {
-		msg := m.Config.ListLabelsErrorMsg
-		if msg == "" {
-			msg = "simulated list labels failure"
-		}
-		return nil, fmt.Errorf("%s", msg)
+	if err := m.Config.ListLabels.GetErrorOrDefault("simulated list labels failure"); err != nil {
+		return nil, err
 	}
 	labels := make([]string, 0, len(m.Config.ExistingLabels))
 	for l := range m.Config.ExistingLabels {
@@ -85,12 +65,8 @@ func (m *ConfigurableMockGitHubClient) ListLabels(ctx context.Context) ([]string
 }
 
 func (m *ConfigurableMockGitHubClient) CreateLabel(ctx context.Context, label types.Label) error {
-	if m.Config.FailCreateLabel {
-		msg := m.Config.CreateLabelErrorMsg
-		if msg == "" {
-			msg = fmt.Sprintf("simulated create label failure for: %s", label.Name)
-		}
-		return fmt.Errorf("%s", msg)
+	if err := m.Config.CreateLabel.GetErrorOrDefault(fmt.Sprintf("simulated create label failure for: %s", label.Name)); err != nil {
+		return err
 	}
 	m.CreatedLabels = append(m.CreatedLabels, label.Name)
 	if m.Config.ExistingLabels == nil {
@@ -181,10 +157,10 @@ func NewSuccessfulMockGitHubClient(existingLabels ...string) *ConfigurableMockGi
 		Config: MockConfig{
 			ExistingLabels: labels,
 		},
-		CreatedIssues:      []types.Issue{},
-		CreatedDiscussions: []types.Discussion{},
-		CreatedPRs:         []types.PullRequest{},
-		CreatedLabels:      []string{},
+		CreatedIssues:      testutil.EmptyCollections.Issues,
+		CreatedDiscussions: testutil.EmptyCollections.Discussions,
+		CreatedPRs:         testutil.EmptyCollections.PRs,
+		CreatedLabels:      testutil.EmptyCollections.Labels,
 	}
 }
 
@@ -196,9 +172,9 @@ func NewFailingMockGitHubClient(config MockConfig) *ConfigurableMockGitHubClient
 
 	return &ConfigurableMockGitHubClient{
 		Config:             config,
-		CreatedIssues:      []types.Issue{},
-		CreatedDiscussions: []types.Discussion{},
-		CreatedPRs:         []types.PullRequest{},
-		CreatedLabels:      []string{},
+		CreatedIssues:      testutil.EmptyCollections.Issues,
+		CreatedDiscussions: testutil.EmptyCollections.Discussions,
+		CreatedPRs:         testutil.EmptyCollections.PRs,
+		CreatedLabels:      testutil.EmptyCollections.Labels,
 	}
 }

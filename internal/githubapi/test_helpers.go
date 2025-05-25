@@ -3,6 +3,8 @@ package githubapi
 import (
 	"context"
 	"strings"
+
+	"github.com/chrisreddington/gh-demo/internal/testutil"
 )
 
 // MockResponse represents different types of GraphQL responses that can be configured
@@ -62,7 +64,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 			}
 			resp.Repository.ID = mockResp.RepositoryID
 		} else {
-			resp.Repository.ID = "default-repo-id"
+			resp.Repository.ID = testutil.DefaultValues.RepositoryID
 		}
 		return nil
 	}
@@ -113,7 +115,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 			}
 			resp.CreateLabel.Label.ID = mockResp.LabelID
 		} else {
-			resp.CreateLabel.Label.ID = "default-label-id"
+			resp.CreateLabel.Label.ID = testutil.DefaultValues.LabelID
 		}
 		// Copy label data from variables
 		if input, ok := variables["input"].(map[string]interface{}); ok {
@@ -149,8 +151,8 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 			resp.CreateIssue.Issue.ID = mockResp.IssueID
 			resp.CreateIssue.Issue.Number = mockResp.IssueNumber
 		} else {
-			resp.CreateIssue.Issue.ID = "default-issue-id"
-			resp.CreateIssue.Issue.Number = 1
+			resp.CreateIssue.Issue.ID = testutil.DefaultValues.IssueID
+			resp.CreateIssue.Issue.Number = testutil.DefaultValues.IssueNumber
 		}
 		resp.CreateIssue.Issue.Title = "Test Issue"
 		resp.CreateIssue.Issue.URL = "https://github.com/owner/repo/issues/1"
@@ -176,8 +178,8 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 			resp.CreatePullRequest.PullRequest.ID = mockResp.PRID
 			resp.CreatePullRequest.PullRequest.Number = mockResp.PRNumber
 		} else {
-			resp.CreatePullRequest.PullRequest.ID = "default-pr-id"
-			resp.CreatePullRequest.PullRequest.Number = 1
+			resp.CreatePullRequest.PullRequest.ID = testutil.DefaultValues.PRID
+			resp.CreatePullRequest.PullRequest.Number = testutil.DefaultValues.PRNumber
 		}
 		resp.CreatePullRequest.PullRequest.Title = "Test PR"
 		resp.CreatePullRequest.PullRequest.URL = "https://github.com/owner/repo/pull/1"
@@ -209,7 +211,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 				}{ID: cat.ID, Name: cat.Name})
 			}
 		} else {
-			resp.Repository.ID = "default-repo-id"
+			resp.Repository.ID = testutil.DefaultValues.RepositoryID
 			resp.Repository.Categories.Nodes = []struct {
 				ID   string `json:"id"`
 				Name string `json:"name"`
@@ -239,8 +241,8 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 			resp.CreateDiscussion.Discussion.ID = mockResp.DiscussionID
 			resp.CreateDiscussion.Discussion.Number = mockResp.DiscussionNumber
 		} else {
-			resp.CreateDiscussion.Discussion.ID = "default-discussion-id"
-			resp.CreateDiscussion.Discussion.Number = 1
+			resp.CreateDiscussion.Discussion.ID = testutil.DefaultValues.DiscussionID
+			resp.CreateDiscussion.Discussion.Number = testutil.DefaultValues.DiscussionNumber
 		}
 		resp.CreateDiscussion.Discussion.Title = "Test Discussion"
 		resp.CreateDiscussion.Discussion.URL = "https://github.com/owner/repo/discussions/1"
@@ -256,7 +258,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 				} `json:"label"`
 			} `json:"repository"`
 		})
-		resp.Repository.Label.ID = "default-label-id"
+		resp.Repository.Label.ID = testutil.DefaultValues.LabelID
 		return nil
 	}
 
@@ -269,7 +271,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		if mockResp, exists := m.Responses["user"]; exists {
 			resp.User.ID = mockResp.UserID
 		} else {
-			resp.User.ID = "default-user-id"
+			resp.User.ID = testutil.DefaultValues.UserID
 		}
 		return nil
 	}
@@ -315,35 +317,35 @@ func NewDefaultMockGraphQL() *ConfigurableMockGraphQLClient {
 	return &ConfigurableMockGraphQLClient{
 		Responses: map[string]*MockResponse{
 			"repository": {
-				RepositoryID: "repo-id-123",
+				RepositoryID: testutil.DefaultValues.RepositoryID,
 			},
 			"labels": {
 				Labels: []string{"bug", "enhancement", "documentation"},
 			},
 			"createLabel": {
-				LabelID: "label-id-123",
+				LabelID: testutil.DefaultValues.LabelID,
 			},
 			"createIssue": {
-				IssueID:     "issue-id-123",
-				IssueNumber: 1,
+				IssueID:     testutil.DefaultValues.IssueID,
+				IssueNumber: testutil.DefaultValues.IssueNumber,
 			},
 			"createPR": {
-				PRID:     "pr-id-123",
-				PRNumber: 1,
+				PRID:     testutil.DefaultValues.PRID,
+				PRNumber: testutil.DefaultValues.PRNumber,
 			},
 			"discussionCategories": {
-				RepositoryID: "repo-id-123",
+				RepositoryID: testutil.DefaultValues.RepositoryID,
 				Categories: []MockCategory{
 					{ID: "cat-id-123", Name: "General"},
 					{ID: "cat-id-456", Name: "Q&A"},
 				},
 			},
 			"createDiscussion": {
-				DiscussionID:     "discussion-id-123",
-				DiscussionNumber: 1,
+				DiscussionID:     testutil.DefaultValues.DiscussionID,
+				DiscussionNumber: testutil.DefaultValues.DiscussionNumber,
 			},
 			"user": {
-				UserID: "user-id-789",
+				UserID: testutil.DefaultValues.UserID,
 			},
 		},
 	}
