@@ -1081,7 +1081,7 @@ func TestHydrateWithLabels_DryRun(t *testing.T) {
 
 	// Create temporary test files
 	tempDir := t.TempDir()
-	
+
 	// Create test data
 	issues := `[{"title": "Test Issue", "body": "Test", "labels": ["bug"], "assignees": []}]`
 	discussions := `[{"title": "Test Discussion", "body": "Test", "category": "General", "labels": ["enhancement"], "categoryId": "test"}]`
@@ -1132,7 +1132,7 @@ func TestHydrateWithLabels_DryRunFalse(t *testing.T) {
 
 	// Create temporary test files
 	tempDir := t.TempDir()
-	
+
 	// Create test data
 	issues := `[{"title": "Test Issue", "body": "Test", "labels": ["bug"], "assignees": []}]`
 	discussions := `[{"title": "Test Discussion", "body": "Test", "category": "General", "labels": ["enhancement"], "categoryId": "test"}]`
