@@ -49,7 +49,7 @@ type Configuration struct {
 
 // NewConfiguration creates a new configuration with the given base path.
 // The base path should be relative to the project root.
-func NewConfiguration(basePath string) *Configuration {
+func NewConfiguration(ctx context.Context, basePath string) *Configuration {
 	return &Configuration{
 		BasePath:         basePath,
 		IssuesPath:       filepath.Join(basePath, IssuesFilename),

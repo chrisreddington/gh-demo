@@ -73,10 +73,10 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *
 	}
 
 	// Collect label names referenced in content
-	referencedLabelNames := CollectLabels(issues, discussions, pullRequests)
+	referencedLabelNames := CollectLabels(ctx, issues, discussions, pullRequests)
 
 	// Prepare the final list of labels to ensure exist
-	labelsToEnsure := prepareLabelsToEnsure(explicitLabels, referencedLabelNames)
+	labelsToEnsure := prepareLabelsToEnsure(ctx, explicitLabels, referencedLabelNames)
 
 	labelSummary := &SectionSummary{Name: "Labels", Total: len(labelsToEnsure)}
 
@@ -135,7 +135,7 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *
 
 // prepareLabelsToEnsure builds the final list of labels that need to be ensured to exist.
 // It combines explicit labels from labels.json with auto-generated labels for any referenced labels.
-func prepareLabelsToEnsure(explicitLabels []types.Label, referencedLabelNames []string) []types.Label {
+func prepareLabelsToEnsure(ctx context.Context, explicitLabels []types.Label, referencedLabelNames []string) []types.Label {
 	// Create a map of explicit labels by name for quick lookup
 	explicitLabelMap := make(map[string]types.Label)
 	for _, label := range explicitLabels {
@@ -409,7 +409,7 @@ func cleanupIssues(ctx context.Context, client githubapi.GitHubClient, options C
 	logger.Debug("Found %d issues to evaluate for cleanup", len(issues))
 
 	for _, issue := range issues {
-		if options.PreserveConfig != nil && ShouldPreserveIssue(options.PreserveConfig, issue) {
+		if options.PreserveConfig != nil && ShouldPreserveIssue(ctx, options.PreserveConfig, issue) {
 			summary.IssuesPreserved++
 			logger.Debug("Preserving issue: %s", issue.Title)
 			continue
@@ -446,7 +446,7 @@ func cleanupDiscussions(ctx context.Context, client githubapi.GitHubClient, opti
 	logger.Debug("Found %d discussions to evaluate for cleanup", len(discussions))
 
 	for _, discussion := range discussions {
-		if options.PreserveConfig != nil && ShouldPreserveDiscussion(options.PreserveConfig, discussion) {
+		if options.PreserveConfig != nil && ShouldPreserveDiscussion(ctx, options.PreserveConfig, discussion) {
 			summary.DiscussionsPreserved++
 			logger.Debug("Preserving discussion: %s", discussion.Title)
 			continue
@@ -483,7 +483,7 @@ func cleanupPRs(ctx context.Context, client githubapi.GitHubClient, options Clea
 	logger.Debug("Found %d pull requests to evaluate for cleanup", len(prs))
 
 	for _, pullRequest := range prs {
-		if options.PreserveConfig != nil && ShouldPreservePR(options.PreserveConfig, pullRequest) {
+		if options.PreserveConfig != nil && ShouldPreservePR(ctx, options.PreserveConfig, pullRequest) {
 			summary.PRsPreserved++
 			logger.Debug("Preserving PR: %s", pullRequest.Title)
 			continue
@@ -520,7 +520,7 @@ func cleanupLabels(ctx context.Context, client githubapi.GitHubClient, options C
 	logger.Debug("Found %d labels to evaluate for cleanup", len(labelNames))
 
 	for _, labelName := range labelNames {
-		if options.PreserveConfig != nil && ShouldPreserveLabel(options.PreserveConfig, labelName) {
+		if options.PreserveConfig != nil && ShouldPreserveLabel(ctx, options.PreserveConfig, labelName) {
 			summary.LabelsPreserved++
 			logger.Debug("Preserving label: %s", labelName)
 			continue
@@ -605,7 +605,7 @@ func HydrateFromFiles(ctx context.Context, issuesPath, discussionsPath, pullRequ
 
 // CollectLabels returns a deduplicated list of all labels used in issues, discussions, and PRs.
 // CollectLabels returns a deduplicated list of all labels used in issues, discussions, and pull requests.
-func CollectLabels(issues []types.Issue, discussions []types.Discussion, pullRequests []types.PullRequest) []string {
+func CollectLabels(ctx context.Context, issues []types.Issue, discussions []types.Discussion, pullRequests []types.PullRequest) []string {
 	labelSet := make(map[string]struct{})
 	for _, issue := range issues {
 		for _, label := range issue.Labels {

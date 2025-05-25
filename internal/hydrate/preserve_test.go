@@ -165,7 +165,7 @@ func TestShouldPreserveIssue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ShouldPreserveIssue(preserveConfig, tt.issue)
+			result := ShouldPreserveIssue(context.Background(), preserveConfig, tt.issue)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for issue: %s", tt.expected, result, tt.issue.Title)
 			}
@@ -220,7 +220,7 @@ func TestShouldPreserveDiscussion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ShouldPreserveDiscussion(preserveConfig, tt.discussion)
+			result := ShouldPreserveDiscussion(context.Background(), preserveConfig, tt.discussion)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for discussion: %s", tt.expected, result, tt.discussion.Title)
 			}
@@ -275,7 +275,7 @@ func TestShouldPreservePR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ShouldPreservePR(preserveConfig, tt.pullRequest)
+			result := ShouldPreservePR(context.Background(), preserveConfig, tt.pullRequest)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for PR: %s", tt.expected, result, tt.pullRequest.Title)
 			}
@@ -312,7 +312,7 @@ func TestShouldPreserveLabel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ShouldPreserveLabel(preserveConfig, tt.labelName)
+			result := ShouldPreserveLabel(context.Background(), preserveConfig, tt.labelName)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for label: %s", tt.expected, result, tt.labelName)
 			}
@@ -362,7 +362,7 @@ func TestIsMatchOrRegex(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isMatchOrRegex(tt.value, tt.pattern)
+			result := isMatchOrRegex(context.Background(), tt.value, tt.pattern)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for value '%s' and pattern '%s'",
 					tt.expected, result, tt.value, tt.pattern)
