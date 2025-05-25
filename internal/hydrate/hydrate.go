@@ -54,8 +54,7 @@ type CleanupSummary struct {
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
 // It supports both explicit label definitions from labels.json and auto-generated labels with defaults.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
-func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *config.Configuration, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
-	logger := common.NewLogger(debug)
+func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *config.Configuration, includeIssues, includeDiscussions, includePullRequests bool, logger common.Logger) error {
 
 	issues, discussions, pullRequests, err := HydrateFromConfiguration(ctx, cfg, includeIssues, includeDiscussions, includePullRequests)
 	if err != nil {
@@ -313,7 +312,7 @@ func HydrateFromConfiguration(ctx context.Context, cfg *config.Configuration, in
 
 // HydrateWithLabelsFromPaths is a backward compatibility wrapper for tests.
 // New code should use HydrateWithLabels with Configuration instead.
-func HydrateWithLabelsFromPaths(ctx context.Context, client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests, debug bool) error {
+func HydrateWithLabelsFromPaths(ctx context.Context, client githubapi.GitHubClient, issuesPath, discussionsPath, pullRequestsPath string, includeIssues, includeDiscussions, includePullRequests bool, logger common.Logger) error {
 	// Create a configuration object from the individual paths
 	// Extract the base directory from the issues path
 	basePath := filepath.Dir(issuesPath)
@@ -325,7 +324,7 @@ func HydrateWithLabelsFromPaths(ctx context.Context, client githubapi.GitHubClie
 	cfg.PullRequestsPath = pullRequestsPath
 	cfg.LabelsPath = filepath.Join(basePath, config.LabelsFilename)
 
-	return HydrateWithLabels(ctx, client, cfg, includeIssues, includeDiscussions, includePullRequests, debug)
+	return HydrateWithLabels(ctx, client, cfg, includeIssues, includeDiscussions, includePullRequests, logger)
 }
 
 // CleanupBeforeHydration performs cleanup operations before hydration
