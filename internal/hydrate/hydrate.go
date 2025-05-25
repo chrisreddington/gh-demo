@@ -68,8 +68,8 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *
 	// Try to read explicit label definitions from labels.json
 	explicitLabels, err := ReadLabelsJSON(ctx, cfg.LabelsPath)
 	if err != nil {
-		layeredErr := errors.NewLayeredError("config", "read_labels_config", "failed to read labels configuration", err)
-		return layeredErr.WithContext("path", cfg.LabelsPath)
+		err = errors.WrapWithOperation(err, "config", "read_labels_config", "failed to read labels configuration")
+		return errors.WithContextSafe(err, "path", cfg.LabelsPath)
 	}
 
 	// Collect label names referenced in content
@@ -397,13 +397,13 @@ func CleanupBeforeHydration(ctx context.Context, client githubapi.GitHubClient, 
 
 // cleanupIssues handles cleanup of issues
 func cleanupIssues(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
-	var errs []string
+	collector := errors.NewErrorCollector("cleanup_issues")
 
 	issues, err := client.ListIssues(ctx)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to list issues: %v", err)
-		logger.Info(errMsg)
-		return []string{errMsg}
+		wrappedErr := errors.WrapWithOperation(err, "cleanup", "list_issues", "failed to list issues")
+		collector.Add(wrappedErr)
+		return []string{wrappedErr.Error()}
 	}
 
 	logger.Debug("Found %d issues to evaluate for cleanup", len(issues))
@@ -420,27 +420,36 @@ func cleanupIssues(ctx context.Context, client githubapi.GitHubClient, options C
 		} else {
 			logger.Debug("Deleting issue: %s", issue.Title)
 			if err := client.DeleteIssue(ctx, issue.NodeID); err != nil {
-				errMsg := fmt.Sprintf("failed to delete issue '%s': %v", issue.Title, err)
-				logger.Info(errMsg)
-				errs = append(errs, errMsg)
+				wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_issue", "failed to delete issue")
+				wrappedErr = errors.WithContextSafe(wrappedErr, "title", issue.Title)
+				wrappedErr = errors.WithContextSafe(wrappedErr, "node_id", issue.NodeID)
+				collector.Add(wrappedErr)
+				logger.Info("Failed to delete issue '%s': %v", issue.Title, err)
 				continue
 			}
 		}
 		summary.IssuesDeleted++
 	}
 
-	return errs
+	// Convert collected errors to string slice for backward compatibility
+	if result := collector.Result(); result != nil {
+		if partialErr, ok := result.(*errors.PartialFailureError); ok {
+			return partialErr.Errors
+		}
+		return []string{result.Error()}
+	}
+	return nil
 }
 
 // cleanupDiscussions handles cleanup of discussions
 func cleanupDiscussions(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
-	var errs []string
+	collector := errors.NewErrorCollector("cleanup_discussions")
 
 	discussions, err := client.ListDiscussions(ctx)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to list discussions: %v", err)
-		logger.Info(errMsg)
-		return []string{errMsg}
+		wrappedErr := errors.WrapWithOperation(err, "cleanup", "list_discussions", "failed to list discussions")
+		collector.Add(wrappedErr)
+		return []string{wrappedErr.Error()}
 	}
 
 	logger.Debug("Found %d discussions to evaluate for cleanup", len(discussions))
@@ -457,27 +466,36 @@ func cleanupDiscussions(ctx context.Context, client githubapi.GitHubClient, opti
 		} else {
 			logger.Debug("Deleting discussion: %s", discussion.Title)
 			if err := client.DeleteDiscussion(ctx, discussion.NodeID); err != nil {
-				errMsg := fmt.Sprintf("failed to delete discussion '%s': %v", discussion.Title, err)
-				logger.Info(errMsg)
-				errs = append(errs, errMsg)
+				wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_discussion", "failed to delete discussion")
+				wrappedErr = errors.WithContextSafe(wrappedErr, "title", discussion.Title)
+				wrappedErr = errors.WithContextSafe(wrappedErr, "node_id", discussion.NodeID)
+				collector.Add(wrappedErr)
+				logger.Info("Failed to delete discussion '%s': %v", discussion.Title, err)
 				continue
 			}
 		}
 		summary.DiscussionsDeleted++
 	}
 
-	return errs
+	// Convert collected errors to string slice for backward compatibility
+	if result := collector.Result(); result != nil {
+		if partialErr, ok := result.(*errors.PartialFailureError); ok {
+			return partialErr.Errors
+		}
+		return []string{result.Error()}
+	}
+	return nil
 }
 
 // cleanupPRs handles cleanup of pull requests
 func cleanupPRs(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
-	var errs []string
+	collector := errors.NewErrorCollector("cleanup_prs")
 
 	prs, err := client.ListPRs(ctx)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to list pull requests: %v", err)
-		logger.Info(errMsg)
-		return []string{errMsg}
+		wrappedErr := errors.WrapWithOperation(err, "cleanup", "list_prs", "failed to list pull requests")
+		collector.Add(wrappedErr)
+		return []string{wrappedErr.Error()}
 	}
 
 	logger.Debug("Found %d pull requests to evaluate for cleanup", len(prs))
@@ -494,27 +512,36 @@ func cleanupPRs(ctx context.Context, client githubapi.GitHubClient, options Clea
 		} else {
 			logger.Debug("Deleting PR: %s", pullRequest.Title)
 			if err := client.DeletePR(ctx, pullRequest.NodeID); err != nil {
-				errMsg := fmt.Sprintf("failed to delete PR '%s': %v", pullRequest.Title, err)
-				logger.Info(errMsg)
-				errs = append(errs, errMsg)
+				wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_pr", "failed to delete PR")
+				wrappedErr = errors.WithContextSafe(wrappedErr, "title", pullRequest.Title)
+				wrappedErr = errors.WithContextSafe(wrappedErr, "node_id", pullRequest.NodeID)
+				collector.Add(wrappedErr)
+				logger.Info("Failed to delete PR '%s': %v", pullRequest.Title, err)
 				continue
 			}
 		}
 		summary.PRsDeleted++
 	}
 
-	return errs
+	// Convert collected errors to string slice for backward compatibility
+	if result := collector.Result(); result != nil {
+		if partialErr, ok := result.(*errors.PartialFailureError); ok {
+			return partialErr.Errors
+		}
+		return []string{result.Error()}
+	}
+	return nil
 }
 
 // cleanupLabels handles cleanup of labels
 func cleanupLabels(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
-	var errs []string
+	collector := errors.NewErrorCollector("cleanup_labels")
 
 	labelNames, err := client.ListLabels(ctx)
 	if err != nil {
-		errMsg := fmt.Sprintf("failed to list labels: %v", err)
-		logger.Info(errMsg)
-		return []string{errMsg}
+		wrappedErr := errors.WrapWithOperation(err, "cleanup", "list_labels", "failed to list labels")
+		collector.Add(wrappedErr)
+		return []string{wrappedErr.Error()}
 	}
 
 	logger.Debug("Found %d labels to evaluate for cleanup", len(labelNames))
@@ -531,16 +558,24 @@ func cleanupLabels(ctx context.Context, client githubapi.GitHubClient, options C
 		} else {
 			logger.Debug("Deleting label: %s", labelName)
 			if err := client.DeleteLabel(ctx, labelName); err != nil {
-				errMsg := fmt.Sprintf("failed to delete label '%s': %v", labelName, err)
-				logger.Info(errMsg)
-				errs = append(errs, errMsg)
+				wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_label", "failed to delete label")
+				wrappedErr = errors.WithContextSafe(wrappedErr, "label_name", labelName)
+				collector.Add(wrappedErr)
+				logger.Info("Failed to delete label '%s': %v", labelName, err)
 				continue
 			}
 		}
 		summary.LabelsDeleted++
 	}
 
-	return errs
+	// Convert collected errors to string slice for backward compatibility
+	if result := collector.Result(); result != nil {
+		if partialErr, ok := result.(*errors.PartialFailureError); ok {
+			return partialErr.Errors
+		}
+		return []string{result.Error()}
+	}
+	return nil
 }
 
 // HydrateFromFiles loads issues, discussions, and pull requests from their respective JSON files.
@@ -558,12 +593,12 @@ func HydrateFromFiles(ctx context.Context, issuesPath, discussionsPath, pullRequ
 
 		data, err := os.ReadFile(issuesPath)
 		if err != nil {
-			layeredErr := errors.NewLayeredError("file", "read_issues", "failed to read issues file", err)
-			return nil, nil, nil, layeredErr.WithContext("path", issuesPath)
+			err = errors.WrapWithOperation(err, "file", "read_issues", "failed to read issues file")
+			return nil, nil, nil, errors.WithContextSafe(err, "path", issuesPath)
 		}
 		if err := json.Unmarshal(data, &issues); err != nil {
-			layeredErr := errors.NewLayeredError("file", "parse_issues", "failed to parse issues file", err)
-			return nil, nil, nil, layeredErr.WithContext("path", issuesPath)
+			err = errors.WrapWithOperation(err, "file", "parse_issues", "failed to parse issues file")
+			return nil, nil, nil, errors.WithContextSafe(err, "path", issuesPath)
 		}
 	}
 
@@ -575,12 +610,12 @@ func HydrateFromFiles(ctx context.Context, issuesPath, discussionsPath, pullRequ
 
 		data, err := os.ReadFile(discussionsPath)
 		if err != nil {
-			layeredErr := errors.NewLayeredError("file", "read_discussions", "failed to read discussions file", err)
-			return nil, nil, nil, layeredErr.WithContext("path", discussionsPath)
+			err = errors.WrapWithOperation(err, "file", "read_discussions", "failed to read discussions file")
+			return nil, nil, nil, errors.WithContextSafe(err, "path", discussionsPath)
 		}
 		if err := json.Unmarshal(data, &discussions); err != nil {
-			layeredErr := errors.NewLayeredError("file", "parse_discussions", "failed to parse discussions file", err)
-			return nil, nil, nil, layeredErr.WithContext("path", discussionsPath)
+			err = errors.WrapWithOperation(err, "file", "parse_discussions", "failed to parse discussions file")
+			return nil, nil, nil, errors.WithContextSafe(err, "path", discussionsPath)
 		}
 	}
 
@@ -591,12 +626,12 @@ func HydrateFromFiles(ctx context.Context, issuesPath, discussionsPath, pullRequ
 		}
 		data, err := os.ReadFile(pullRequestsPath)
 		if err != nil {
-			layeredErr := errors.NewLayeredError("file", "read_pull_requests", "failed to read pull requests file", err)
-			return nil, nil, nil, layeredErr.WithContext("path", pullRequestsPath)
+			err = errors.WrapWithOperation(err, "file", "read_pull_requests", "failed to read pull requests file")
+			return nil, nil, nil, errors.WithContextSafe(err, "path", pullRequestsPath)
 		}
 		if err := json.Unmarshal(data, &pullRequests); err != nil {
-			layeredErr := errors.NewLayeredError("file", "parse_pull_requests", "failed to parse pull requests file", err)
-			return nil, nil, nil, layeredErr.WithContext("path", pullRequestsPath)
+			err = errors.WrapWithOperation(err, "file", "parse_pull_requests", "failed to parse pull requests file")
+			return nil, nil, nil, errors.WithContextSafe(err, "path", pullRequestsPath)
 		}
 	}
 
@@ -650,14 +685,14 @@ func ReadLabelsJSON(ctx context.Context, labelsPath string) ([]types.Label, erro
 
 	content, err := os.ReadFile(labelsPath)
 	if err != nil {
-		layeredErr := errors.NewLayeredError("file", "read_labels", "failed to read labels file", err)
-		return nil, layeredErr.WithContext("path", labelsPath)
+		err = errors.WrapWithOperation(err, "file", "read_labels", "failed to read labels file")
+		return nil, errors.WithContextSafe(err, "path", labelsPath)
 	}
 
 	var labels []types.Label
 	if err := json.Unmarshal(content, &labels); err != nil {
-		layeredErr := errors.NewLayeredError("file", "parse_labels", "invalid JSON in labels file", err)
-		return nil, layeredErr.WithContext("path", labelsPath)
+		err = errors.WrapWithOperation(err, "file", "parse_labels", "invalid JSON in labels file")
+		return nil, errors.WithContextSafe(err, "path", labelsPath)
 	}
 
 	return labels, nil

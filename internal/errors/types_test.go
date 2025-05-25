@@ -382,3 +382,101 @@ func TestContextError(t *testing.T) {
 		})
 	}
 }
+
+// TestAsLayeredError tests safe type assertion helper
+func TestAsLayeredError(t *testing.T) {
+	layeredErr := APIError("test_op", "test message", nil)
+	regularErr := fmt.Errorf("regular error")
+
+	// Test with LayeredError
+	result := AsLayeredError(layeredErr)
+	if result == nil {
+		t.Error("AsLayeredError should return LayeredError for valid LayeredError")
+	}
+	if result.Layer != "api" {
+		t.Errorf("Expected layer 'api', got %s", result.Layer)
+	}
+
+	// Test with regular error
+	result = AsLayeredError(regularErr)
+	if result != nil {
+		t.Error("AsLayeredError should return nil for non-LayeredError")
+	}
+
+	// Test with nil error
+	result = AsLayeredError(nil)
+	if result != nil {
+		t.Error("AsLayeredError should return nil for nil error")
+	}
+}
+
+// TestWithContextSafe tests safe context addition helper
+func TestWithContextSafe(t *testing.T) {
+	layeredErr := APIError("test_op", "test message", nil)
+	regularErr := fmt.Errorf("regular error")
+
+	// Test with LayeredError
+	result := WithContextSafe(layeredErr, "key", "value")
+	if layeredResult := AsLayeredError(result); layeredResult != nil {
+		if layeredResult.Context["key"] != "value" {
+			t.Errorf("Expected context key=value, got %s", layeredResult.Context["key"])
+		}
+	} else {
+		t.Error("WithContextSafe should preserve LayeredError")
+	}
+
+	// Test with regular error (should return unchanged)
+	result = WithContextSafe(regularErr, "key", "value")
+	if result != regularErr {
+		t.Error("WithContextSafe should return original error for non-LayeredError")
+	}
+
+	// Test with nil error
+	result = WithContextSafe(nil, "key", "value")
+	if result != nil {
+		t.Error("WithContextSafe should return nil for nil error")
+	}
+}
+
+// TestWrapWithOperation tests error wrapping helper
+func TestWrapWithOperation(t *testing.T) {
+	originalErr := fmt.Errorf("original error")
+	
+	// Test with regular error
+	result := WrapWithOperation(originalErr, "test_layer", "test_op", "test message")
+	layeredResult := AsLayeredError(result)
+	if layeredResult == nil {
+		t.Error("WrapWithOperation should create LayeredError")
+		return
+	}
+	if layeredResult.Layer != "test_layer" {
+		t.Errorf("Expected layer 'test_layer', got %s", layeredResult.Layer)
+	}
+	if layeredResult.Operation != "test_op" {
+		t.Errorf("Expected operation 'test_op', got %s", layeredResult.Operation)
+	}
+	if layeredResult.Cause != originalErr {
+		t.Errorf("Expected cause to be original error")
+	}
+
+	// Test with LayeredError (should wrap it)
+	layeredErr := APIError("inner_op", "inner message", originalErr)
+	result = WrapWithOperation(layeredErr, "outer_layer", "outer_op", "outer message")
+	outerResult := AsLayeredError(result)
+	if outerResult == nil {
+		t.Error("WrapWithOperation should create outer LayeredError")
+		return
+	}
+	if outerResult.Layer != "outer_layer" {
+		t.Errorf("Expected outer layer 'outer_layer', got %s", outerResult.Layer)
+	}
+	if outerResult.Cause != layeredErr {
+		t.Error("Expected cause to be the inner LayeredError")
+	}
+
+	// Test with nil error
+	result = WrapWithOperation(nil, "test_layer", "test_op", "test message")
+	if result != nil {
+		t.Error("WrapWithOperation should return nil for nil error")
+	}
+}
