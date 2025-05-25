@@ -36,7 +36,7 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 
 	// Should not error with stubbed methods
 	logger := common.NewLogger(false)
-	err = HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger)
+	err = HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels with real GHClient failed: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestHydrateWithLabelsFromPaths(t *testing.T) {
 
 	// Hydrate and ensure labels
 	logger := common.NewLogger(false)
-	err = HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger)
+	err = HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
 	if err != nil {
 		t.Fatalf("HydrateWithLabels failed: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestHydrateOperations(t *testing.T) {
 
 			logger := common.NewLogger(false)
 			err := HydrateWithLabels(context.Background(), client, cfg,
-				issuesPath != "", discussionsPath != "", prsPath != "", logger)
+				issuesPath != "", discussionsPath != "", prsPath != "", logger, false)
 
 			if tt.expectError && err == nil {
 				t.Errorf("Expected error for %s but got none", tt.name)
@@ -275,7 +275,7 @@ func TestGracefulErrorHandling(t *testing.T) {
 
 	// Test that the function continues processing despite PR failure
 	logger := common.NewLogger(false)
-	err := HydrateWithLabels(context.Background(), client, cfg, true, false, true, logger)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, false, true, logger, false)
 
 	// Should return error mentioning the PR failure, but should have succeeded with issues
 	if err == nil {
@@ -326,7 +326,7 @@ func TestPRValidation(t *testing.T) {
 
 	// Should fail gracefully with validation error
 	logger := common.NewLogger(false)
-	err := HydrateWithLabels(context.Background(), client, cfg, false, false, true, logger)
+	err := HydrateWithLabels(context.Background(), client, cfg, false, false, true, logger, false)
 
 	if err == nil {
 		// The MockGitHubClient doesn't implement validation, so this test won't work as expected
@@ -470,7 +470,7 @@ func TestHydrateWithLabels_ContextCancellation(t *testing.T) {
 	cfg := createConfigurationFromPaths(issuesPath, "", "")
 
 	logger := common.NewLogger(false)
-	err := HydrateWithLabels(ctx, client, cfg, true, false, false, logger)
+	err := HydrateWithLabels(ctx, client, cfg, true, false, false, logger, false)
 	if err == nil {
 		t.Error("Expected context cancellation error")
 		return
@@ -683,7 +683,7 @@ func TestEnsureLabelsExist_WithFailures(t *testing.T) {
 		{Name: "new", Color: "00ff00"},
 	}
 
-	err := EnsureDefinedLabelsExist(context.Background(), client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(context.Background(), client, labels, logger, summary, false)
 
 	// This should succeed with our mock
 	if err != nil {
@@ -703,7 +703,7 @@ func TestEnsureLabelsExist_ListLabelsError(t *testing.T) {
 	summary := &SectionSummary{}
 	labels := []types.Label{{Name: "test-label", Color: "ff0000"}}
 
-	err := EnsureDefinedLabelsExist(context.Background(), client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(context.Background(), client, labels, logger, summary, false)
 
 	// This should return an error due to ListLabels failing
 	if err == nil {
@@ -724,7 +724,7 @@ func TestEnsureLabelsExist_EmptyLabels(t *testing.T) {
 	summary := &SectionSummary{}
 	labels := []types.Label{} // Empty labels slice
 
-	err := EnsureDefinedLabelsExist(context.Background(), client, labels, logger, summary)
+	err := EnsureDefinedLabelsExist(context.Background(), client, labels, logger, summary, false)
 
 	// This should return nil without calling any client methods
 	if err != nil {
@@ -758,7 +758,7 @@ func TestHydrateWithLabels_DebugMode(t *testing.T) {
 
 	// Test with debug mode enabled
 	logger := common.NewLogger(true) // Enable debug for this test
-	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
 	if err != nil {
 		t.Errorf("Expected no error with debug mode, got: %v", err)
 	}
@@ -772,7 +772,7 @@ func TestHydrateWithLabels_FileReadError(t *testing.T) {
 	cfg := createConfigurationFromPaths("/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json")
 
 	logger := common.NewLogger(false)
-	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
 	if err == nil {
 		t.Error("Expected error when files don't exist")
 	}
@@ -809,7 +809,7 @@ func TestHydrateWithLabels_EnsureLabelsExistError(t *testing.T) {
 	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
 
 	logger := common.NewLogger(false)
-	err := HydrateWithLabels(context.Background(), client, cfg, true, false, false, logger)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, false, false, logger, false)
 
 	if err == nil {
 		t.Error("Expected error when EnsureLabelsExist fails")
@@ -854,7 +854,7 @@ func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
 	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
 
 	logger := common.NewLogger(false)
-	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
 
 	// Should return aggregated errors
 	if err == nil {
@@ -905,7 +905,7 @@ func TestConfigurablePaths(t *testing.T) {
 
 	// Test hydration with the custom paths
 	logger := common.NewLogger(false)
-	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
 	if err != nil {
 		t.Errorf("HydrateWithLabels failed with custom config path: %v", err)
 	}
@@ -1041,7 +1041,7 @@ func TestHydrateWithConfiguration(t *testing.T) {
 
 	// Test hydration with the new Configuration approach
 	logger := common.NewLogger(false)
-	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
 	if err != nil {
 		t.Errorf("HydrateWithLabels failed with Configuration: %v", err)
 	}
@@ -1072,4 +1072,106 @@ func createConfigurationFromPaths(issuesPath, discussionsPath, pullRequestsPath 
 	cfg.LabelsPath = filepath.Join(basePath, config.LabelsFilename)
 
 	return cfg
+}
+
+// TestHydrateWithLabels_DryRun tests that dry-run mode previews operations without actually performing them
+func TestHydrateWithLabels_DryRun(t *testing.T) {
+	// Setup mock client
+	client := NewSuccessfulMockGitHubClient("existing-label")
+
+	// Create temporary test files
+	tempDir := t.TempDir()
+
+	// Create test data
+	issues := `[{"title": "Test Issue", "body": "Test", "labels": ["bug"], "assignees": []}]`
+	discussions := `[{"title": "Test Discussion", "body": "Test", "category": "General", "labels": ["enhancement"], "categoryId": "test"}]`
+	prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": ["ci"], "assignees": []}]`
+
+	issuesPath := filepath.Join(tempDir, "issues.json")
+	discussionsPath := filepath.Join(tempDir, "discussions.json")
+	prsPath := filepath.Join(tempDir, "prs.json")
+
+	if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
+		t.Fatalf("Failed to write issues file: %v", err)
+	}
+	if err := os.WriteFile(discussionsPath, []byte(discussions), 0644); err != nil {
+		t.Fatalf("Failed to write discussions file: %v", err)
+	}
+	if err := os.WriteFile(prsPath, []byte(prs), 0644); err != nil {
+		t.Fatalf("Failed to write PRs file: %v", err)
+	}
+
+	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+
+	// Test with dry-run enabled
+	logger := common.NewLogger(false)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, true)
+	if err != nil {
+		t.Errorf("Unexpected error with dry-run enabled: %v", err)
+	}
+
+	// Verify no actual API calls were made
+	if len(client.CreatedIssues) != 0 {
+		t.Errorf("Expected no issues to be created in dry-run, but %d were created", len(client.CreatedIssues))
+	}
+	if len(client.CreatedDiscussions) != 0 {
+		t.Errorf("Expected no discussions to be created in dry-run, but %d were created", len(client.CreatedDiscussions))
+	}
+	if len(client.CreatedPRs) != 0 {
+		t.Errorf("Expected no PRs to be created in dry-run, but %d were created", len(client.CreatedPRs))
+	}
+	if len(client.CreatedLabels) != 0 {
+		t.Errorf("Expected no labels to be created in dry-run, but %d were created", len(client.CreatedLabels))
+	}
+}
+
+// TestHydrateWithLabels_DryRunFalse tests that non-dry-run mode performs actual operations
+func TestHydrateWithLabels_DryRunFalse(t *testing.T) {
+	// Setup mock client with no existing labels
+	client := NewSuccessfulMockGitHubClient()
+
+	// Create temporary test files
+	tempDir := t.TempDir()
+
+	// Create test data
+	issues := `[{"title": "Test Issue", "body": "Test", "labels": ["bug"], "assignees": []}]`
+	discussions := `[{"title": "Test Discussion", "body": "Test", "category": "General", "labels": ["enhancement"], "categoryId": "test"}]`
+	prs := `[{"title": "Test PR", "body": "Test", "head": "feature", "base": "main", "labels": ["ci"], "assignees": []}]`
+
+	issuesPath := filepath.Join(tempDir, "issues.json")
+	discussionsPath := filepath.Join(tempDir, "discussions.json")
+	prsPath := filepath.Join(tempDir, "prs.json")
+
+	if err := os.WriteFile(issuesPath, []byte(issues), 0644); err != nil {
+		t.Fatalf("Failed to write issues file: %v", err)
+	}
+	if err := os.WriteFile(discussionsPath, []byte(discussions), 0644); err != nil {
+		t.Fatalf("Failed to write discussions file: %v", err)
+	}
+	if err := os.WriteFile(prsPath, []byte(prs), 0644); err != nil {
+		t.Fatalf("Failed to write PRs file: %v", err)
+	}
+
+	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+
+	// Test with dry-run disabled
+	logger := common.NewLogger(false)
+	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
+	if err != nil {
+		t.Errorf("Unexpected error with dry-run disabled: %v", err)
+	}
+
+	// Verify actual API calls were made
+	if len(client.CreatedIssues) == 0 {
+		t.Error("Expected at least one issue to be created when dry-run is false")
+	}
+	if len(client.CreatedDiscussions) == 0 {
+		t.Error("Expected at least one discussion to be created when dry-run is false")
+	}
+	if len(client.CreatedPRs) == 0 {
+		t.Error("Expected at least one PR to be created when dry-run is false")
+	}
+	if len(client.CreatedLabels) == 0 {
+		t.Error("Expected at least one label to be created when dry-run is false")
+	}
 }
