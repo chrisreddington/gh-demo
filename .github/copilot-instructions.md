@@ -8,17 +8,17 @@ This project (gh-demo) is a GitHub CLI Extension written in Go to automate repos
 ### Go Language Standards
 - Follow standard Go idioms and best practices
 - Use comprehensive GoDoc comments for all exported symbols
-- Keep functions small and focused on a single responsibility
+- Keep functions small and focused on a single responsibility (Ideally no more than 50 - 80 lines)
 - All method and variable names should be descriptive and follow Go naming conventions. No abbreviations unless they are well-known (e.g., `URL`, `ID`). Even pr should be pullRequest, as an example.
 - Prefer strongly typed interfaces over `interface{}`
 - Separate interface definitions from implementations
 
 ### Testing Requirements
+- Write tests before implementation (TDD approach)
 - Achieve minimum 80% test coverage for all packages
 - Use table-driven tests for validation logic and multiple scenarios
 - Mock ALL external dependencies (GitHub API, file system operations)
 - Test error paths, not just happy paths
-- Write tests before implementation (TDD approach)
 
 ### Pre-Commit Requirements
 - The code must build: `go build .`
