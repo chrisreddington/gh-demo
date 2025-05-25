@@ -392,6 +392,7 @@ func TestAsLayeredError(t *testing.T) {
 	result := AsLayeredError(layeredErr)
 	if result == nil {
 		t.Error("AsLayeredError should return LayeredError for valid LayeredError")
+		return
 	}
 	if result.Layer != "api" {
 		t.Errorf("Expected layer 'api', got %s", result.Layer)
