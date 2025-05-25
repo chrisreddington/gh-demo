@@ -135,7 +135,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	}
 
 	// Perform hydration
-	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, debug)
+	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, logger)
 
 	// Handle the result
 	return handleHydrationResult(err, logger)
