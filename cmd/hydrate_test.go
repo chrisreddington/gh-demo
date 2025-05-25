@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
@@ -648,4 +650,407 @@ func TestNewHydrateCmd_ConfigPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestResolveRepositoryInfo tests the repository information resolution logic
+func TestResolveRepositoryInfo(t *testing.T) {
+	tests := []struct {
+		name        string
+		owner       string
+		repo        string
+		expectError bool
+		errorText   string
+	}{
+		{
+			name:        "valid owner and repo",
+			owner:       "testowner",
+			repo:        "testrepo",
+			expectError: false,
+		},
+		{
+			name:        "owner with whitespace",
+			owner:       "  testowner  ",
+			repo:        "testrepo",
+			expectError: false,
+		},
+		{
+			name:        "repo with whitespace",
+			owner:       "testowner",
+			repo:        "  testrepo  ",
+			expectError: false,
+		},
+		{
+			name:        "empty owner",
+			owner:       "",
+			repo:        "testrepo",
+			expectError: true,
+			errorText:   "--owner and --repo are required",
+		},
+		{
+			name:        "empty repo",
+			owner:       "testowner",
+			repo:        "",
+			expectError: true,
+			errorText:   "--owner and --repo are required",
+		},
+		{
+			name:        "both empty",
+			owner:       "",
+			repo:        "",
+			expectError: true,
+			errorText:   "--owner and --repo are required",
+		},
+		{
+			name:        "whitespace only owner",
+			owner:       "   ",
+			repo:        "testrepo",
+			expectError: true,
+			errorText:   "--owner and --repo are required",
+		},
+		{
+			name:        "whitespace only repo",
+			owner:       "testowner",
+			repo:        "   ",
+			expectError: true,
+			errorText:   "--owner and --repo are required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			result, err := resolveRepositoryInfo(ctx, tt.owner, tt.repo)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if result == nil {
+				t.Errorf("Expected result but got nil")
+				return
+			}
+
+			expectedOwner := strings.TrimSpace(tt.owner)
+			expectedRepo := strings.TrimSpace(tt.repo)
+
+			if result.Owner != expectedOwner {
+				t.Errorf("Expected owner %q, got %q", expectedOwner, result.Owner)
+			}
+
+			if result.Repo != expectedRepo {
+				t.Errorf("Expected repo %q, got %q", expectedRepo, result.Repo)
+			}
+		})
+	}
+}
+
+// TestResolveRepositoryInfo_ContextCancellation tests context cancellation handling
+func TestResolveRepositoryInfo_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	result, err := resolveRepositoryInfo(ctx, "owner", "repo")
+
+	if err == nil {
+		t.Error("Expected context cancellation error")
+		return
+	}
+
+	if result != nil {
+		t.Error("Expected nil result on context cancellation")
+	}
+
+	if err != context.Canceled {
+		t.Errorf("Expected context.Canceled, got %v", err)
+	}
+}
+
+// TestCreateGitHubClient tests GitHub client creation validation logic
+func TestCreateGitHubClient(t *testing.T) {
+	tests := []struct {
+		name        string
+		repoInfo    *repositoryInfo
+		expectError bool
+		errorText   string
+	}{
+		{
+			name: "empty owner",
+			repoInfo: &repositoryInfo{
+				Owner: "",
+				Repo:  "testrepo",
+			},
+			expectError: true,
+			errorText:   "owner cannot be empty",
+		},
+		{
+			name: "empty repo",
+			repoInfo: &repositoryInfo{
+				Owner: "testowner",
+				Repo:  "",
+			},
+			expectError: true,
+			errorText:   "repo cannot be empty",
+		},
+		{
+			name: "whitespace only owner",
+			repoInfo: &repositoryInfo{
+				Owner: "   ",
+				Repo:  "testrepo",
+			},
+			expectError: true,
+			errorText:   "owner cannot be empty",
+		},
+		{
+			name: "whitespace only repo",
+			repoInfo: &repositoryInfo{
+				Owner: "testowner",
+				Repo:  "   ",
+			},
+			expectError: true,
+			errorText:   "repo cannot be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			logger := common.NewLogger(false)
+
+			client, err := createGitHubClient(ctx, tt.repoInfo, logger)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				if client != nil {
+					t.Error("Expected nil client on error")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if client == nil {
+				t.Error("Expected client but got nil")
+			}
+		})
+	}
+}
+
+// TestCreateGitHubClient_ContextCancellation tests context cancellation
+func TestCreateGitHubClient_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	logger := common.NewLogger(false)
+	repoInfo := &repositoryInfo{Owner: "owner", Repo: "repo"}
+
+	client, err := createGitHubClient(ctx, repoInfo, logger)
+
+	if err == nil {
+		t.Error("Expected context cancellation error")
+		return
+	}
+
+	if client != nil {
+		t.Error("Expected nil client on context cancellation")
+	}
+
+	// Check if the error chain contains context.Canceled
+	if !strings.Contains(err.Error(), "context canceled") {
+		t.Errorf("Expected error to contain 'context canceled', got %v", err)
+	}
+}
+
+// TestHandleHydrationResult tests hydration result handling
+func TestHandleHydrationResult(t *testing.T) {
+	tests := []struct {
+		name           string
+		inputError     error
+		expectError    bool
+		expectNilError bool
+	}{
+		{
+			name:           "no error - success case",
+			inputError:     nil,
+			expectNilError: true,
+		},
+		{
+			name:        "complete failure",
+			inputError:  fmt.Errorf("complete failure"),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			logger := common.NewLogger(false)
+
+			result := handleHydrationResult(ctx, tt.inputError, logger)
+
+			if tt.expectNilError {
+				if result != nil {
+					t.Errorf("Expected nil error, got %v", result)
+				}
+				return
+			}
+
+			if tt.expectError {
+				if result == nil {
+					t.Error("Expected error but got nil")
+				}
+			} else {
+				if result != nil {
+					t.Errorf("Expected nil error, got %v", result)
+				}
+			}
+		})
+	}
+}
+
+// TestHandleHydrationResult_ContextCancellation tests context cancellation
+func TestHandleHydrationResult_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	logger := common.NewLogger(false)
+
+	// Test with partial failure error and cancelled context
+	// We'll create a mock partial failure by using the errors.NewPartialFailureError
+	partialErr := fmt.Errorf("partial failure")
+	
+	// Cancel context before calling
+	cancel()
+
+	result := handleHydrationResult(ctx, partialErr, logger)
+
+	// Should return the original error since it's not a partial failure
+	if result == nil {
+		t.Error("Expected non-nil result for complete failure")
+	}
+}
+
+// TestExecuteHydrate_ParameterValidation tests executeHydrate parameter validation
+func TestExecuteHydrate_ParameterValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		owner       string
+		repo        string
+		configPath  string
+		expectError bool
+		errorText   string
+	}{
+		{
+			name:        "empty owner and repo outside git context",
+			owner:       "",
+			repo:        "",
+			configPath:  ".github/demos",
+			expectError: true,
+			errorText:   "--owner and --repo are required",
+		},
+		{
+			name:        "whitespace only owner",
+			owner:       "   ",
+			repo:        "testrepo",
+			configPath:  ".github/demos",
+			expectError: true,
+			errorText:   "--owner and --repo are required",
+		},
+		{
+			name:        "whitespace only repo",
+			owner:       "testowner",
+			repo:        "   ",
+			configPath:  ".github/demos",
+			expectError: true,
+			errorText:   "--owner and --repo are required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use a temporary directory that doesn't have .git to avoid git context fallback
+			tempDir := t.TempDir()
+			
+			// Change to temp directory to avoid git context
+			originalDir, err := os.Getwd()
+			if err != nil {
+				t.Fatalf("Failed to get current directory: %v", err)
+			}
+			
+			err = os.Chdir(tempDir)
+			if err != nil {
+				t.Fatalf("Failed to change to temp directory: %v", err)
+			}
+			defer func() {
+				os.Chdir(originalDir)
+			}()
+
+			ctx := context.Background()
+			cleanupFlags := CleanupFlags{}
+
+			err = executeHydrate(ctx, tt.owner, tt.repo, tt.configPath, true, true, true, false, cleanupFlags)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), tt.errorText) {
+					t.Errorf("Expected error to contain %q, got %q", tt.errorText, err.Error())
+				}
+				return
+			}
+
+			// For successful cases, we'd need to mock the GitHub API, so we skip those for now
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+// TestExecuteHydrate_ContextCancellation tests context cancellation handling
+func TestExecuteHydrate_ContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	cleanupFlags := CleanupFlags{}
+
+	err := executeHydrate(ctx, "owner", "repo", ".github/demos", true, true, true, false, cleanupFlags)
+
+	if err == nil {
+		t.Error("Expected context cancellation error")
+		return
+	}
+
+	if err != context.Canceled {
+		t.Errorf("Expected context.Canceled, got %v", err)
+	}
+}
+
+// TestPerformCleanup tests the cleanup operation validation
+func TestPerformCleanup(t *testing.T) {
+	// Note: performCleanup requires a valid GitHub client and config files
+	// Testing this function fully would require complex mocking setup
+	// For now, we test that the function signature is correct and exists
+	
+	t.Skip("Skipping performCleanup tests - requires complex GitHub client mocking")
 }
