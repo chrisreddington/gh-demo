@@ -8,24 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/chrisreddington/gh-demo/internal/testutil"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
-// MockGraphQLClient implements the GraphQLClient interface for testing
-type MockGraphQLClient struct {
-	DoFunc func(context.Context, string, map[string]interface{}, interface{}) error
-}
-
-func (m *MockGraphQLClient) Do(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
-	if m.DoFunc != nil {
-		return m.DoFunc(ctx, query, variables, response)
-	}
-	return nil
-}
-
 // Tests for GHClient
 func TestNewGHClientWithClients(t *testing.T) {
-	mockGQL := &MockGraphQLClient{}
+	mockGQL := &testutil.SimpleMockGraphQLClient{}
 
 	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL)
 	if err != nil {
@@ -40,7 +29,7 @@ func TestNewGHClientWithClients(t *testing.T) {
 }
 
 func TestNewGHClientWithClients_ValidationErrors(t *testing.T) {
-	mockGQL := &MockGraphQLClient{}
+	mockGQL := &testutil.SimpleMockGraphQLClient{}
 
 	tests := []struct {
 		name        string
@@ -132,25 +121,19 @@ func TestGHClientWithMockClients(t *testing.T) {
 	}
 
 	// Test CreateIssue
-	err = client.CreateIssue(context.Background(), types.Issue{
-		Title:     "Test Issue",
-		Body:      "This is a test issue",
-		Labels:    []string{"bug"},
-		Assignees: []string{"testuser"},
-	})
+	testIssue := testutil.DataFactory.CreateTestIssue("Test Issue")
+	testIssue.Labels = []string{"bug"}
+	testIssue.Assignees = []string{"testuser"}
+	err = client.CreateIssue(context.Background(), testIssue)
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
 
 	// Test CreatePR
-	err = client.CreatePR(context.Background(), types.PullRequest{
-		Title:     "Test PR",
-		Body:      "This is a test PR",
-		Head:      "feature-branch",
-		Base:      "main",
-		Labels:    []string{"enhancement"},
-		Assignees: []string{"testuser"},
-	})
+	testPR := testutil.DataFactory.CreateTestPR("Test PR")
+	testPR.Labels = []string{"enhancement"}
+	testPR.Assignees = []string{"testuser"}
+	err = client.CreatePR(context.Background(), testPR)
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
@@ -189,7 +172,7 @@ func TestCreateDiscussion(t *testing.T) {
 }
 
 func TestCreateDiscussion_CategoryNotFound(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "discussionCategories") {
 				// Repository info query with different categories
@@ -237,7 +220,7 @@ func TestCreateDiscussion_CategoryNotFound(t *testing.T) {
 }
 
 func TestCreateDiscussion_GraphQLError(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			return fmt.Errorf("GraphQL error: network timeout")
 		},
@@ -491,7 +474,7 @@ func TestGHClient_GraphQLOperations(t *testing.T) {
 }
 
 func TestSetLogger(t *testing.T) {
-	mockGQL := &MockGraphQLClient{}
+	mockGQL := &testutil.SimpleMockGraphQLClient{}
 
 	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL)
 	if err != nil {
@@ -518,7 +501,7 @@ func (m *MockLogger) Info(format string, args ...interface{}) {
 }
 
 func TestDebugLog(t *testing.T) {
-	mockGQL := &MockGraphQLClient{}
+	mockGQL := &testutil.SimpleMockGraphQLClient{}
 
 	client, err := NewGHClientWithClients("testowner", "testrepo", mockGQL)
 	if err != nil {
@@ -536,7 +519,7 @@ func TestDebugLog(t *testing.T) {
 
 // TestCreateDiscussionWithLabels tests the addLabelToDiscussion function through CreateDiscussion
 func TestCreateDiscussionWithLabels(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "discussionCategories") {
 				// Repository info query
@@ -616,7 +599,7 @@ func TestCreateDiscussionWithLabels(t *testing.T) {
 
 // TestAddLabelToDiscussion_LabelNotFound tests error handling in addLabelToDiscussion
 func TestAddLabelToDiscussion_LabelNotFound(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "discussionCategories") {
 				// Repository info query
@@ -689,7 +672,7 @@ func TestAddLabelToDiscussion_LabelNotFound(t *testing.T) {
 
 // TestAddLabelToDiscussion_GraphQLError tests GraphQL error handling
 func TestAddLabelToDiscussion_GraphQLError(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "discussionCategories") {
 				// Repository info query
@@ -755,7 +738,7 @@ func TestAddLabelToDiscussion_GraphQLError(t *testing.T) {
 
 // TestCreatePR_ValidationErrors tests CreatePR validation error paths
 func TestCreatePR_ValidationErrors(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			// This should not be called for validation errors
 			t.Error("GraphQL client should not be called for validation errors")
@@ -814,7 +797,7 @@ func TestCreatePR_ValidationErrors(t *testing.T) {
 
 // TestCreatePR_WithLabelsAndAssignees tests CreatePR with labels and assignees
 func TestCreatePR_WithLabelsAndAssignees(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "GetRepositoryId") {
 				// Repository ID query
@@ -891,7 +874,7 @@ func TestCreatePR_WithLabelsAndAssignees(t *testing.T) {
 
 // TestCreatePR_LabelsAssigneesFailure tests CreatePR when labels/assignees update fails
 func TestCreatePR_LabelsAssigneesFailure(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "GetRepositoryId") {
 				// Repository ID query
@@ -971,7 +954,7 @@ func TestCreatePR_LabelsAssigneesFailure(t *testing.T) {
 
 // TestCreatePR_RequestFailure tests CreatePR when the initial request fails
 func TestCreatePR_RequestFailure(t *testing.T) {
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			if strings.Contains(query, "GetRepositoryId") {
 				// Repository ID query
@@ -1043,7 +1026,7 @@ func TestCreateIssue_ContextTimeout(t *testing.T) {
 	// Wait for context to timeout
 	time.Sleep(2 * time.Millisecond)
 
-	gqlClient := &MockGraphQLClient{
+	gqlClient := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			// Check if context is already cancelled
 			select {
@@ -1122,7 +1105,7 @@ func (s *slowClient) Do(query string, variables map[string]interface{}, response
 }
 
 func TestDeleteDiscussion(t *testing.T) {
-	mockGQL := &MockGraphQLClient{
+	mockGQL := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			// Check the mutation is correct
 			if !strings.Contains(query, "deleteDiscussion") {
@@ -1166,7 +1149,7 @@ func TestDeleteDiscussion(t *testing.T) {
 
 func TestDeleteDiscussion_ValidationErrors(t *testing.T) {
 	client := &GHClient{
-		gqlClient: &MockGraphQLClient{},
+		gqlClient: &testutil.SimpleMockGraphQLClient{},
 		Owner:     "testowner",
 		Repo:      "testrepo",
 		logger:    &MockLogger{},
@@ -1199,7 +1182,7 @@ func TestDeleteDiscussion_ValidationErrors(t *testing.T) {
 }
 
 func TestDeleteDiscussion_GraphQLError(t *testing.T) {
-	mockGQL := &MockGraphQLClient{
+	mockGQL := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			return errors.New("GraphQL error")
 		},
@@ -1222,16 +1205,16 @@ func TestDeleteDiscussion_GraphQLError(t *testing.T) {
 func TestListIssues(t *testing.T) {
 	tests := []struct {
 		name            string
-		setupMockClient func() *MockGraphQLClient
+		setupMockClient func() *testutil.SimpleMockGraphQLClient
 		expectError     bool
 		expectedCount   int
 		errorText       string
 	}{
 		{
 			name: "successful list with multiple pages",
-			setupMockClient: func() *MockGraphQLClient {
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
 				callCount := 0
-				return &MockGraphQLClient{
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						callCount++
 						resp := response.(*struct {
@@ -1329,8 +1312,8 @@ func TestListIssues(t *testing.T) {
 		},
 		{
 			name: "empty repository",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						resp := response.(*struct {
 							Repository struct {
@@ -1376,8 +1359,8 @@ func TestListIssues(t *testing.T) {
 		},
 		{
 			name: "graphql client error",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						return fmt.Errorf("network error")
 					},
@@ -1388,8 +1371,8 @@ func TestListIssues(t *testing.T) {
 		},
 		{
 			name: "nil client validation",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{} // Return empty client to test validation
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{} // Return empty client to test validation
 			},
 			expectError: true,
 			errorText:   "GraphQL client is not initialized",
@@ -1450,15 +1433,15 @@ func TestListIssues(t *testing.T) {
 func TestListDiscussions(t *testing.T) {
 	tests := []struct {
 		name            string
-		setupMockClient func() *MockGraphQLClient
+		setupMockClient func() *testutil.SimpleMockGraphQLClient
 		expectError     bool
 		expectedCount   int
 		errorText       string
 	}{
 		{
 			name: "successful list",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						resp := response.(*struct {
 							Repository struct {
@@ -1510,8 +1493,8 @@ func TestListDiscussions(t *testing.T) {
 		},
 		{
 			name: "graphql error",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						return fmt.Errorf("api error")
 					},
@@ -1560,15 +1543,15 @@ func TestListDiscussions(t *testing.T) {
 func TestListPRs(t *testing.T) {
 	tests := []struct {
 		name            string
-		setupMockClient func() *MockGraphQLClient
+		setupMockClient func() *testutil.SimpleMockGraphQLClient
 		expectError     bool
 		expectedCount   int
 		errorText       string
 	}{
 		{
 			name: "successful list",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						resp := response.(*struct {
 							Repository struct {
@@ -1636,8 +1619,8 @@ func TestListPRs(t *testing.T) {
 		},
 		{
 			name: "graphql error",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						return fmt.Errorf("api error")
 					},
@@ -1687,15 +1670,15 @@ func TestDeleteIssue(t *testing.T) {
 	tests := []struct {
 		name            string
 		nodeID          string
-		setupMockClient func() *MockGraphQLClient
+		setupMockClient func() *testutil.SimpleMockGraphQLClient
 		expectError     bool
 		errorText       string
 	}{
 		{
 			name:   "successful deletion",
 			nodeID: "issue-node-123",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						if !strings.Contains(query, "closeIssue") {
 							t.Error("Expected closeIssue mutation")
@@ -1728,8 +1711,8 @@ func TestDeleteIssue(t *testing.T) {
 		{
 			name:   "empty node ID",
 			nodeID: "",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{}
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{}
 			},
 			expectError: true,
 			errorText:   "node ID cannot be empty",
@@ -1737,8 +1720,8 @@ func TestDeleteIssue(t *testing.T) {
 		{
 			name:   "graphql error",
 			nodeID: "issue-node-123",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						return fmt.Errorf("api error")
 					},
@@ -1750,8 +1733,8 @@ func TestDeleteIssue(t *testing.T) {
 		{
 			name:   "issue not properly closed",
 			nodeID: "issue-node-123",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						// Mock response with issue still open
 						resp := response.(*struct {
@@ -1808,15 +1791,15 @@ func TestDeletePR(t *testing.T) {
 	tests := []struct {
 		name            string
 		nodeID          string
-		setupMockClient func() *MockGraphQLClient
+		setupMockClient func() *testutil.SimpleMockGraphQLClient
 		expectError     bool
 		errorText       string
 	}{
 		{
 			name:   "successful deletion",
 			nodeID: "pr-node-123",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						if !strings.Contains(query, "closePullRequest") {
 							t.Error("Expected closePullRequest mutation")
@@ -1849,8 +1832,8 @@ func TestDeletePR(t *testing.T) {
 		{
 			name:   "empty node ID",
 			nodeID: "",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{}
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{}
 			},
 			expectError: true,
 			errorText:   "node ID cannot be empty",
@@ -1858,8 +1841,8 @@ func TestDeletePR(t *testing.T) {
 		{
 			name:   "graphql error",
 			nodeID: "pr-node-123",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						return fmt.Errorf("api error")
 					},
@@ -1904,15 +1887,15 @@ func TestDeleteLabel(t *testing.T) {
 	tests := []struct {
 		name            string
 		labelName       string
-		setupMockClient func() *MockGraphQLClient
+		setupMockClient func() *testutil.SimpleMockGraphQLClient
 		expectError     bool
 		errorText       string
 	}{
 		{
 			name:      "successful deletion",
 			labelName: "test-label",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						if strings.Contains(query, "repository(owner:") && strings.Contains(query, "label(name:") {
 							// First query: get label ID by name
@@ -1952,8 +1935,8 @@ func TestDeleteLabel(t *testing.T) {
 		{
 			name:      "empty label name",
 			labelName: "",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{}
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{}
 			},
 			expectError: true,
 			errorText:   "label name cannot be empty",
@@ -1961,8 +1944,8 @@ func TestDeleteLabel(t *testing.T) {
 		{
 			name:      "graphql error",
 			labelName: "test-label",
-			setupMockClient: func() *MockGraphQLClient {
-				return &MockGraphQLClient{
+			setupMockClient: func() *testutil.SimpleMockGraphQLClient {
+				return &testutil.SimpleMockGraphQLClient{
 					DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 						return fmt.Errorf("api error")
 					},

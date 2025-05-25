@@ -1,6 +1,7 @@
 package testutil
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
@@ -81,6 +82,20 @@ func (f *TestDataFactory) CreateTestLabel(name string) types.Label {
 	}
 }
 
+// MockError provides a simple error implementation for testing
+type MockError struct {
+	Message string
+}
+
+func (e *MockError) Error() string {
+	return e.Message
+}
+
+// NewMockError creates a new MockError with the given message
+func NewMockError(message string) error {
+	return &MockError{Message: message}
+}
+
 // MockLogger provides a simple mock logger for testing
 type MockLogger struct {
 	LastMessage string
@@ -106,6 +121,58 @@ func (m *MockLogger) Error(format string, args ...interface{}) {
 
 // Verify MockLogger implements common.Logger interface
 var _ common.Logger = (*MockLogger)(nil)
+
+// MockFactory provides common patterns for creating test mocks
+type MockFactory struct{}
+
+// CreateErrorConfigMap creates a map of ErrorConfig for multiple operations
+func (f *MockFactory) CreateErrorConfigMap(errorOperations map[string]string) map[string]ErrorConfig {
+	configs := make(map[string]ErrorConfig)
+	for operation, errorMessage := range errorOperations {
+		configs[operation] = ErrorConfig{
+			ShouldError:  true,
+			ErrorMessage: errorMessage,
+		}
+	}
+	return configs
+}
+
+// CreateSuccessfulErrorConfig creates an ErrorConfig that doesn't trigger errors
+func (f *MockFactory) CreateSuccessfulErrorConfig() ErrorConfig {
+	return ErrorConfig{
+		ShouldError:  false,
+		ErrorMessage: "",
+	}
+}
+
+// CreateLabelMap creates a map of labels with the specified existing state
+func (f *MockFactory) CreateLabelMap(labels ...string) map[string]bool {
+	labelMap := make(map[string]bool)
+	for _, label := range labels {
+		labelMap[label] = true
+	}
+	return labelMap
+}
+
+// CreateTestCollections creates test collections with the specified number of items
+func (f *MockFactory) CreateTestCollections(numIssues, numPRs, numDiscussions int) ([]types.Issue, []types.PullRequest, []types.Discussion) {
+	issues := make([]types.Issue, numIssues)
+	for i := 0; i < numIssues; i++ {
+		issues[i] = DataFactory.CreateTestIssue(fmt.Sprintf("Test Issue %d", i+1))
+	}
+
+	prs := make([]types.PullRequest, numPRs)
+	for i := 0; i < numPRs; i++ {
+		prs[i] = DataFactory.CreateTestPR(fmt.Sprintf("Test PR %d", i+1))
+	}
+
+	discussions := make([]types.Discussion, numDiscussions)
+	for i := 0; i < numDiscussions; i++ {
+		discussions[i] = DataFactory.CreateTestDiscussion(fmt.Sprintf("Test Discussion %d", i+1))
+	}
+
+	return issues, prs, discussions
+}
 
 // DefaultValues provides common default values used across different mock implementations
 var DefaultValues = struct {
@@ -141,4 +208,22 @@ var EmptyCollections = struct {
 	Discussions: []types.Discussion{},
 	PRs:         []types.PullRequest{},
 	Labels:      []string{},
+}
+
+// Factory provides a global instance of MockFactory for convenience
+var Factory = &MockFactory{}
+
+// DataFactory provides a global instance of TestDataFactory for convenience  
+var DataFactory = &TestDataFactory{}
+
+// SimpleMockGraphQLClient provides a basic mock for GraphQL operations
+type SimpleMockGraphQLClient struct {
+	DoFunc func(context.Context, string, map[string]interface{}, interface{}) error
+}
+
+func (m *SimpleMockGraphQLClient) Do(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
+	if m.DoFunc != nil {
+		return m.DoFunc(ctx, query, variables, response)
+	}
+	return nil
 }

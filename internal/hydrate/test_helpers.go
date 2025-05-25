@@ -148,14 +148,9 @@ func (m *ConfigurableMockGitHubClient) DeleteLabel(ctx context.Context, name str
 
 // NewSuccessfulMockGitHubClient creates a mock that succeeds for all operations
 func NewSuccessfulMockGitHubClient(existingLabels ...string) *ConfigurableMockGitHubClient {
-	labels := make(map[string]bool)
-	for _, label := range existingLabels {
-		labels[label] = true
-	}
-
 	return &ConfigurableMockGitHubClient{
 		Config: MockConfig{
-			ExistingLabels: labels,
+			ExistingLabels: testutil.Factory.CreateLabelMap(existingLabels...),
 		},
 		CreatedIssues:      testutil.EmptyCollections.Issues,
 		CreatedDiscussions: testutil.EmptyCollections.Discussions,
@@ -167,7 +162,7 @@ func NewSuccessfulMockGitHubClient(existingLabels ...string) *ConfigurableMockGi
 // NewFailingMockGitHubClient creates a mock that fails for specified operations
 func NewFailingMockGitHubClient(config MockConfig) *ConfigurableMockGitHubClient {
 	if config.ExistingLabels == nil {
-		config.ExistingLabels = make(map[string]bool)
+		config.ExistingLabels = testutil.Factory.CreateLabelMap()
 	}
 
 	return &ConfigurableMockGitHubClient{

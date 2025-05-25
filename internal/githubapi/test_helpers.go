@@ -60,7 +60,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		})
 		if mockResp, exists := m.Responses["repository"]; exists {
 			if mockResp.ShouldError {
-				return &mockError{message: mockResp.ErrorMessage}
+				return testutil.NewMockError(mockResp.ErrorMessage)
 			}
 			resp.Repository.ID = mockResp.RepositoryID
 		} else {
@@ -86,7 +86,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		})
 		if mockResp, exists := m.Responses["labels"]; exists {
 			if mockResp.ShouldError {
-				return &mockError{message: mockResp.ErrorMessage}
+				return testutil.NewMockError(mockResp.ErrorMessage)
 			}
 			for _, label := range mockResp.Labels {
 				resp.Repository.Labels.Nodes = append(resp.Repository.Labels.Nodes, struct {
@@ -111,7 +111,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		})
 		if mockResp, exists := m.Responses["createLabel"]; exists {
 			if mockResp.ShouldError {
-				return &mockError{message: mockResp.ErrorMessage}
+				return testutil.NewMockError(mockResp.ErrorMessage)
 			}
 			resp.CreateLabel.Label.ID = mockResp.LabelID
 		} else {
@@ -146,7 +146,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		})
 		if mockResp, exists := m.Responses["createIssue"]; exists {
 			if mockResp.ShouldError {
-				return &mockError{message: mockResp.ErrorMessage}
+				return testutil.NewMockError(mockResp.ErrorMessage)
 			}
 			resp.CreateIssue.Issue.ID = mockResp.IssueID
 			resp.CreateIssue.Issue.Number = mockResp.IssueNumber
@@ -173,7 +173,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		})
 		if mockResp, exists := m.Responses["createPR"]; exists {
 			if mockResp.ShouldError {
-				return &mockError{message: mockResp.ErrorMessage}
+				return testutil.NewMockError(mockResp.ErrorMessage)
 			}
 			resp.CreatePullRequest.PullRequest.ID = mockResp.PRID
 			resp.CreatePullRequest.PullRequest.Number = mockResp.PRNumber
@@ -201,7 +201,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		})
 		if mockResp, exists := m.Responses["discussionCategories"]; exists {
 			if mockResp.ShouldError {
-				return &mockError{message: mockResp.ErrorMessage}
+				return testutil.NewMockError(mockResp.ErrorMessage)
 			}
 			resp.Repository.ID = mockResp.RepositoryID
 			for _, cat := range mockResp.Categories {
@@ -236,7 +236,7 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		})
 		if mockResp, exists := m.Responses["createDiscussion"]; exists {
 			if mockResp.ShouldError {
-				return &mockError{message: mockResp.ErrorMessage}
+				return testutil.NewMockError(mockResp.ErrorMessage)
 			}
 			resp.CreateDiscussion.Discussion.ID = mockResp.DiscussionID
 			resp.CreateDiscussion.Discussion.Number = mockResp.DiscussionNumber
@@ -299,15 +299,6 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 
 	// Default: return nil for unhandled queries
 	return nil
-}
-
-// mockError implements error interface for testing
-type mockError struct {
-	message string
-}
-
-func (e *mockError) Error() string {
-	return e.message
 }
 
 // Helper functions to create common mock configurations

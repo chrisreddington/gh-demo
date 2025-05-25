@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/chrisreddington/gh-demo/internal/testutil"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
@@ -13,7 +14,7 @@ func TestGitHubClientInterface(t *testing.T) {
 	var _ GitHubClient = &GHClient{}
 
 	// Test that we can create a client and it satisfies the interface
-	client, err := NewGHClientWithClients("test", "test", &MockGraphQLClient{})
+	client, err := NewGHClientWithClients("test", "test", &testutil.SimpleMockGraphQLClient{})
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -23,11 +24,11 @@ func TestGitHubClientInterface(t *testing.T) {
 
 // TestGraphQLClientInterface tests the GraphQLClient interface contract
 func TestGraphQLClientInterface(t *testing.T) {
-	// Test that MockGraphQLClient implements GraphQLClient interface
-	var _ GraphQLClient = &MockGraphQLClient{}
+	// Test that testutil.SimpleMockGraphQLClient implements GraphQLClient interface
+	var _ GraphQLClient = &testutil.SimpleMockGraphQLClient{}
 
 	// Test that the interface methods can be called
-	mock := &MockGraphQLClient{
+	mock := &testutil.SimpleMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			return nil
 		},
@@ -45,7 +46,7 @@ func TestGitHubClientInterfaceMethodSignatures(t *testing.T) {
 	client := &GHClient{
 		Owner:     "test",
 		Repo:      "test",
-		gqlClient: &MockGraphQLClient{},
+		gqlClient: &testutil.SimpleMockGraphQLClient{},
 		logger:    &MockLogger{},
 	}
 
@@ -112,7 +113,7 @@ func TestGitHubClientInterfaceComplianceWithMocks(t *testing.T) {
 			client: &GHClient{
 				Owner:     "test",
 				Repo:      "test",
-				gqlClient: &MockGraphQLClient{},
+				gqlClient: &testutil.SimpleMockGraphQLClient{},
 				logger:    &MockLogger{},
 			},
 		},
@@ -167,7 +168,7 @@ func TestInterfaceDocumentationCompliance(t *testing.T) {
 		client := &GHClient{
 			Owner:     "test",
 			Repo:      "test",
-			gqlClient: &MockGraphQLClient{},
+			gqlClient: &testutil.SimpleMockGraphQLClient{},
 			logger:    &MockLogger{},
 		}
 
@@ -223,7 +224,7 @@ func TestInterfaceDocumentationCompliance(t *testing.T) {
 
 	t.Run("GraphQLClient interface", func(t *testing.T) {
 		// Verify GraphQLClient interface contract
-		gqlClient := &MockGraphQLClient{}
+		gqlClient := &testutil.SimpleMockGraphQLClient{}
 
 		// Test Do method signature
 		err := gqlClient.Do(context.Background(), "test query", map[string]interface{}{}, nil)
