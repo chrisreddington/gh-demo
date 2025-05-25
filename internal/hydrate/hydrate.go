@@ -51,6 +51,40 @@ type CleanupSummary struct {
 	Errors               []string
 }
 
+// handleListError creates and returns error for list operation failures
+func handleListError(err error, operation, itemType string) []string {
+	wrappedErr := errors.WrapWithOperation(err, "cleanup", operation, fmt.Sprintf("failed to list %s", itemType))
+	return []string{wrappedErr.Error()}
+}
+
+// handleDeleteError creates, collects and logs error for delete operation failures
+func handleDeleteError(err error, collector *errors.ErrorCollector, logger common.Logger, itemType, title, nodeID string) {
+	wrappedErr := errors.WrapWithOperation(err, "cleanup", fmt.Sprintf("delete_%s", itemType), fmt.Sprintf("failed to delete %s", itemType))
+	wrappedErr = errors.WithContextSafe(wrappedErr, "title", title)
+	wrappedErr = errors.WithContextSafe(wrappedErr, "node_id", nodeID)
+	collector.Add(wrappedErr)
+	logger.Info("Failed to delete %s '%s': %v", itemType, title, err)
+}
+
+// handleLabelDeleteError creates, collects and logs error for label delete operation failures  
+func handleLabelDeleteError(err error, collector *errors.ErrorCollector, logger common.Logger, labelName string) {
+	wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_label", "failed to delete label")
+	wrappedErr = errors.WithContextSafe(wrappedErr, "label_name", labelName)
+	collector.Add(wrappedErr)
+	logger.Info("Failed to delete label '%s': %v", labelName, err)
+}
+
+// convertErrorsToStringSlice converts collected errors to string slice for backward compatibility
+func convertErrorsToStringSlice(collector *errors.ErrorCollector) []string {
+	if result := collector.Result(); result != nil {
+		if partialErr, ok := result.(*errors.PartialFailureError); ok {
+			return partialErr.Errors
+		}
+		return []string{result.Error()}
+	}
+	return nil
+}
+
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
 // It supports both explicit label definitions from labels.json and auto-generated labels with defaults.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
@@ -401,9 +435,7 @@ func cleanupIssues(ctx context.Context, client githubapi.GitHubClient, options C
 
 	issues, err := client.ListIssues(ctx)
 	if err != nil {
-		wrappedErr := errors.WrapWithOperation(err, "cleanup", "list_issues", "failed to list issues")
-		collector.Add(wrappedErr)
-		return []string{wrappedErr.Error()}
+		return handleListError(err, "list_issues", "issues")
 	}
 
 	logger.Debug("Found %d issues to evaluate for cleanup", len(issues))
@@ -420,25 +452,14 @@ func cleanupIssues(ctx context.Context, client githubapi.GitHubClient, options C
 		} else {
 			logger.Debug("Deleting issue: %s", issue.Title)
 			if err := client.DeleteIssue(ctx, issue.NodeID); err != nil {
-				wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_issue", "failed to delete issue")
-				wrappedErr = errors.WithContextSafe(wrappedErr, "title", issue.Title)
-				wrappedErr = errors.WithContextSafe(wrappedErr, "node_id", issue.NodeID)
-				collector.Add(wrappedErr)
-				logger.Info("Failed to delete issue '%s': %v", issue.Title, err)
+				handleDeleteError(err, collector, logger, "issue", issue.Title, issue.NodeID)
 				continue
 			}
 		}
 		summary.IssuesDeleted++
 	}
 
-	// Convert collected errors to string slice for backward compatibility
-	if result := collector.Result(); result != nil {
-		if partialErr, ok := result.(*errors.PartialFailureError); ok {
-			return partialErr.Errors
-		}
-		return []string{result.Error()}
-	}
-	return nil
+	return convertErrorsToStringSlice(collector)
 }
 
 // cleanupDiscussions handles cleanup of discussions
@@ -447,9 +468,7 @@ func cleanupDiscussions(ctx context.Context, client githubapi.GitHubClient, opti
 
 	discussions, err := client.ListDiscussions(ctx)
 	if err != nil {
-		wrappedErr := errors.WrapWithOperation(err, "cleanup", "list_discussions", "failed to list discussions")
-		collector.Add(wrappedErr)
-		return []string{wrappedErr.Error()}
+		return handleListError(err, "list_discussions", "discussions")
 	}
 
 	logger.Debug("Found %d discussions to evaluate for cleanup", len(discussions))
@@ -466,25 +485,14 @@ func cleanupDiscussions(ctx context.Context, client githubapi.GitHubClient, opti
 		} else {
 			logger.Debug("Deleting discussion: %s", discussion.Title)
 			if err := client.DeleteDiscussion(ctx, discussion.NodeID); err != nil {
-				wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_discussion", "failed to delete discussion")
-				wrappedErr = errors.WithContextSafe(wrappedErr, "title", discussion.Title)
-				wrappedErr = errors.WithContextSafe(wrappedErr, "node_id", discussion.NodeID)
-				collector.Add(wrappedErr)
-				logger.Info("Failed to delete discussion '%s': %v", discussion.Title, err)
+				handleDeleteError(err, collector, logger, "discussion", discussion.Title, discussion.NodeID)
 				continue
 			}
 		}
 		summary.DiscussionsDeleted++
 	}
 
-	// Convert collected errors to string slice for backward compatibility
-	if result := collector.Result(); result != nil {
-		if partialErr, ok := result.(*errors.PartialFailureError); ok {
-			return partialErr.Errors
-		}
-		return []string{result.Error()}
-	}
-	return nil
+	return convertErrorsToStringSlice(collector)
 }
 
 // cleanupPRs handles cleanup of pull requests
@@ -493,9 +501,7 @@ func cleanupPRs(ctx context.Context, client githubapi.GitHubClient, options Clea
 
 	prs, err := client.ListPRs(ctx)
 	if err != nil {
-		wrappedErr := errors.WrapWithOperation(err, "cleanup", "list_prs", "failed to list pull requests")
-		collector.Add(wrappedErr)
-		return []string{wrappedErr.Error()}
+		return handleListError(err, "list_prs", "pull requests")
 	}
 
 	logger.Debug("Found %d pull requests to evaluate for cleanup", len(prs))
@@ -512,25 +518,14 @@ func cleanupPRs(ctx context.Context, client githubapi.GitHubClient, options Clea
 		} else {
 			logger.Debug("Deleting PR: %s", pullRequest.Title)
 			if err := client.DeletePR(ctx, pullRequest.NodeID); err != nil {
-				wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_pr", "failed to delete PR")
-				wrappedErr = errors.WithContextSafe(wrappedErr, "title", pullRequest.Title)
-				wrappedErr = errors.WithContextSafe(wrappedErr, "node_id", pullRequest.NodeID)
-				collector.Add(wrappedErr)
-				logger.Info("Failed to delete PR '%s': %v", pullRequest.Title, err)
+				handleDeleteError(err, collector, logger, "PR", pullRequest.Title, pullRequest.NodeID)
 				continue
 			}
 		}
 		summary.PRsDeleted++
 	}
 
-	// Convert collected errors to string slice for backward compatibility
-	if result := collector.Result(); result != nil {
-		if partialErr, ok := result.(*errors.PartialFailureError); ok {
-			return partialErr.Errors
-		}
-		return []string{result.Error()}
-	}
-	return nil
+	return convertErrorsToStringSlice(collector)
 }
 
 // cleanupLabels handles cleanup of labels
@@ -539,9 +534,7 @@ func cleanupLabels(ctx context.Context, client githubapi.GitHubClient, options C
 
 	labelNames, err := client.ListLabels(ctx)
 	if err != nil {
-		wrappedErr := errors.WrapWithOperation(err, "cleanup", "list_labels", "failed to list labels")
-		collector.Add(wrappedErr)
-		return []string{wrappedErr.Error()}
+		return handleListError(err, "list_labels", "labels")
 	}
 
 	logger.Debug("Found %d labels to evaluate for cleanup", len(labelNames))
@@ -558,24 +551,14 @@ func cleanupLabels(ctx context.Context, client githubapi.GitHubClient, options C
 		} else {
 			logger.Debug("Deleting label: %s", labelName)
 			if err := client.DeleteLabel(ctx, labelName); err != nil {
-				wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_label", "failed to delete label")
-				wrappedErr = errors.WithContextSafe(wrappedErr, "label_name", labelName)
-				collector.Add(wrappedErr)
-				logger.Info("Failed to delete label '%s': %v", labelName, err)
+				handleLabelDeleteError(err, collector, logger, labelName)
 				continue
 			}
 		}
 		summary.LabelsDeleted++
 	}
 
-	// Convert collected errors to string slice for backward compatibility
-	if result := collector.Result(); result != nil {
-		if partialErr, ok := result.(*errors.PartialFailureError); ok {
-			return partialErr.Errors
-		}
-		return []string{result.Error()}
-	}
-	return nil
+	return convertErrorsToStringSlice(collector)
 }
 
 // HydrateFromFiles loads issues, discussions, and pull requests from their respective JSON files.
