@@ -133,7 +133,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	}
 
 	// Perform hydration
-	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, logger)
+	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, logger, cleanupFlags.DryRun)
 
 	// Handle the result
 	return handleHydrationResult(err, logger)
@@ -198,7 +198,7 @@ Cleanup flags allow you to clean existing objects before hydrating:
   --clean-discussions: Clean only discussions
   --clean-prs: Clean only pull requests
   --clean-labels: Clean only labels
-  --dry-run: Preview what would be deleted without actually deleting
+  --dry-run: Preview what would be created and deleted without actually performing operations
   --preserve-config: Path to preserve configuration file (default: .github/demos/preserve.json)`,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Create context with cancellation for Ctrl+C
@@ -232,7 +232,7 @@ Cleanup flags allow you to clean existing objects before hydrating:
 	cmd.Flags().BoolVar(&cleanupFlags.CleanDiscussions, "clean-discussions", false, "Clean existing discussions before hydrating")
 	cmd.Flags().BoolVar(&cleanupFlags.CleanPRs, "clean-prs", false, "Clean existing pull requests before hydrating")
 	cmd.Flags().BoolVar(&cleanupFlags.CleanLabels, "clean-labels", false, "Clean existing labels before hydrating")
-	cmd.Flags().BoolVar(&cleanupFlags.DryRun, "dry-run", false, "Preview what would be deleted without actually deleting")
+	cmd.Flags().BoolVar(&cleanupFlags.DryRun, "dry-run", false, "Preview what would be created and deleted without actually performing operations")
 	cmd.Flags().StringVar(&cleanupFlags.PreserveConfig, "preserve-config", "", "Path to preserve configuration file (default: .github/demos/preserve.json)")
 
 	return cmd

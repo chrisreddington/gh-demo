@@ -54,7 +54,11 @@ type CleanupSummary struct {
 // HydrateWithLabels loads content, collects all labels, and ensures labels exist before hydration.
 // It supports both explicit label definitions from labels.json and auto-generated labels with defaults.
 // It continues processing even if individual items fail, collecting all errors and reporting them at the end.
-func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *config.Configuration, includeIssues, includeDiscussions, includePullRequests bool, logger common.Logger) error {
+func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *config.Configuration, includeIssues, includeDiscussions, includePullRequests bool, logger common.Logger, dryRun bool) error {
+
+	if dryRun {
+		logger.Info("Starting hydration operations (dry-run: true)")
+	}
 
 	issues, discussions, pullRequests, err := HydrateFromConfiguration(ctx, cfg, includeIssues, includeDiscussions, includePullRequests)
 	if err != nil {
@@ -81,7 +85,7 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *
 	}
 	logger.Debug("Found %d total labels to ensure exist", len(labelsToEnsure))
 
-	if err := EnsureDefinedLabelsExist(ctx, client, labelsToEnsure, logger, labelSummary); err != nil {
+	if err := EnsureDefinedLabelsExist(ctx, client, labelsToEnsure, logger, labelSummary, dryRun); err != nil {
 		return errors.APIError("ensure_labels", "failed to ensure labels exist", err)
 	}
 
@@ -92,7 +96,7 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *
 
 	// Create issues, discussions, and pull requests
 	if includeIssues {
-		issueErrors, err := createIssues(ctx, client, issues, logger)
+		issueErrors, err := createIssues(ctx, client, issues, logger, dryRun)
 		if err != nil {
 			return err
 		}
@@ -102,7 +106,7 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *
 	}
 
 	if includeDiscussions {
-		discussionErrors, err := createDiscussions(ctx, client, discussions, logger)
+		discussionErrors, err := createDiscussions(ctx, client, discussions, logger, dryRun)
 		if err != nil {
 			return err
 		}
@@ -112,7 +116,7 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *
 	}
 
 	if includePullRequests {
-		prErrors, err := createPullRequests(ctx, client, pullRequests, logger)
+		prErrors, err := createPullRequests(ctx, client, pullRequests, logger, dryRun)
 		if err != nil {
 			return err
 		}
@@ -162,7 +166,7 @@ func prepareLabelsToEnsure(explicitLabels []types.Label, referencedLabelNames []
 
 // createIssues creates all issues and collects any errors that occur.
 // It returns a slice of error messages for any issues that failed to create.
-func createIssues(ctx context.Context, client githubapi.GitHubClient, issues []types.Issue, logger common.Logger) ([]string, error) {
+func createIssues(ctx context.Context, client githubapi.GitHubClient, issues []types.Issue, logger common.Logger, dryRun bool) ([]string, error) {
 	if len(issues) == 0 {
 		return nil, nil
 	}
@@ -177,15 +181,20 @@ func createIssues(ctx context.Context, client githubapi.GitHubClient, issues []t
 			return errors, err
 		}
 
-		if err := client.CreateIssue(ctx, issue); err != nil {
-			errorMsg := fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err)
-			errors = append(errors, errorMsg)
-			issueSummary.Errors = append(issueSummary.Errors, errorMsg)
-			issueSummary.Failures++
-			logger.Debug("Failed to create issue '%s': %v", issue.Title, err)
-		} else {
+		if dryRun {
+			logger.Info("Would create issue: %s", issue.Title)
 			issueSummary.Success++
-			logger.Debug("Successfully created issue '%s'", issue.Title)
+		} else {
+			if err := client.CreateIssue(ctx, issue); err != nil {
+				errorMsg := fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err)
+				errors = append(errors, errorMsg)
+				issueSummary.Errors = append(issueSummary.Errors, errorMsg)
+				issueSummary.Failures++
+				logger.Debug("Failed to create issue '%s': %v", issue.Title, err)
+			} else {
+				issueSummary.Success++
+				logger.Debug("Successfully created issue '%s'", issue.Title)
+			}
 		}
 	}
 	logger.Info("Issues: %d total, %d successful, %d failed", issueSummary.Total, issueSummary.Success, issueSummary.Failures)
@@ -194,7 +203,7 @@ func createIssues(ctx context.Context, client githubapi.GitHubClient, issues []t
 
 // createDiscussions creates all discussions and collects any errors that occur.
 // It returns a slice of error messages for any discussions that failed to create.
-func createDiscussions(ctx context.Context, client githubapi.GitHubClient, discussions []types.Discussion, logger common.Logger) ([]string, error) {
+func createDiscussions(ctx context.Context, client githubapi.GitHubClient, discussions []types.Discussion, logger common.Logger, dryRun bool) ([]string, error) {
 	if len(discussions) == 0 {
 		return nil, nil
 	}
@@ -209,15 +218,20 @@ func createDiscussions(ctx context.Context, client githubapi.GitHubClient, discu
 			return errors, err
 		}
 
-		if err := client.CreateDiscussion(ctx, discussion); err != nil {
-			errorMsg := fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err)
-			errors = append(errors, errorMsg)
-			discussionSummary.Errors = append(discussionSummary.Errors, errorMsg)
-			discussionSummary.Failures++
-			logger.Debug("Failed to create discussion '%s': %v", discussion.Title, err)
-		} else {
+		if dryRun {
+			logger.Info("Would create discussion: %s", discussion.Title)
 			discussionSummary.Success++
-			logger.Debug("Successfully created discussion '%s'", discussion.Title)
+		} else {
+			if err := client.CreateDiscussion(ctx, discussion); err != nil {
+				errorMsg := fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err)
+				errors = append(errors, errorMsg)
+				discussionSummary.Errors = append(discussionSummary.Errors, errorMsg)
+				discussionSummary.Failures++
+				logger.Debug("Failed to create discussion '%s': %v", discussion.Title, err)
+			} else {
+				discussionSummary.Success++
+				logger.Debug("Successfully created discussion '%s'", discussion.Title)
+			}
 		}
 	}
 	logger.Info("Discussions: %d total, %d successful, %d failed", discussionSummary.Total, discussionSummary.Success, discussionSummary.Failures)
@@ -226,7 +240,7 @@ func createDiscussions(ctx context.Context, client githubapi.GitHubClient, discu
 
 // createPullRequests creates all pull requests and collects any errors that occur.
 // It returns a slice of error messages for any pull requests that failed to create.
-func createPullRequests(ctx context.Context, client githubapi.GitHubClient, pullRequests []types.PullRequest, logger common.Logger) ([]string, error) {
+func createPullRequests(ctx context.Context, client githubapi.GitHubClient, pullRequests []types.PullRequest, logger common.Logger, dryRun bool) ([]string, error) {
 	if len(pullRequests) == 0 {
 		return nil, nil
 	}
@@ -241,15 +255,20 @@ func createPullRequests(ctx context.Context, client githubapi.GitHubClient, pull
 			return errors, err
 		}
 
-		if err := client.CreatePR(ctx, pullRequest); err != nil {
-			errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pullRequest.Title, err)
-			errors = append(errors, errorMsg)
-			pullRequestSummary.Errors = append(pullRequestSummary.Errors, errorMsg)
-			pullRequestSummary.Failures++
-			logger.Debug("Failed to create pull request '%s': %v", pullRequest.Title, err)
-		} else {
+		if dryRun {
+			logger.Info("Would create pull request: %s", pullRequest.Title)
 			pullRequestSummary.Success++
-			logger.Debug("Successfully created pull request '%s'", pullRequest.Title)
+		} else {
+			if err := client.CreatePR(ctx, pullRequest); err != nil {
+				errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pullRequest.Title, err)
+				errors = append(errors, errorMsg)
+				pullRequestSummary.Errors = append(pullRequestSummary.Errors, errorMsg)
+				pullRequestSummary.Failures++
+				logger.Debug("Failed to create pull request '%s': %v", pullRequest.Title, err)
+			} else {
+				pullRequestSummary.Success++
+				logger.Debug("Successfully created pull request '%s'", pullRequest.Title)
+			}
 		}
 	}
 	logger.Info("Pull Requests: %d total, %d successful, %d failed", pullRequestSummary.Total, pullRequestSummary.Success, pullRequestSummary.Failures)
@@ -259,7 +278,7 @@ func createPullRequests(ctx context.Context, client githubapi.GitHubClient, pull
 // EnsureDefinedLabelsExist creates any missing labels in the repository.
 // It checks which labels already exist and only creates those that are missing.
 // This function works with full Label objects that include color and description.
-func EnsureDefinedLabelsExist(ctx context.Context, client githubapi.GitHubClient, labels []types.Label, logger common.Logger, summary *SectionSummary) error {
+func EnsureDefinedLabelsExist(ctx context.Context, client githubapi.GitHubClient, labels []types.Label, logger common.Logger, summary *SectionSummary, dryRun bool) error {
 	if len(labels) == 0 {
 		return nil
 	}
@@ -284,16 +303,21 @@ func EnsureDefinedLabelsExist(ctx context.Context, client githubapi.GitHubClient
 		}
 
 		if _, ok := existSet[label.Name]; !ok {
-			logger.Debug("Creating missing label '%s' (color: %s)", label.Name, label.Color)
-
-			if err := client.CreateLabel(ctx, label); err != nil {
-				errorMsg := fmt.Sprintf("Label '%s': %v", label.Name, err)
-				summary.Errors = append(summary.Errors, errorMsg)
-				summary.Failures++
-				logger.Debug("Failed to create label '%s': %v", label.Name, err)
-			} else {
+			if dryRun {
+				logger.Info("Would create label: %s (color: %s)", label.Name, label.Color)
 				summary.Success++
-				logger.Debug("Successfully created label '%s' with color '%s'", label.Name, label.Color)
+			} else {
+				logger.Debug("Creating missing label '%s' (color: %s)", label.Name, label.Color)
+
+				if err := client.CreateLabel(ctx, label); err != nil {
+					errorMsg := fmt.Sprintf("Label '%s': %v", label.Name, err)
+					summary.Errors = append(summary.Errors, errorMsg)
+					summary.Failures++
+					logger.Debug("Failed to create label '%s': %v", label.Name, err)
+				} else {
+					summary.Success++
+					logger.Debug("Successfully created label '%s' with color '%s'", label.Name, label.Color)
+				}
 			}
 		} else {
 			summary.Success++
