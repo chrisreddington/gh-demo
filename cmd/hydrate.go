@@ -25,7 +25,12 @@ type repositoryInfo struct {
 
 // resolveRepositoryInfo validates and resolves the repository owner and name.
 // It tries to get missing values from the current git context if available.
-func resolveRepositoryInfo(owner, repo string) (*repositoryInfo, error) {
+func resolveRepositoryInfo(ctx context.Context, owner, repo string) (*repositoryInfo, error) {
+	// Check if context is cancelled before operations
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	resolvedOwner := strings.TrimSpace(owner)
 	resolvedRepo := strings.TrimSpace(repo)
 
@@ -53,8 +58,8 @@ func resolveRepositoryInfo(owner, repo string) (*repositoryInfo, error) {
 }
 
 // createGitHubClient creates and configures a GitHub API client.
-func createGitHubClient(repoInfo *repositoryInfo, logger common.Logger) (githubapi.GitHubClient, error) {
-	client, err := githubapi.NewGHClient(repoInfo.Owner, repoInfo.Repo)
+func createGitHubClient(ctx context.Context, repoInfo *repositoryInfo, logger common.Logger) (githubapi.GitHubClient, error) {
+	client, err := githubapi.NewGHClient(ctx, repoInfo.Owner, repoInfo.Repo)
 	if err != nil {
 		return nil, errors.APIError("create_client", "failed to create GitHub client", err)
 	}
@@ -67,11 +72,15 @@ func createGitHubClient(repoInfo *repositoryInfo, logger common.Logger) (githuba
 
 // handleHydrationResult processes the result of the hydration operation.
 // It handles both complete failures and partial failures with appropriate user feedback.
-func handleHydrationResult(err error, logger common.Logger) error {
+func handleHydrationResult(ctx context.Context, err error, logger common.Logger) error {
 	if err != nil {
 		// Check if this is a partial failure using proper error type detection
 		if errors.IsPartialFailure(err) {
 			logger.Info("Repository hydration completed with some failures")
+			// Check if context is cancelled before I/O operation
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
 			fmt.Fprintf(os.Stderr, "Hydration completed with some failures:\n%v\n", err)
 			return nil // Partial failures are considered success for CLI purposes
 		} else {
@@ -103,7 +112,7 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	logger := common.NewLogger(debug) // Use debug flag for logger
 
 	// Resolve repository information
-	repoInfo, err := resolveRepositoryInfo(owner, repo)
+	repoInfo, err := resolveRepositoryInfo(ctx, owner, repo)
 	if err != nil {
 		return err
 	}
@@ -118,13 +127,13 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	cfg := config.NewConfigurationWithRoot(ctx, root, configPath)
 
 	// Create and configure GitHub client
-	client, err := createGitHubClient(repoInfo, logger)
+	client, err := createGitHubClient(ctx, repoInfo, logger)
 	if err != nil {
 		return err
 	}
 
 	// Perform cleanup if requested
-	if shouldPerformCleanup(cleanupFlags) {
+	if shouldPerformCleanup(ctx, cleanupFlags) {
 		err := performCleanup(ctx, client, cleanupFlags, cfg, logger)
 		if err != nil {
 			// Log cleanup error but continue with hydration unless it's a critical failure
@@ -136,11 +145,11 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, logger, cleanupFlags.DryRun)
 
 	// Handle the result
-	return handleHydrationResult(err, logger)
+	return handleHydrationResult(ctx, err, logger)
 }
 
 // shouldPerformCleanup determines if any cleanup operations should be performed
-func shouldPerformCleanup(flags CleanupFlags) bool {
+func shouldPerformCleanup(ctx context.Context, flags CleanupFlags) bool {
 	return flags.Clean || flags.CleanIssues || flags.CleanDiscussions || flags.CleanPRs || flags.CleanLabels
 }
 

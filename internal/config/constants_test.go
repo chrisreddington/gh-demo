@@ -8,7 +8,7 @@ import (
 
 func TestNewConfiguration(t *testing.T) {
 	basePath := "test/config"
-	config := NewConfiguration(basePath)
+	config := NewConfiguration(context.Background(), basePath)
 
 	if config.BasePath != basePath {
 		t.Errorf("Expected BasePath %s, got %s", basePath, config.BasePath)

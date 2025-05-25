@@ -18,7 +18,7 @@ import (
 func TestHydrateWithRealGHClient(t *testing.T) {
 	t.Skip("Skipping test that requires real GitHub credentials")
 	// This test uses the real (stubbed) GHClient to ensure wiring is correct.
-	client, err := githubapi.NewGHClient("octocat", "demo-repo")
+	client, err := githubapi.NewGHClient(context.Background(), "octocat", "demo-repo")
 	if err != nil {
 		t.Fatalf("Failed to create client: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestHydrateWithRealGHClient(t *testing.T) {
 	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 	// Create configuration from paths
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	// Should not error with stubbed methods
 	logger := common.NewLogger(false)
@@ -56,7 +56,7 @@ func TestHydrateWithLabelsFromPaths(t *testing.T) {
 	prsPath := filepath.Join(root, ".github", "demos", "prs.json")
 
 	// Create configuration from paths
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	// Hydrate and ensure labels
 	logger := common.NewLogger(false)
@@ -181,7 +181,7 @@ func TestHydrateOperations(t *testing.T) {
 			issuesPath, discussionsPath, prsPath := tt.setupFiles(tempDir)
 
 			// Create configuration from paths
-			cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+			cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 			logger := common.NewLogger(false)
 			err := HydrateWithLabels(context.Background(), client, cfg,
@@ -271,7 +271,7 @@ func TestGracefulErrorHandling(t *testing.T) {
 	}
 
 	// Create configuration from paths
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	// Test that the function continues processing despite PR failure
 	logger := common.NewLogger(false)
@@ -322,7 +322,7 @@ func TestPRValidation(t *testing.T) {
 	client := NewSuccessfulMockGitHubClient()
 
 	// Create configuration from paths
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	// Should fail gracefully with validation error
 	logger := common.NewLogger(false)
@@ -467,7 +467,7 @@ func TestHydrateWithLabels_ContextCancellation(t *testing.T) {
 	}
 
 	// Create configuration from paths
-	cfg := createConfigurationFromPaths(issuesPath, "", "")
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, "", "")
 
 	logger := common.NewLogger(false)
 	err := HydrateWithLabels(ctx, client, cfg, true, false, false, logger, false)
@@ -564,7 +564,7 @@ func TestCollectLabels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			labels := CollectLabels(tt.issues, tt.discussions, tt.prs)
+			labels := CollectLabels(context.Background(), tt.issues, tt.discussions, tt.prs)
 
 			if len(labels) != len(tt.expected) {
 				t.Errorf("Expected %d unique labels, got %d", len(tt.expected), len(labels))
@@ -754,7 +754,7 @@ func TestHydrateWithLabels_DebugMode(t *testing.T) {
 	}
 
 	// Create configuration from paths
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	// Test with debug mode enabled
 	logger := common.NewLogger(true) // Enable debug for this test
@@ -769,7 +769,7 @@ func TestHydrateWithLabels_FileReadError(t *testing.T) {
 	client := NewSuccessfulMockGitHubClient()
 
 	// Use non-existent files
-	cfg := createConfigurationFromPaths("/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json")
+	cfg := createConfigurationFromPaths(context.Background(), "/non/existent/issues.json", "/non/existent/discussions.json", "/non/existent/prs.json")
 
 	logger := common.NewLogger(false)
 	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
@@ -806,7 +806,7 @@ func TestHydrateWithLabels_EnsureLabelsExistError(t *testing.T) {
 	}
 
 	// Create configuration from paths
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	logger := common.NewLogger(false)
 	err := HydrateWithLabels(context.Background(), client, cfg, true, false, false, logger, false)
@@ -851,7 +851,7 @@ func TestHydrateWithLabels_AggregatedErrors(t *testing.T) {
 	}
 
 	// Create configuration from paths
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	logger := common.NewLogger(false)
 	err := HydrateWithLabels(context.Background(), client, cfg, true, true, true, logger, false)
@@ -901,7 +901,7 @@ func TestConfigurablePaths(t *testing.T) {
 	client := NewSuccessfulMockGitHubClient()
 
 	// Create configuration from paths
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	// Test hydration with the custom paths
 	logger := common.NewLogger(false)
@@ -1060,10 +1060,10 @@ func TestHydrateWithConfiguration(t *testing.T) {
 
 // createConfigurationFromPaths creates a Configuration object from individual file paths
 // This helper function replicates the logic from the removed HydrateWithLabelsFromPaths function
-func createConfigurationFromPaths(issuesPath, discussionsPath, pullRequestsPath string) *config.Configuration {
+func createConfigurationFromPaths(ctx context.Context, issuesPath, discussionsPath, pullRequestsPath string) *config.Configuration {
 	// Extract the base directory from the issues path
 	basePath := filepath.Dir(issuesPath)
-	cfg := config.NewConfiguration(basePath)
+	cfg := config.NewConfiguration(ctx, basePath)
 
 	// Override the computed paths with the actual provided paths
 	cfg.IssuesPath = issuesPath
@@ -1101,7 +1101,7 @@ func TestHydrateWithLabels_DryRun(t *testing.T) {
 		t.Fatalf("Failed to write PRs file: %v", err)
 	}
 
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	// Test with dry-run enabled
 	logger := common.NewLogger(false)
@@ -1152,7 +1152,7 @@ func TestHydrateWithLabels_DryRunFalse(t *testing.T) {
 		t.Fatalf("Failed to write PRs file: %v", err)
 	}
 
-	cfg := createConfigurationFromPaths(issuesPath, discussionsPath, prsPath)
+	cfg := createConfigurationFromPaths(context.Background(), issuesPath, discussionsPath, prsPath)
 
 	// Test with dry-run disabled
 	logger := common.NewLogger(false)

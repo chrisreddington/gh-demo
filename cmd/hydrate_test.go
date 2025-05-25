@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -526,7 +527,7 @@ func TestShouldPerformCleanup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := shouldPerformCleanup(tt.flags)
+			result := shouldPerformCleanup(context.Background(), tt.flags)
 			if result != tt.expected {
 				t.Errorf("Expected %v, got %v for flags: %+v", tt.expected, result, tt.flags)
 			}

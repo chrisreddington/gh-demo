@@ -1018,7 +1018,7 @@ func TestNewGHClient_Integration(t *testing.T) {
 	}
 
 	// This test will only pass if GitHub credentials are available
-	client, err := NewGHClient("testowner", "testrepo")
+	client, err := NewGHClient(context.Background(), "testowner", "testrepo")
 	if err != nil {
 		// If error contains authentication message, skip the test
 		if strings.Contains(err.Error(), "authentication token not found") {

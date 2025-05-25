@@ -2,6 +2,7 @@
 package hydrate
 
 import (
+	"context"
 	"regexp"
 
 	"github.com/chrisreddington/gh-demo/internal/config"
@@ -9,7 +10,7 @@ import (
 )
 
 // ShouldPreserveIssue checks if an issue should be preserved based on the configuration.
-func ShouldPreserveIssue(preserveConfig *config.PreserveConfig, issue types.Issue) bool {
+func ShouldPreserveIssue(ctx context.Context, preserveConfig *config.PreserveConfig, issue types.Issue) bool {
 	// Check by ID
 	for _, id := range preserveConfig.Issues.PreserveByID {
 		if issue.NodeID == id {
@@ -19,7 +20,7 @@ func ShouldPreserveIssue(preserveConfig *config.PreserveConfig, issue types.Issu
 
 	// Check by title (exact match and regex)
 	for _, pattern := range preserveConfig.Issues.PreserveByTitle {
-		if isMatchOrRegex(issue.Title, pattern) {
+		if isMatchOrRegex(ctx, issue.Title, pattern) {
 			return true
 		}
 	}
@@ -37,7 +38,7 @@ func ShouldPreserveIssue(preserveConfig *config.PreserveConfig, issue types.Issu
 }
 
 // ShouldPreserveDiscussion checks if a discussion should be preserved based on the configuration.
-func ShouldPreserveDiscussion(preserveConfig *config.PreserveConfig, discussion types.Discussion) bool {
+func ShouldPreserveDiscussion(ctx context.Context, preserveConfig *config.PreserveConfig, discussion types.Discussion) bool {
 	// Check by ID
 	for _, id := range preserveConfig.Discussions.PreserveByID {
 		if discussion.NodeID == id {
@@ -47,7 +48,7 @@ func ShouldPreserveDiscussion(preserveConfig *config.PreserveConfig, discussion 
 
 	// Check by title (exact match and regex)
 	for _, pattern := range preserveConfig.Discussions.PreserveByTitle {
-		if isMatchOrRegex(discussion.Title, pattern) {
+		if isMatchOrRegex(ctx, discussion.Title, pattern) {
 			return true
 		}
 	}
@@ -63,7 +64,7 @@ func ShouldPreserveDiscussion(preserveConfig *config.PreserveConfig, discussion 
 }
 
 // ShouldPreservePR checks if a pull request should be preserved based on the configuration.
-func ShouldPreservePR(preserveConfig *config.PreserveConfig, pullRequest types.PullRequest) bool {
+func ShouldPreservePR(ctx context.Context, preserveConfig *config.PreserveConfig, pullRequest types.PullRequest) bool {
 	// Check by ID
 	for _, id := range preserveConfig.PullRequests.PreserveByID {
 		if pullRequest.NodeID == id {
@@ -73,7 +74,7 @@ func ShouldPreservePR(preserveConfig *config.PreserveConfig, pullRequest types.P
 
 	// Check by title (exact match and regex)
 	for _, pattern := range preserveConfig.PullRequests.PreserveByTitle {
-		if isMatchOrRegex(pullRequest.Title, pattern) {
+		if isMatchOrRegex(ctx, pullRequest.Title, pattern) {
 			return true
 		}
 	}
@@ -91,7 +92,7 @@ func ShouldPreservePR(preserveConfig *config.PreserveConfig, pullRequest types.P
 }
 
 // ShouldPreserveLabel checks if a label should be preserved based on the configuration.
-func ShouldPreserveLabel(preserveConfig *config.PreserveConfig, labelName string) bool {
+func ShouldPreserveLabel(ctx context.Context, preserveConfig *config.PreserveConfig, labelName string) bool {
 	for _, name := range preserveConfig.Labels.PreserveByName {
 		if labelName == name {
 			return true
@@ -102,7 +103,7 @@ func ShouldPreserveLabel(preserveConfig *config.PreserveConfig, labelName string
 
 // isMatchOrRegex checks if a string matches either exactly or as a regex pattern.
 // It first tries exact match, then regex if the pattern starts with '^' or contains regex special chars.
-func isMatchOrRegex(value, pattern string) bool {
+func isMatchOrRegex(ctx context.Context, value, pattern string) bool {
 	// Try exact match first
 	if value == pattern {
 		return true
