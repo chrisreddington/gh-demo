@@ -1,6 +1,7 @@
 package githubapi
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/chrisreddington/gh-demo/internal/testutil"
@@ -111,14 +112,28 @@ func TestConfigurableMockGraphQLClient_HandlerFunctions(t *testing.T) {
 
 			// Create appropriate response struct based on handler type
 			var response interface{}
+			
+			// Extract operation type from test name for cleaner switch logic
+			operationType := ""
 			switch {
-			case tt.name == "handleRepositoryQuery success" || tt.name == "handleRepositoryQuery error":
+			case strings.Contains(tt.name, "handleRepositoryQuery"):
+				operationType = "repository"
+			case strings.Contains(tt.name, "handleLabelsQuery"):
+				operationType = "labels"
+			case strings.Contains(tt.name, "handleIssueCreationQuery"):
+				operationType = "issue"
+			case strings.Contains(tt.name, "handlePullRequestCreationQuery"):
+				operationType = "pullRequest"
+			}
+			
+			switch operationType {
+			case "repository":
 				response = &struct {
 					Repository struct {
 						ID string `json:"id"`
 					} `json:"repository"`
 				}{}
-			case tt.name == "handleLabelsQuery success" || tt.name == "handleLabelsQuery error":
+			case "labels":
 				response = &struct {
 					Repository struct {
 						Labels struct {
@@ -132,7 +147,7 @@ func TestConfigurableMockGraphQLClient_HandlerFunctions(t *testing.T) {
 						} `json:"labels"`
 					} `json:"repository"`
 				}{}
-			case tt.name == "handleIssueCreationQuery success" || tt.name == "handleIssueCreationQuery error":
+			case "issue":
 				response = &struct {
 					CreateIssue struct {
 						Issue struct {
@@ -143,7 +158,7 @@ func TestConfigurableMockGraphQLClient_HandlerFunctions(t *testing.T) {
 						} `json:"issue"`
 					} `json:"createIssue"`
 				}{}
-			case tt.name == "handlePullRequestCreationQuery success" || tt.name == "handlePullRequestCreationQuery error":
+			case "pullRequest":
 				response = &struct {
 					CreatePullRequest struct {
 						PullRequest struct {
