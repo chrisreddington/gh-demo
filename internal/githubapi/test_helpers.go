@@ -50,233 +50,180 @@ func (m *ConfigurableMockGraphQLClient) Do(ctx context.Context, query string, va
 	return m.handleQuery(query, variables, response)
 }
 
-func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[string]interface{}, response interface{}) error {
-	// Handle GetRepositoryId query
-	if strings.Contains(query, "GetRepositoryId") {
-		resp := response.(*struct {
-			Repository struct {
-				ID string `json:"id"`
-			} `json:"repository"`
-		})
-		if mockResp, exists := m.Responses["repository"]; exists {
-			if mockResp.ShouldError {
-				return testutil.NewMockError(mockResp.ErrorMessage)
-			}
-			resp.Repository.ID = mockResp.RepositoryID
-		} else {
-			resp.Repository.ID = testutil.DefaultValues.RepositoryID
+// handleRepositoryQuery handles GetRepositoryId queries
+func (m *ConfigurableMockGraphQLClient) handleRepositoryQuery(response interface{}) error {
+	resp := response.(*struct {
+		Repository struct {
+			ID string `json:"id"`
+		} `json:"repository"`
+	})
+	if mockResp, exists := m.Responses["repository"]; exists {
+		if mockResp.ShouldError {
+			return testutil.NewMockError(mockResp.ErrorMessage)
 		}
-		return nil
+		resp.Repository.ID = mockResp.RepositoryID
+	} else {
+		resp.Repository.ID = testutil.DefaultValues.RepositoryID
 	}
+	return nil
+}
 
-	// Handle ListLabels query
-	if strings.Contains(query, "labels") && strings.Contains(query, "nodes") {
-		resp := response.(*struct {
-			Repository struct {
-				Labels struct {
-					Nodes []struct {
-						Name string `json:"name"`
-					} `json:"nodes"`
-					PageInfo struct {
-						HasNextPage bool   `json:"hasNextPage"`
-						EndCursor   string `json:"endCursor"`
-					} `json:"pageInfo"`
-				} `json:"labels"`
-			} `json:"repository"`
-		})
-		if mockResp, exists := m.Responses["labels"]; exists {
-			if mockResp.ShouldError {
-				return testutil.NewMockError(mockResp.ErrorMessage)
-			}
-			for _, label := range mockResp.Labels {
-				resp.Repository.Labels.Nodes = append(resp.Repository.Labels.Nodes, struct {
+// handleLabelsQuery handles ListLabels queries  
+func (m *ConfigurableMockGraphQLClient) handleLabelsQuery(response interface{}) error {
+	resp := response.(*struct {
+		Repository struct {
+			Labels struct {
+				Nodes []struct {
 					Name string `json:"name"`
-				}{Name: label})
-			}
+				} `json:"nodes"`
+				PageInfo struct {
+					HasNextPage bool   `json:"hasNextPage"`
+					EndCursor   string `json:"endCursor"`
+				} `json:"pageInfo"`
+			} `json:"labels"`
+		} `json:"repository"`
+	})
+	if mockResp, exists := m.Responses["labels"]; exists {
+		if mockResp.ShouldError {
+			return testutil.NewMockError(mockResp.ErrorMessage)
 		}
-		return nil
+		for _, label := range mockResp.Labels {
+			resp.Repository.Labels.Nodes = append(resp.Repository.Labels.Nodes, struct {
+				Name string `json:"name"`
+			}{Name: label})
+		}
 	}
+	return nil
+}
 
-	// Handle createLabel mutation
-	if strings.Contains(query, "createLabel") {
-		resp := response.(*struct {
-			CreateLabel struct {
-				Label struct {
-					ID          string `json:"id"`
-					Name        string `json:"name"`
-					Color       string `json:"color"`
-					Description string `json:"description"`
-				} `json:"label"`
-			} `json:"createLabel"`
-		})
-		if mockResp, exists := m.Responses["createLabel"]; exists {
-			if mockResp.ShouldError {
-				return testutil.NewMockError(mockResp.ErrorMessage)
-			}
-			resp.CreateLabel.Label.ID = mockResp.LabelID
-		} else {
-			resp.CreateLabel.Label.ID = testutil.DefaultValues.LabelID
+// handleLabelCreationQuery handles createLabel mutations
+func (m *ConfigurableMockGraphQLClient) handleLabelCreationQuery(variables map[string]interface{}, response interface{}) error {
+	resp := response.(*struct {
+		CreateLabel struct {
+			Label struct {
+				ID          string `json:"id"`
+				Name        string `json:"name"`
+				Color       string `json:"color"`
+				Description string `json:"description"`
+			} `json:"label"`
+		} `json:"createLabel"`
+	})
+	if mockResp, exists := m.Responses["createLabel"]; exists {
+		if mockResp.ShouldError {
+			return testutil.NewMockError(mockResp.ErrorMessage)
 		}
-		// Copy label data from variables
-		if input, ok := variables["input"].(map[string]interface{}); ok {
-			if name, ok := input["name"].(string); ok {
-				resp.CreateLabel.Label.Name = name
-			}
-			if color, ok := input["color"].(string); ok {
-				resp.CreateLabel.Label.Color = color
-			}
-			if desc, ok := input["description"].(string); ok {
-				resp.CreateLabel.Label.Description = desc
-			}
-		}
-		return nil
+		resp.CreateLabel.Label.ID = mockResp.LabelID
+	} else {
+		resp.CreateLabel.Label.ID = testutil.DefaultValues.LabelID
 	}
-
-	// Handle createIssue mutation
-	if strings.Contains(query, "createIssue") {
-		resp := response.(*struct {
-			CreateIssue struct {
-				Issue struct {
-					ID     string `json:"id"`
-					Number int    `json:"number"`
-					Title  string `json:"title"`
-					URL    string `json:"url"`
-				} `json:"issue"`
-			} `json:"createIssue"`
-		})
-		if mockResp, exists := m.Responses["createIssue"]; exists {
-			if mockResp.ShouldError {
-				return testutil.NewMockError(mockResp.ErrorMessage)
-			}
-			resp.CreateIssue.Issue.ID = mockResp.IssueID
-			resp.CreateIssue.Issue.Number = mockResp.IssueNumber
-		} else {
-			resp.CreateIssue.Issue.ID = testutil.DefaultValues.IssueID
-			resp.CreateIssue.Issue.Number = testutil.DefaultValues.IssueNumber
+	// Copy label data from variables
+	if input, ok := variables["input"].(map[string]interface{}); ok {
+		if name, ok := input["name"].(string); ok {
+			resp.CreateLabel.Label.Name = name
 		}
-		resp.CreateIssue.Issue.Title = "Test Issue"
-		resp.CreateIssue.Issue.URL = "https://github.com/owner/repo/issues/1"
-		return nil
-	}
-
-	// Handle createPullRequest mutation
-	if strings.Contains(query, "createPullRequest") {
-		resp := response.(*struct {
-			CreatePullRequest struct {
-				PullRequest struct {
-					ID     string `json:"id"`
-					Number int    `json:"number"`
-					Title  string `json:"title"`
-					URL    string `json:"url"`
-				} `json:"pullRequest"`
-			} `json:"createPullRequest"`
-		})
-		if mockResp, exists := m.Responses["createPR"]; exists {
-			if mockResp.ShouldError {
-				return testutil.NewMockError(mockResp.ErrorMessage)
-			}
-			resp.CreatePullRequest.PullRequest.ID = mockResp.PRID
-			resp.CreatePullRequest.PullRequest.Number = mockResp.PRNumber
-		} else {
-			resp.CreatePullRequest.PullRequest.ID = testutil.DefaultValues.PRID
-			resp.CreatePullRequest.PullRequest.Number = testutil.DefaultValues.PRNumber
+		if color, ok := input["color"].(string); ok {
+			resp.CreateLabel.Label.Color = color
 		}
-		resp.CreatePullRequest.PullRequest.Title = "Test PR"
-		resp.CreatePullRequest.PullRequest.URL = "https://github.com/owner/repo/pull/1"
-		return nil
+		if desc, ok := input["description"].(string); ok {
+			resp.CreateLabel.Label.Description = desc
+		}
 	}
+	return nil
+}
 
-	// Handle discussionCategories query
-	if strings.Contains(query, "discussionCategories") {
-		resp := response.(*struct {
-			Repository struct {
-				ID         string `json:"id"`
-				Categories struct {
-					Nodes []struct {
-						ID   string `json:"id"`
-						Name string `json:"name"`
-					} `json:"nodes"`
-				} `json:"discussionCategories"`
-			} `json:"repository"`
-		})
-		if mockResp, exists := m.Responses["discussionCategories"]; exists {
-			if mockResp.ShouldError {
-				return testutil.NewMockError(mockResp.ErrorMessage)
-			}
-			resp.Repository.ID = mockResp.RepositoryID
-			for _, cat := range mockResp.Categories {
-				resp.Repository.Categories.Nodes = append(resp.Repository.Categories.Nodes, struct {
+// handleDiscussionCategoriesQuery handles discussionCategories queries
+func (m *ConfigurableMockGraphQLClient) handleDiscussionCategoriesQuery(response interface{}) error {
+	resp := response.(*struct {
+		Repository struct {
+			ID         string `json:"id"`
+			Categories struct {
+				Nodes []struct {
 					ID   string `json:"id"`
 					Name string `json:"name"`
-				}{ID: cat.ID, Name: cat.Name})
-			}
-		} else {
-			resp.Repository.ID = testutil.DefaultValues.RepositoryID
-			resp.Repository.Categories.Nodes = []struct {
+				} `json:"nodes"`
+			} `json:"discussionCategories"`
+		} `json:"repository"`
+	})
+	if mockResp, exists := m.Responses["discussionCategories"]; exists {
+		if mockResp.ShouldError {
+			return testutil.NewMockError(mockResp.ErrorMessage)
+		}
+		resp.Repository.ID = mockResp.RepositoryID
+		for _, cat := range mockResp.Categories {
+			resp.Repository.Categories.Nodes = append(resp.Repository.Categories.Nodes, struct {
 				ID   string `json:"id"`
 				Name string `json:"name"`
-			}{
-				{ID: "default-cat-id", Name: "General"},
-			}
+			}{ID: cat.ID, Name: cat.Name})
 		}
-		return nil
-	}
-
-	// Handle createDiscussion mutation
-	if strings.Contains(query, "createDiscussion") {
-		resp := response.(*struct {
-			CreateDiscussion struct {
-				Discussion struct {
-					ID     string `json:"id"`
-					Number int    `json:"number"`
-					Title  string `json:"title"`
-					URL    string `json:"url"`
-				} `json:"discussion"`
-			} `json:"createDiscussion"`
-		})
-		if mockResp, exists := m.Responses["createDiscussion"]; exists {
-			if mockResp.ShouldError {
-				return testutil.NewMockError(mockResp.ErrorMessage)
-			}
-			resp.CreateDiscussion.Discussion.ID = mockResp.DiscussionID
-			resp.CreateDiscussion.Discussion.Number = mockResp.DiscussionNumber
-		} else {
-			resp.CreateDiscussion.Discussion.ID = testutil.DefaultValues.DiscussionID
-			resp.CreateDiscussion.Discussion.Number = testutil.DefaultValues.DiscussionNumber
+	} else {
+		resp.Repository.ID = testutil.DefaultValues.RepositoryID
+		resp.Repository.Categories.Nodes = []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		}{
+			{ID: "default-cat-id", Name: "General"},
 		}
-		resp.CreateDiscussion.Discussion.Title = "Test Discussion"
-		resp.CreateDiscussion.Discussion.URL = "https://github.com/owner/repo/discussions/1"
-		return nil
 	}
+	return nil
+}
 
-	// Handle GetLabelId, GetUserId, and other helper queries with default responses
-	if strings.Contains(query, "GetLabelId") {
-		resp := response.(*struct {
-			Repository struct {
-				Label struct {
-					ID string `json:"id"`
-				} `json:"label"`
-			} `json:"repository"`
-		})
-		resp.Repository.Label.ID = testutil.DefaultValues.LabelID
-		return nil
+// handleDiscussionCreationQuery handles createDiscussion mutations
+func (m *ConfigurableMockGraphQLClient) handleDiscussionCreationQuery(response interface{}) error {
+	resp := response.(*struct {
+		CreateDiscussion struct {
+			Discussion struct {
+				ID     string `json:"id"`
+				Number int    `json:"number"`
+				Title  string `json:"title"`
+				URL    string `json:"url"`
+			} `json:"discussion"`
+		} `json:"createDiscussion"`
+	})
+	if mockResp, exists := m.Responses["createDiscussion"]; exists {
+		if mockResp.ShouldError {
+			return testutil.NewMockError(mockResp.ErrorMessage)
+		}
+		resp.CreateDiscussion.Discussion.ID = mockResp.DiscussionID
+		resp.CreateDiscussion.Discussion.Number = mockResp.DiscussionNumber
+	} else {
+		resp.CreateDiscussion.Discussion.ID = testutil.DefaultValues.DiscussionID
+		resp.CreateDiscussion.Discussion.Number = testutil.DefaultValues.DiscussionNumber
 	}
+	resp.CreateDiscussion.Discussion.Title = "Test Discussion"
+	resp.CreateDiscussion.Discussion.URL = "https://github.com/owner/repo/discussions/1"
+	return nil
+}
 
-	if strings.Contains(query, "GetUserId") {
-		resp := response.(*struct {
-			User struct {
+// handleUserQuery handles GetUserId queries
+func (m *ConfigurableMockGraphQLClient) handleUserQuery(response interface{}) error {
+	resp := response.(*struct {
+		User struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	})
+	if mockResp, exists := m.Responses["user"]; exists {
+		resp.User.ID = mockResp.UserID
+	} else {
+		resp.User.ID = testutil.DefaultValues.UserID
+	}
+	return nil
+}
+
+// handleLabelIdQuery handles GetLabelId queries
+func (m *ConfigurableMockGraphQLClient) handleLabelIdQuery(response interface{}) error {
+	resp := response.(*struct {
+		Repository struct {
+			Label struct {
 				ID string `json:"id"`
-			} `json:"user"`
-		})
-		if mockResp, exists := m.Responses["user"]; exists {
-			resp.User.ID = mockResp.UserID
-		} else {
-			resp.User.ID = testutil.DefaultValues.UserID
-		}
-		return nil
-	}
+			} `json:"label"`
+		} `json:"repository"`
+	})
+	resp.Repository.Label.ID = testutil.DefaultValues.LabelID
+	return nil
+}
 
-	// Handle addLabelsToLabelable and addAssigneesToAssignable mutations
+// handleMutationQueries handles addLabelsToLabelable and addAssigneesToAssignable mutations
+func (m *ConfigurableMockGraphQLClient) handleMutationQueries(query string, response interface{}) error {
 	if strings.Contains(query, "addLabelsToLabelable") {
 		resp := response.(*struct {
 			AddLabelsToLabelable struct {
@@ -295,6 +242,114 @@ func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[
 		})
 		resp.AddAssigneesToAssignable.ClientMutationID = "mutation-id-456"
 		return nil
+	}
+
+	return nil
+}
+
+// handlePullRequestCreationQuery handles createPullRequest mutations
+func (m *ConfigurableMockGraphQLClient) handlePullRequestCreationQuery(response interface{}) error {
+	resp := response.(*struct {
+		CreatePullRequest struct {
+			PullRequest struct {
+				ID     string `json:"id"`
+				Number int    `json:"number"`
+				Title  string `json:"title"`
+				URL    string `json:"url"`
+			} `json:"pullRequest"`
+		} `json:"createPullRequest"`
+	})
+	if mockResp, exists := m.Responses["createPR"]; exists {
+		if mockResp.ShouldError {
+			return testutil.NewMockError(mockResp.ErrorMessage)
+		}
+		resp.CreatePullRequest.PullRequest.ID = mockResp.PRID
+		resp.CreatePullRequest.PullRequest.Number = mockResp.PRNumber
+	} else {
+		resp.CreatePullRequest.PullRequest.ID = testutil.DefaultValues.PRID
+		resp.CreatePullRequest.PullRequest.Number = testutil.DefaultValues.PRNumber
+	}
+	resp.CreatePullRequest.PullRequest.Title = "Test PR"
+	resp.CreatePullRequest.PullRequest.URL = "https://github.com/owner/repo/pull/1"
+	return nil
+}
+
+// handleIssueCreationQuery handles createIssue mutations
+func (m *ConfigurableMockGraphQLClient) handleIssueCreationQuery(response interface{}) error {
+	resp := response.(*struct {
+		CreateIssue struct {
+			Issue struct {
+				ID     string `json:"id"`
+				Number int    `json:"number"`
+				Title  string `json:"title"`
+				URL    string `json:"url"`
+			} `json:"issue"`
+		} `json:"createIssue"`
+	})
+	if mockResp, exists := m.Responses["createIssue"]; exists {
+		if mockResp.ShouldError {
+			return testutil.NewMockError(mockResp.ErrorMessage)
+		}
+		resp.CreateIssue.Issue.ID = mockResp.IssueID
+		resp.CreateIssue.Issue.Number = mockResp.IssueNumber
+	} else {
+		resp.CreateIssue.Issue.ID = testutil.DefaultValues.IssueID
+		resp.CreateIssue.Issue.Number = testutil.DefaultValues.IssueNumber
+	}
+	resp.CreateIssue.Issue.Title = "Test Issue"
+	resp.CreateIssue.Issue.URL = "https://github.com/owner/repo/issues/1"
+	return nil
+}
+
+func (m *ConfigurableMockGraphQLClient) handleQuery(query string, variables map[string]interface{}, response interface{}) error {
+	// Handle GetRepositoryId query
+	if strings.Contains(query, "GetRepositoryId") {
+		return m.handleRepositoryQuery(response)
+	}
+
+	// Handle ListLabels query
+	if strings.Contains(query, "labels") && strings.Contains(query, "nodes") {
+		return m.handleLabelsQuery(response)
+	}
+
+	// Handle createLabel mutation
+	if strings.Contains(query, "createLabel") {
+		return m.handleLabelCreationQuery(variables, response)
+	}
+
+	// Handle createIssue mutation
+	if strings.Contains(query, "createIssue") {
+		return m.handleIssueCreationQuery(response)
+	}
+
+	// Handle createPullRequest mutation
+	if strings.Contains(query, "createPullRequest") {
+		return m.handlePullRequestCreationQuery(response)
+	}
+
+	// Handle discussionCategories query
+	if strings.Contains(query, "discussionCategories") {
+		return m.handleDiscussionCategoriesQuery(response)
+	}
+
+	// Handle createDiscussion mutation
+	if strings.Contains(query, "createDiscussion") {
+		return m.handleDiscussionCreationQuery(response)
+	}
+
+	// Handle GetLabelId queries
+	if strings.Contains(query, "GetLabelId") {
+		return m.handleLabelIdQuery(response)
+	}
+
+	// Handle GetUserId queries
+	if strings.Contains(query, "GetUserId") {
+		return m.handleUserQuery(response)
+	}
+
+	// Handle mutation queries (addLabelsToLabelable, addAssigneesToAssignable)
+	if strings.Contains(query, "addLabelsToLabelable") || strings.Contains(query, "addAssigneesToAssignable") {
+		return m.handleMutationQueries(query, response)
 	}
 
 	// Default: return nil for unhandled queries

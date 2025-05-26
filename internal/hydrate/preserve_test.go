@@ -370,3 +370,205 @@ func TestIsMatchOrRegex(t *testing.T) {
 		})
 	}
 }
+
+// TestPreservePredicateFunctions tests the individual predicate functions extracted for refactoring
+func TestPreservePredicateFunctions(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("checkPreservationByID", func(t *testing.T) {
+		tests := []struct {
+			name          string
+			nodeID        string
+			preserveByID  []string
+			expected      bool
+		}{
+			{
+				name:         "ID found in preserve list",
+				nodeID:       "test-id-123",
+				preserveByID: []string{"test-id-123", "test-id-456"},
+				expected:     true,
+			},
+			{
+				name:         "ID not found in preserve list",
+				nodeID:       "test-id-789",
+				preserveByID: []string{"test-id-123", "test-id-456"},
+				expected:     false,
+			},
+			{
+				name:         "empty preserve list",
+				nodeID:       "test-id-123",
+				preserveByID: []string{},
+				expected:     false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := checkPreservationByID(tt.nodeID, tt.preserveByID)
+				if result != tt.expected {
+					t.Errorf("checkPreservationByID() = %v, expected %v", result, tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("checkPreservationByTitle", func(t *testing.T) {
+		tests := []struct {
+			name             string
+			title            string
+			preserveByTitle  []string
+			expected         bool
+		}{
+			{
+				name:            "exact title match",
+				title:           "Test Issue",
+				preserveByTitle: []string{"Test Issue", "Important Bug"},
+				expected:        true,
+			},
+			{
+				name:            "regex pattern match",
+				title:           "Bug: Critical error",
+				preserveByTitle: []string{"^Bug:", "Feature:"},
+				expected:        true,
+			},
+			{
+				name:            "no match",
+				title:           "Regular Issue",
+				preserveByTitle: []string{"Bug:", "Feature:"},
+				expected:        false,
+			},
+			{
+				name:            "empty preserve list",
+				title:           "Test Issue",
+				preserveByTitle: []string{},
+				expected:        false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := checkPreservationByTitle(ctx, tt.title, tt.preserveByTitle)
+				if result != tt.expected {
+					t.Errorf("checkPreservationByTitle() = %v, expected %v", result, tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("checkPreservationByLabels", func(t *testing.T) {
+		tests := []struct {
+			name             string
+			itemLabels       []string
+			preserveByLabel  []string
+			expected         bool
+		}{
+			{
+				name:            "label match found",
+				itemLabels:      []string{"bug", "critical", "frontend"},
+				preserveByLabel: []string{"critical", "urgent"},
+				expected:        true,
+			},
+			{
+				name:            "no label match",
+				itemLabels:      []string{"bug", "minor", "backend"},
+				preserveByLabel: []string{"critical", "urgent"},
+				expected:        false,
+			},
+			{
+				name:            "empty item labels",
+				itemLabels:      []string{},
+				preserveByLabel: []string{"critical", "urgent"},
+				expected:        false,
+			},
+			{
+				name:            "empty preserve labels",
+				itemLabels:      []string{"bug", "critical"},
+				preserveByLabel: []string{},
+				expected:        false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := checkPreservationByLabels(tt.itemLabels, tt.preserveByLabel)
+				if result != tt.expected {
+					t.Errorf("checkPreservationByLabels() = %v, expected %v", result, tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("checkPreservationByCategory", func(t *testing.T) {
+		tests := []struct {
+			name                string
+			category            string
+			preserveByCategory  []string
+			expected            bool
+		}{
+			{
+				name:               "category match found",
+				category:           "Ideas",
+				preserveByCategory: []string{"Ideas", "General"},
+				expected:           true,
+			},
+			{
+				name:               "no category match",
+				category:           "Support",
+				preserveByCategory: []string{"Ideas", "General"},
+				expected:           false,
+			},
+			{
+				name:               "empty preserve categories",
+				category:           "Ideas",
+				preserveByCategory: []string{},
+				expected:           false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := checkPreservationByCategory(tt.category, tt.preserveByCategory)
+				if result != tt.expected {
+					t.Errorf("checkPreservationByCategory() = %v, expected %v", result, tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("checkPreservationByName", func(t *testing.T) {
+		tests := []struct {
+			name            string
+			itemName        string
+			preserveByName  []string
+			expected        bool
+		}{
+			{
+				name:           "name match found",
+				itemName:       "critical",
+				preserveByName: []string{"critical", "urgent", "bug"},
+				expected:       true,
+			},
+			{
+				name:           "no name match",
+				itemName:       "enhancement",
+				preserveByName: []string{"critical", "urgent", "bug"},
+				expected:       false,
+			},
+			{
+				name:           "empty preserve names",
+				itemName:       "critical",
+				preserveByName: []string{},
+				expected:       false,
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := checkPreservationByName(tt.itemName, tt.preserveByName)
+				if result != tt.expected {
+					t.Errorf("checkPreservationByName() = %v, expected %v", result, tt.expected)
+				}
+			})
+		}
+	})
+}
