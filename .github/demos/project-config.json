@@ -1,0 +1,212 @@
+{
+  "title": "Repository Demo Project",
+  "description": "A demonstration project showcasing GitHub repository organization with ProjectV2. This project contains sample issues, discussions, and pull requests to demonstrate project management workflows.",
+  "visibility": "private",
+  "fields": [
+    {
+      "name": "Priority",
+      "type": "single_select",
+      "description": "Priority level for the content item",
+      "options": [
+        {
+          "name": "🔥 Critical",
+          "description": "Urgent items requiring immediate attention",
+          "color": "d73a4a"
+        },
+        {
+          "name": "⚠️ High",
+          "description": "Important items that should be addressed soon",
+          "color": "ff9500"
+        },
+        {
+          "name": "📋 Medium",
+          "description": "Standard priority items",
+          "color": "fbca04"
+        },
+        {
+          "name": "📝 Low",
+          "description": "Nice to have items",
+          "color": "0e8a16"
+        }
+      ]
+    },
+    {
+      "name": "Status",
+      "type": "single_select",
+      "description": "Current status of the item",
+      "options": [
+        {
+          "name": "📋 To Do",
+          "description": "Items that haven't been started",
+          "color": "ededed"
+        },
+        {
+          "name": "🔄 In Progress",
+          "description": "Items currently being worked on",
+          "color": "fbca04"
+        },
+        {
+          "name": "👀 In Review",
+          "description": "Items under review",
+          "color": "0052cc"
+        },
+        {
+          "name": "✅ Done",
+          "description": "Completed items",
+          "color": "0e8a16"
+        }
+      ]
+    },
+    {
+      "name": "Effort",
+      "type": "single_select",
+      "description": "Estimated effort required",
+      "options": [
+        {
+          "name": "S",
+          "description": "Small - 1-2 hours",
+          "color": "0e8a16"
+        },
+        {
+          "name": "M", 
+          "description": "Medium - 0.5-1 day",
+          "color": "fbca04"
+        },
+        {
+          "name": "L",
+          "description": "Large - 1-3 days",
+          "color": "ff9500"
+        },
+        {
+          "name": "XL",
+          "description": "Extra Large - 1+ weeks",
+          "color": "d73a4a"
+        }
+      ]
+    },
+    {
+      "name": "Content Type",
+      "type": "single_select",
+      "description": "Type of repository content",
+      "options": [
+        {
+          "name": "🐛 Bug",
+          "description": "Bug reports and fixes",
+          "color": "d73a4a"
+        },
+        {
+          "name": "✨ Feature",
+          "description": "New features and enhancements",
+          "color": "a2eeef"
+        },
+        {
+          "name": "📚 Documentation",
+          "description": "Documentation updates",
+          "color": "0052cc"
+        },
+        {
+          "name": "🔧 Maintenance",
+          "description": "Code maintenance and refactoring",
+          "color": "ededed"
+        },
+        {
+          "name": "💬 Discussion",
+          "description": "Community discussions and ideas",
+          "color": "d4c5f9"
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "name": "📋 All Items",
+      "description": "Complete view of all project items",
+      "layout": "table",
+      "fields": ["title", "assignees", "status", "priority", "content_type", "effort"],
+      "sort_by": [
+        {
+          "field": "priority",
+          "direction": "desc"
+        },
+        {
+          "field": "updated_at",
+          "direction": "desc"
+        }
+      ]
+    },
+    {
+      "name": "📊 Board View",
+      "description": "Kanban-style board organized by status",
+      "layout": "board",
+      "group_by": "status",
+      "fields": ["title", "assignees", "priority", "content_type", "effort"],
+      "sort_by": [
+        {
+          "field": "priority",
+          "direction": "desc"
+        }
+      ]
+    },
+    {
+      "name": "🔥 High Priority",
+      "description": "Focus view for critical and high priority items",
+      "layout": "table",
+      "fields": ["title", "assignees", "status", "content_type", "effort"],
+      "filters": [
+        {
+          "field": "priority",
+          "operator": "equals",
+          "value": ["🔥 Critical", "⚠️ High"]
+        }
+      ],
+      "sort_by": [
+        {
+          "field": "priority",
+          "direction": "desc"
+        }
+      ]
+    },
+    {
+      "name": "👥 By Content Type",
+      "description": "Items organized by content type",
+      "layout": "board",
+      "group_by": "content_type",
+      "fields": ["title", "assignees", "status", "priority", "effort"],
+      "sort_by": [
+        {
+          "field": "status",
+          "direction": "asc"
+        }
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "content_type": "issue",
+      "description": "Default values for new issues",
+      "field_values": {
+        "status": "📋 To Do",
+        "priority": "📋 Medium",
+        "content_type": "🐛 Bug"
+      }
+    },
+    {
+      "content_type": "pull_request",
+      "description": "Default values for new pull requests",
+      "field_values": {
+        "status": "👀 In Review",
+        "priority": "📋 Medium",
+        "content_type": "✨ Feature"
+      }
+    },
+    {
+      "content_type": "discussion",
+      "description": "Default values for new discussions",
+      "field_values": {
+        "status": "📋 To Do",
+        "priority": "📝 Low",
+        "content_type": "💬 Discussion"
+      }
+    }
+  ]
+}

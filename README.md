@@ -56,11 +56,96 @@ gh demo hydrate --owner myuser --repo myrepo --clean --preserve-config .github/d
 gh demo hydrate --owner myuser --repo myrepo --clean --dry-run
 ```
 
+### ProjectV2 Integration
+
+Create a GitHub ProjectV2 and automatically organize all hydrated content:
+
+```bash
+# Create a project with default configuration
+gh demo hydrate --owner myuser --repo myrepo --create-project
+
+# Create a project with custom configuration
+gh demo hydrate --owner myuser --repo myrepo --create-project --project-config .github/demos/my-project.json
+
+# Fail if project creation fails (default: continue without project)
+gh demo hydrate --owner myuser --repo myrepo --create-project --fail-on-project-error
+
+# Preview project creation
+gh demo hydrate --owner myuser --repo myrepo --create-project --dry-run
+```
+
+**Important**: Project creation requires your GitHub token to have `write:org` (for organization projects) or `write:user` (for user projects) scope. If project creation fails due to insufficient permissions, the command will continue with standard hydration unless `--fail-on-project-error` is specified.
+
 ### Help
 
 ```bash
 # Get help
 gh demo hydrate --help
+```
+
+## Project Configuration
+
+The `--create-project` flag creates a GitHub ProjectV2 and associates all created issues, discussions, and pull requests with it. Project configuration is defined in JSON format.
+
+### Project Configuration Schema
+
+| Field       | Type                    | Description                                    | Required |
+|-------------|-------------------------|------------------------------------------------|----------|
+| title       | string                  | Project title                                  | No*      |
+| description | string                  | Project description                            | No       |
+| visibility  | string                  | Project visibility ("private" or "public")    | No*      |
+| fields      | []ProjectV2Field        | Custom project fields                          | No       |
+| views       | []ProjectV2View         | Project views and layouts                      | No       |
+| templates   | []ProjectV2Template     | Default field values for content types        | No       |
+
+*Default values are provided if not specified.
+
+### Project Field Schema
+
+| Field       | Type                         | Description                                    | Required |
+|-------------|------------------------------|------------------------------------------------|----------|
+| name        | string                       | Field name                                     | Yes      |
+| type        | string                       | Field type ("single_select", "text", "number")| Yes      |
+| description | string                       | Field description                              | No       |
+| options     | []ProjectV2FieldOption       | Options for select fields                      | No       |
+
+### Example Project Configuration
+
+```json
+{
+  "title": "Repository Demo Project",
+  "description": "Demonstration project for repository hydration",
+  "visibility": "private",
+  "fields": [
+    {
+      "name": "Priority",
+      "type": "single_select",
+      "description": "Priority level",
+      "options": [
+        {
+          "name": "High",
+          "color": "d73a4a"
+        },
+        {
+          "name": "Medium", 
+          "color": "fbca04"
+        },
+        {
+          "name": "Low",
+          "color": "0e8a16"
+        }
+      ]
+    }
+  ],
+  "views": [
+    {
+      "name": "All Items",
+      "description": "Complete view of all project items",
+      "layout": "table",
+      "fields": ["title", "assignees", "status", "priority"]
+    }
+  ]
+}
 ```
 
 ## Schema Documentation
@@ -203,6 +288,7 @@ The hydration tool uses JSON configuration files to define the content to create
 - `<config-path>/prs.json`: Array of pull request objects
 - `<config-path>/labels.json`: Array of label objects (optional - labels referenced in other files will be auto-created with defaults)
 - `<config-path>/preserve.json`: Configuration for objects to preserve during cleanup operations (optional)
+- `<config-path>/project-config.json`: ProjectV2 configuration for project creation (optional)
 
 ### Example Configuration Files
 
@@ -213,6 +299,7 @@ Example configuration files are included in the `.github/demos/` directory:
 - [`prs.json`](.github/demos/prs.json) - Sample pull request definitions
 - [`labels.json`](.github/demos/labels.json) - Sample label definitions with colors
 - [`preserve.json`](.github/demos/preserve.json) - Preservation rules for cleanup operations
+- [`project-config.json`](.github/demos/project-config.json) - Sample project configuration with fields and views
 
 ## Development
 
