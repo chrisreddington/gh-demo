@@ -8,6 +8,17 @@ A GitHub CLI extension for automating repository hydration tasks, such as creati
 gh extension install chrisreddington/gh-demo
 ```
 
+## Features
+
+### 🎯 **Repository Hydration**
+Create issues, discussions, and pull requests from JSON configuration files with automatic label creation and support for assignees, labels, and other GitHub metadata.
+
+### 🧹 **Cleanup Operations**  
+Clean existing repository content with intelligent preservation rules, granular control, and regex pattern support to preserve important content.
+
+### 🔍 **Development Tools**
+Dry run mode, flexible configuration paths, structured logging with debug mode, and comprehensive error handling for production use.
+
 ## Usage
 
 ### Basic Hydration
@@ -183,62 +194,17 @@ Example:
 }
 ```
 
-## Features
+## Configuration
 
-### 🎯 **Repository Hydration**
-- Create issues, discussions, and pull requests from JSON configuration files
-- Automatic label creation with customizable colors and descriptions
-- Support for assignees, labels, and other GitHub metadata
-- Configurable content types (include/exclude issues, discussions, PRs)
-
-### 🧹 **Cleanup Operations**
-- Clean existing repository content before hydration
-- Granular cleanup control (issues, discussions, PRs, labels separately)
-- Intelligent preservation rules with regex pattern support
-- Preserve by title, labels, categories, or GitHub node IDs
-
-### 🔍 **Dry Run Mode**
-- Preview all operations without making actual changes
-- See what would be created, updated, or deleted
-- Perfect for testing configurations and preservation rules
-
-### ⚙️ **Flexible Configuration**
-- Customizable configuration directory path
-- Auto-discovery from current git repository context
-- Comprehensive error handling with detailed feedback
-- Structured logging with debug mode support
-
-### 🛡️ **Production Ready**
-- Context-aware timeout handling for all operations
-- Comprehensive test coverage with mocked dependencies
-- GraphQL API integration via `go-gh` library
-- Rate limit handling and retry logic
-
-## File Structure
-
-The hydration tool expects JSON files in the configuration directory. By default, this is the `.github/demos/` directory, but it can be customized using the `--config-path` flag:
+The hydration tool uses JSON configuration files to define the content to create. By default, it looks in the `.github/demos/` directory, but you can specify a custom path using the `--config-path` flag:
 
 - `<config-path>/issues.json`: Array of issue objects
-- `<config-path>/discussions.json`: Array of discussion objects
+- `<config-path>/discussions.json`: Array of discussion objects  
 - `<config-path>/prs.json`: Array of pull request objects
 - `<config-path>/labels.json`: Array of label objects (optional - labels referenced in other files will be auto-created with defaults)
 - `<config-path>/preserve.json`: Configuration for objects to preserve during cleanup operations (optional)
 
-### Default Configuration Directory
-
-```bash
-gh demo hydrate --owner myorg --repo myrepo
-# Uses .github/demos/ directory by default
-```
-
-### Custom Configuration Directory
-
-```bash
-gh demo hydrate --owner myorg --repo myrepo --config-path custom/config/path
-# Uses custom/config/path/ directory relative to project root
-```
-
-### Example Files
+### Example Configuration Files
 
 Example configuration files are included in the `.github/demos/` directory:
 
@@ -248,114 +214,7 @@ Example configuration files are included in the `.github/demos/` directory:
 - [`labels.json`](.github/demos/labels.json) - Sample label definitions with colors
 - [`preserve.json`](.github/demos/preserve.json) - Preservation rules for cleanup operations
 
-## Project Architecture
-
-This project follows clean architecture principles with clear separation of concerns:
-
-```
-├── cmd/                    # CLI command implementations
-│   ├── hydrate.go         # Main hydrate command with flags and validation
-│   └── root.go            # Root command setup
-├── internal/              # Internal packages (not for external use)
-│   ├── common/            # Shared utilities and interfaces
-│   │   ├── interfaces.go  # Common interfaces (Logger, etc.)
-│   │   └── logger.go      # Structured logging implementation
-│   ├── config/            # Configuration management
-│   │   └── constants.go   # Application constants and Configuration struct
-│   ├── errors/            # Typed error definitions and handling
-│   │   └── types.go       # Custom error types with context
-│   ├── githubapi/         # GitHub API client and interfaces
-│   │   ├── client.go      # GitHub client implementation
-│   │   ├── interfaces.go  # API client interfaces for mocking
-│   │   └── mutations.go   # GraphQL mutations for create/delete operations
-│   ├── hydrate/           # Core business logic
-│   │   ├── hydrate.go     # Main hydration and cleanup logic
-│   │   └── preserve.go    # Preservation logic for cleanup operations
-│   ├── testutil/          # Test utilities and helpers
-│   └── types/             # Shared data structures
-│       └── models.go      # Issue, Discussion, PR, Label models
-├── .github/demos/         # Example configuration files
-└── main.go               # Application entry point
-```
-
-### Design Principles
-
-- **Dependency Injection**: All external dependencies (GitHub API, file system) are injected via interfaces
-- **Context Propagation**: All operations accept `context.Context` for timeout and cancellation handling
-- **Comprehensive Error Handling**: Typed errors with operation context for better debugging
-- **Configuration Over Convention**: Flexible configuration with sensible defaults
-- **Test-Driven Development**: High test coverage with mocked dependencies
-
-## Testing
-
-This project follows a test-driven development approach with comprehensive test coverage.
-
-### Test Types
-
-1. **Unit Tests**: Use mocked dependencies for fast, isolated testing
-2. **Integration Tests**: Test real GitHub API interactions (skipped in CI without auth)
-
-### Running Tests
-
-```bash
-# Run all tests
-go test ./...
-
-# Run tests in short mode (skips integration tests)
-go test -short ./...
-
-# Run tests with verbose output
-go test -v ./...
-
-# Run specific package tests
-go test ./internal/githubapi/...
-```
-
-### Testing Strategy
-
-- **Table-Driven Tests**: Comprehensive test cases with individual test functions, aiming for ≤30 lines of setup
-- **Test Coverage**: Minimum 80% coverage with focus on error paths and edge cases
-- **GitHub API Client**: Uses dependency injection with `NewGHClientWithClients()` for unit tests and `NewGHClient()` for integration tests
-- **Authentication**: Unit tests use mocks and don't require GitHub credentials
-- **CI/CD**: Runs tests in short mode to skip integration tests that require authentication
-- **Mocking**: ALL external dependencies (GitHub API, file system) are mocked for unit tests
-
-### Test Environment
-
-Tests run against mock implementations by default. Integration tests that require GitHub authentication will:
-- Skip automatically if no credentials are available
-- Run in short mode during CI/CD to avoid authentication issues
-- Can be enabled locally when GitHub CLI authentication is configured
-
 ## Development
-
-### Code Quality Standards
-
-This project follows strict code quality standards:
-
-- **Maximum function size**: 80 lines including comments and blank lines
-- **Complex functions (>50 lines)** must be broken down into smaller, focused helper functions
-- **Descriptive naming**: Use full names (`pullRequest` not `pr`, `repository` not `repo`)
-- **Context handling**: ALL I/O functions MUST accept `context.Context` as first parameter
-- **Error wrapping**: Wrap ALL errors with meaningful context using typed errors
-
-### Pre-Commit Requirements
-
-Before committing, ensure:
-
-```bash
-# Code builds without errors
-go build .
-
-# All tests pass
-go test ./...
-
-# Code is properly formatted
-go fmt ./...
-
-# Linting passes (if golangci-lint is available)
-golangci-lint run
-```
 
 ### Building and Running
 
@@ -367,12 +226,44 @@ go build -o gh-demo .
 gh extension install .
 ```
 
-## Contributing
+### Testing
 
-We welcome contributions! Please follow these guidelines:
+```bash
+# Run all tests
+go test ./...
 
+# Run tests in short mode (skips integration tests)
+go test -short ./...
+
+# Run tests with verbose output
+go test -v ./...
+```
+
+### Pre-Commit Requirements
+
+Before committing, ensure:
+
+```bash
+# Code builds without errors
+go build .
+
+# All tests pass  
+go test ./...
+
+# Code is properly formatted
+go fmt ./...
+
+# Linting passes (if golangci-lint is available)
+golangci-lint run
+```
+
+### Contributing
+
+We welcome contributions! For detailed coding standards, architecture guidelines, and development practices, please read [`.github/copilot-instructions.md`](.github/copilot-instructions.md).
+
+Please follow these steps:
 1. **Fork the repository** and create a feature branch
-2. **Follow the coding standards** outlined in the Development section
+2. **Follow the coding standards** outlined in `.github/copilot-instructions.md`
 3. **Write tests** for all new functionality (minimum 80% coverage)
 4. **Update documentation** including this README if needed
 5. **Test your changes** with real GitHub repositories
@@ -386,14 +277,6 @@ When reporting issues, please include:
 - Configuration files used (sanitized of sensitive information)
 - Expected vs actual behavior
 
-### Feature Requests
-
-Feature requests are welcome! Please:
-- Check existing issues to avoid duplicates
-- Describe the use case and problem being solved
-- Provide examples of how the feature would be used
-- Consider implementation complexity and maintenance burden
-
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
