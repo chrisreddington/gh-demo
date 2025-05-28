@@ -5,18 +5,22 @@ import (
 	"fmt"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
+	"github.com/chrisreddington/gh-demo/internal/errors"
 	"github.com/chrisreddington/gh-demo/internal/testutil"
 	"github.com/chrisreddington/gh-demo/internal/types"
 )
 
 // MockConfig allows configuration of the mock GitHubClient behavior
 type MockConfig struct {
-	ExistingLabels map[string]bool
-	Issues         testutil.ErrorConfig
-	PRs            testutil.ErrorConfig
-	Discussions    testutil.ErrorConfig
-	ListLabels     testutil.ErrorConfig
-	CreateLabel    testutil.ErrorConfig
+	ExistingLabels         map[string]bool
+	Issues                 testutil.ErrorConfig
+	PRs                    testutil.ErrorConfig
+	Discussions            testutil.ErrorConfig
+	ListLabels             testutil.ErrorConfig
+	CreateLabel            testutil.ErrorConfig
+	FailProjectCreation    bool
+	FailProjectItemAddition bool
+	FailProjectRetrieval   bool
 }
 
 // ConfigurableMockGitHubClient provides a configurable mock implementation of GitHubClient
@@ -142,6 +146,51 @@ func (m *ConfigurableMockGitHubClient) DeleteLabel(ctx context.Context, name str
 		}
 	}
 	return nil
+}
+
+// ProjectV2 operations for testing compatibility
+
+func (m *ConfigurableMockGitHubClient) CreateProjectV2(ctx context.Context, config types.ProjectV2Configuration) (*types.ProjectV2, error) {
+	if m.Config.FailProjectCreation {
+		return nil, errors.ProjectError("create_project", "mock project creation failure", fmt.Errorf("mock error"))
+	}
+	
+	// Return a mock project for testing
+	return &types.ProjectV2{
+		NodeID:      "test-project-node-id",
+		ID:          "test-project-id",
+		Number:      1,
+		Title:       config.Title,
+		Description: config.Description,
+		Visibility:  config.Visibility,
+		URL:         "https://github.com/users/test/projects/1",
+	}, nil
+}
+
+func (m *ConfigurableMockGitHubClient) AddItemToProjectV2(ctx context.Context, projectID, itemNodeID string) error {
+	if m.Config.FailProjectItemAddition {
+		return errors.ProjectError("add_item_to_project", "mock project item addition failure", fmt.Errorf("mock error"))
+	}
+	
+	// For testing, just return success
+	return nil
+}
+
+func (m *ConfigurableMockGitHubClient) GetProjectV2(ctx context.Context, projectID string) (*types.ProjectV2, error) {
+	if m.Config.FailProjectRetrieval {
+		return nil, errors.ProjectError("get_project", "mock project retrieval failure", fmt.Errorf("mock error"))
+	}
+	
+	// Return a mock project for testing
+	return &types.ProjectV2{
+		NodeID:      projectID,
+		ID:          projectID,
+		Number:      1,
+		Title:       "Test Project",
+		Description: "Test project description",
+		Visibility:  "private",
+		URL:         "https://github.com/users/test/projects/1",
+	}, nil
 }
 
 // Helper functions to create common mock configurations
