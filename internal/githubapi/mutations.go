@@ -317,3 +317,62 @@ const getLabelByNameQuery = `
 		}
 	}
 `
+
+// ProjectV2 mutations and queries
+
+// createProjectV2Mutation creates a new ProjectV2 for a repository owner
+const createProjectV2Mutation = `
+	mutation CreateProjectV2($ownerId: ID!, $title: String!, $description: String) {
+		createProjectV2(input: {
+			ownerId: $ownerId
+			title: $title
+			description: $description
+		}) {
+			projectV2 {
+				id
+				number
+				title
+				description
+				url
+			}
+		}
+	}
+`
+
+// addProjectV2ItemByIdMutation adds an item to a ProjectV2 by content ID
+const addProjectV2ItemByIdMutation = `
+	mutation AddProjectV2ItemById($projectId: ID!, $contentId: ID!) {
+		addProjectV2ItemById(input: {
+			projectId: $projectId
+			contentId: $contentId
+		}) {
+			item {
+				id
+			}
+		}
+	}
+`
+
+// getProjectV2Query retrieves a ProjectV2 by ID
+const getProjectV2Query = `
+	query GetProjectV2($projectId: ID!) {
+		node(id: $projectId) {
+			... on ProjectV2 {
+				id
+				number
+				title
+				description
+				url
+			}
+		}
+	}
+`
+
+// getRepositoryOwnerIdQuery gets the owner ID for creating projects
+const getRepositoryOwnerIdQuery = `
+	query GetRepositoryOwnerId($owner: String!) {
+		repositoryOwner(login: $owner) {
+			id
+		}
+	}
+`

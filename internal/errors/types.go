@@ -213,3 +213,27 @@ func WrapWithOperation(err error, layer, operation, message string) error {
 
 	return NewLayeredError(layer, operation, message, err)
 }
+
+// Project-specific error functions for ProjectV2 operations
+
+// ProjectError creates a project-layer error for ProjectV2 operations.
+func ProjectError(operation, message string, cause error) error {
+	return NewLayeredError("project", operation, message, cause)
+}
+
+// ProjectPermissionError creates a permission-specific project error.
+func ProjectPermissionError(operation, message string, cause error) error {
+	err := NewLayeredError("project", operation, message, cause)
+	return err.WithContext("type", "permission")
+}
+
+// ProjectNotFoundError creates an error for when a project is not found.
+func ProjectNotFoundError(operation string, projectID string) error {
+	err := NewLayeredError("project", operation, "project not found", nil)
+	return err.WithContext("project_id", projectID)
+}
+
+// ProjectConfigurationError creates an error for project configuration issues.
+func ProjectConfigurationError(operation, message string, cause error) error {
+	return NewLayeredError("project", operation, message, cause)
+}

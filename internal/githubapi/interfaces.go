@@ -41,6 +41,14 @@ type GitHubClient interface {
 	// DeleteLabel deletes a label by its name
 	DeleteLabel(ctx context.Context, name string) error
 
+	// ProjectV2 operations
+	// CreateProjectV2 creates a new ProjectV2 for the repository owner
+	CreateProjectV2(ctx context.Context, config types.ProjectV2Configuration) (*types.ProjectV2, error)
+	// AddItemToProjectV2 adds an item (issue, PR, discussion) to a ProjectV2
+	AddItemToProjectV2(ctx context.Context, projectID, itemNodeID string) error
+	// GetProjectV2 retrieves project information by ID
+	GetProjectV2(ctx context.Context, projectID string) (*types.ProjectV2, error)
+
 	// SetLogger sets the logger for debug output during API operations
 	SetLogger(logger common.Logger)
 }

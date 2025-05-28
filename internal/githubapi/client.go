@@ -1331,3 +1331,229 @@ func (c *GHClient) DeleteLabel(ctx context.Context, name string) error {
 	c.debugLog("Successfully deleted label '%s'", name)
 	return nil
 }
+
+// ProjectV2 operations
+
+// CreateProjectV2 creates a new ProjectV2 for the repository owner using the provided configuration.
+// It returns the created project with its ID and URL for further operations.
+func (c *GHClient) CreateProjectV2(ctx context.Context, projectConfig types.ProjectV2Configuration) (*types.ProjectV2, error) {
+	if c.gqlClient == nil {
+		return nil, errors.ValidationError("create_project", "GraphQL client is not initialized")
+	}
+
+	if strings.TrimSpace(projectConfig.Title) == "" {
+		return nil, errors.ValidationError("create_project", "project title cannot be empty")
+	}
+
+	c.debugLog("Creating ProjectV2 '%s' for owner %s", projectConfig.Title, c.Owner)
+
+	// First, get the owner ID
+	ownerID, err := c.getRepositoryOwnerID(ctx)
+	if err != nil {
+		return nil, errors.ProjectError("get_owner_id", "failed to get repository owner ID", err)
+	}
+
+	// Create the project
+	var mutationResponse struct {
+		CreateProjectV2 struct {
+			ProjectV2 struct {
+				ID          string `json:"id"`
+				Number      int    `json:"number"`
+				Title       string `json:"title"`
+				Description string `json:"description"`
+				URL         string `json:"url"`
+			} `json:"projectV2"`
+		} `json:"createProjectV2"`
+	}
+
+	mutationVariables := map[string]interface{}{
+		"ownerId":     ownerID,
+		"title":       projectConfig.Title,
+		"description": projectConfig.Description,
+	}
+
+	createCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err = c.gqlClient.Do(createCtx, createProjectV2Mutation, mutationVariables, &mutationResponse)
+	if err != nil {
+		c.debugLog("Failed to create ProjectV2 '%s': %v", projectConfig.Title, err)
+		if errors.IsContextError(err) {
+			return nil, errors.ContextError("create_project", err)
+		}
+		
+		// Check for permission errors
+		if strings.Contains(strings.ToLower(err.Error()), "permission") || 
+		   strings.Contains(strings.ToLower(err.Error()), "forbidden") ||
+		   strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
+			return nil, errors.ProjectPermissionError("create_project", 
+				"insufficient permissions to create projects - ensure token has write:org or write:user scope", err)
+		}
+		
+		return nil, errors.ProjectError("create_project", "failed to create ProjectV2", err)
+	}
+
+	project := &types.ProjectV2{
+		NodeID:      mutationResponse.CreateProjectV2.ProjectV2.ID,
+		ID:          mutationResponse.CreateProjectV2.ProjectV2.ID,
+		Number:      mutationResponse.CreateProjectV2.ProjectV2.Number,
+		Title:       mutationResponse.CreateProjectV2.ProjectV2.Title,
+		Description: mutationResponse.CreateProjectV2.ProjectV2.Description,
+		URL:         mutationResponse.CreateProjectV2.ProjectV2.URL,
+		Visibility:  projectConfig.Visibility,
+	}
+
+	c.debugLog("Successfully created ProjectV2 '%s' (ID: %s, Number: %d, URL: %s)",
+		project.Title, project.ID, project.Number, project.URL)
+
+	return project, nil
+}
+
+// AddItemToProjectV2 adds an item (issue, PR, discussion) to a ProjectV2 by item node ID.
+// The item must be a valid GitHub content item with a node ID.
+func (c *GHClient) AddItemToProjectV2(ctx context.Context, projectID, itemNodeID string) error {
+	if c.gqlClient == nil {
+		return errors.ValidationError("add_item_to_project", "GraphQL client is not initialized")
+	}
+
+	if strings.TrimSpace(projectID) == "" {
+		return errors.ValidationError("add_item_to_project", "project ID cannot be empty")
+	}
+
+	if strings.TrimSpace(itemNodeID) == "" {
+		return errors.ValidationError("add_item_to_project", "item node ID cannot be empty")
+	}
+
+	c.debugLog("Adding item %s to ProjectV2 %s", itemNodeID, projectID)
+
+	var mutationResponse struct {
+		AddProjectV2ItemById struct {
+			Item struct {
+				ID string `json:"id"`
+			} `json:"item"`
+		} `json:"addProjectV2ItemById"`
+	}
+
+	mutationVariables := map[string]interface{}{
+		"projectId": projectID,
+		"contentId": itemNodeID,
+	}
+
+	addCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(addCtx, addProjectV2ItemByIdMutation, mutationVariables, &mutationResponse)
+	if err != nil {
+		c.debugLog("Failed to add item %s to ProjectV2 %s: %v", itemNodeID, projectID, err)
+		if errors.IsContextError(err) {
+			return errors.ContextError("add_item_to_project", err)
+		}
+		
+		// Check for permission errors
+		if strings.Contains(strings.ToLower(err.Error()), "permission") || 
+		   strings.Contains(strings.ToLower(err.Error()), "forbidden") ||
+		   strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
+			return errors.ProjectPermissionError("add_item_to_project", 
+				"insufficient permissions to add items to project", err)
+		}
+		
+		err = errors.ProjectError("add_item_to_project", "failed to add item to ProjectV2", err)
+		err = errors.WithContextSafe(err, "project_id", projectID)
+		return errors.WithContextSafe(err, "item_node_id", itemNodeID)
+	}
+
+	c.debugLog("Successfully added item %s to ProjectV2 %s (Item ID: %s)",
+		itemNodeID, projectID, mutationResponse.AddProjectV2ItemById.Item.ID)
+
+	return nil
+}
+
+// GetProjectV2 retrieves project information by project ID.
+// This is useful for verifying project existence and getting project details.
+func (c *GHClient) GetProjectV2(ctx context.Context, projectID string) (*types.ProjectV2, error) {
+	if c.gqlClient == nil {
+		return nil, errors.ValidationError("get_project", "GraphQL client is not initialized")
+	}
+
+	if strings.TrimSpace(projectID) == "" {
+		return nil, errors.ValidationError("get_project", "project ID cannot be empty")
+	}
+
+	c.debugLog("Retrieving ProjectV2 %s", projectID)
+
+	var queryResponse struct {
+		Node struct {
+			ID          string `json:"id"`
+			Number      int    `json:"number"`
+			Title       string `json:"title"`
+			Description string `json:"description"`
+			URL         string `json:"url"`
+		} `json:"node"`
+	}
+
+	queryVariables := map[string]interface{}{
+		"projectId": projectID,
+	}
+
+	getCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(getCtx, getProjectV2Query, queryVariables, &queryResponse)
+	if err != nil {
+		c.debugLog("Failed to retrieve ProjectV2 %s: %v", projectID, err)
+		if errors.IsContextError(err) {
+			return nil, errors.ContextError("get_project", err)
+		}
+		return nil, errors.ProjectError("get_project", "failed to retrieve ProjectV2", err)
+	}
+
+	if queryResponse.Node.ID == "" {
+		return nil, errors.ProjectNotFoundError("get_project", projectID)
+	}
+
+	project := &types.ProjectV2{
+		NodeID:      queryResponse.Node.ID,
+		ID:          queryResponse.Node.ID,
+		Number:      queryResponse.Node.Number,
+		Title:       queryResponse.Node.Title,
+		Description: queryResponse.Node.Description,
+		URL:         queryResponse.Node.URL,
+	}
+
+	c.debugLog("Successfully retrieved ProjectV2 '%s' (ID: %s, Number: %d)",
+		project.Title, project.ID, project.Number)
+
+	return project, nil
+}
+
+// getRepositoryOwnerID retrieves the node ID for the repository owner (needed for project creation).
+func (c *GHClient) getRepositoryOwnerID(ctx context.Context) (string, error) {
+	var queryResponse struct {
+		RepositoryOwner struct {
+			ID string `json:"id"`
+		} `json:"repositoryOwner"`
+	}
+
+	queryVariables := map[string]interface{}{
+		"owner": c.Owner,
+	}
+
+	ownerCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(ownerCtx, getRepositoryOwnerIdQuery, queryVariables, &queryResponse)
+	if err != nil {
+		c.debugLog("Failed to get owner ID for %s: %v", c.Owner, err)
+		if errors.IsContextError(err) {
+			return "", errors.ContextError("get_owner_id", err)
+		}
+		return "", errors.APIError("get_owner_id", "failed to get repository owner ID", err)
+	}
+
+	if queryResponse.RepositoryOwner.ID == "" {
+		return "", errors.ValidationError("get_owner_id", fmt.Sprintf("owner '%s' not found", c.Owner))
+	}
+
+	c.debugLog("Retrieved owner ID %s for %s", queryResponse.RepositoryOwner.ID, c.Owner)
+	return queryResponse.RepositoryOwner.ID, nil
+}
