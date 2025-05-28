@@ -377,10 +377,10 @@ func TestPreservePredicateFunctions(t *testing.T) {
 
 	t.Run("checkPreservationByID", func(t *testing.T) {
 		tests := []struct {
-			name          string
-			nodeID        string
-			preserveByID  []string
-			expected      bool
+			name         string
+			nodeID       string
+			preserveByID []string
+			expected     bool
 		}{
 			{
 				name:         "ID found in preserve list",
@@ -414,10 +414,10 @@ func TestPreservePredicateFunctions(t *testing.T) {
 
 	t.Run("checkPreservationByTitle", func(t *testing.T) {
 		tests := []struct {
-			name             string
-			title            string
-			preserveByTitle  []string
-			expected         bool
+			name            string
+			title           string
+			preserveByTitle []string
+			expected        bool
 		}{
 			{
 				name:            "exact title match",
@@ -457,10 +457,10 @@ func TestPreservePredicateFunctions(t *testing.T) {
 
 	t.Run("checkPreservationByLabels", func(t *testing.T) {
 		tests := []struct {
-			name             string
-			itemLabels       []string
-			preserveByLabel  []string
-			expected         bool
+			name            string
+			itemLabels      []string
+			preserveByLabel []string
+			expected        bool
 		}{
 			{
 				name:            "label match found",
@@ -500,10 +500,10 @@ func TestPreservePredicateFunctions(t *testing.T) {
 
 	t.Run("checkPreservationByCategory", func(t *testing.T) {
 		tests := []struct {
-			name                string
-			category            string
-			preserveByCategory  []string
-			expected            bool
+			name               string
+			category           string
+			preserveByCategory []string
+			expected           bool
 		}{
 			{
 				name:               "category match found",
@@ -537,10 +537,10 @@ func TestPreservePredicateFunctions(t *testing.T) {
 
 	t.Run("checkPreservationByName", func(t *testing.T) {
 		tests := []struct {
-			name            string
-			itemName        string
-			preserveByName  []string
-			expected        bool
+			name           string
+			itemName       string
+			preserveByName []string
+			expected       bool
 		}{
 			{
 				name:           "name match found",

@@ -205,11 +205,11 @@ func WrapWithOperation(err error, layer, operation, message string) error {
 	if err == nil {
 		return nil
 	}
-	
+
 	// If it's already a LayeredError, preserve the chain
 	if layeredErr := AsLayeredError(err); layeredErr != nil {
 		return NewLayeredError(layer, operation, message, err)
 	}
-	
+
 	return NewLayeredError(layer, operation, message, err)
 }

@@ -213,7 +213,7 @@ var EmptyCollections = struct {
 // Factory provides a global instance of MockFactory for convenience
 var Factory = &MockFactory{}
 
-// DataFactory provides a global instance of TestDataFactory for convenience  
+// DataFactory provides a global instance of TestDataFactory for convenience
 var DataFactory = &TestDataFactory{}
 
 // SimpleMockGraphQLClient provides a basic mock for GraphQL operations

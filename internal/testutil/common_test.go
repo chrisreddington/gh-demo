@@ -10,11 +10,11 @@ import (
 
 func TestErrorConfig_GetErrorOrDefault(t *testing.T) {
 	tests := []struct {
-		name         string
-		config       ErrorConfig
-		defaultMsg   string
-		expectError  bool
-		expectedMsg  string
+		name        string
+		config      ErrorConfig
+		defaultMsg  string
+		expectError bool
+		expectedMsg string
 	}{
 		{
 			name: "should not error when ShouldError is false",
@@ -100,7 +100,7 @@ func TestTestDataFactory_CreateTestIssue(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			issue := factory.CreateTestIssue(tt.title)
-			
+
 			if issue.Title != tt.expectedTitle {
 				t.Errorf("Expected title '%s', got '%s'", tt.expectedTitle, issue.Title)
 			}
@@ -140,7 +140,7 @@ func TestTestDataFactory_CreateTestPR(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pr := factory.CreateTestPR(tt.title)
-			
+
 			if pr.Title != tt.expectedTitle {
 				t.Errorf("Expected title '%s', got '%s'", tt.expectedTitle, pr.Title)
 			}
@@ -186,7 +186,7 @@ func TestTestDataFactory_CreateTestDiscussion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			discussion := factory.CreateTestDiscussion(tt.title)
-			
+
 			if discussion.Title != tt.expectedTitle {
 				t.Errorf("Expected title '%s', got '%s'", tt.expectedTitle, discussion.Title)
 			}
@@ -226,7 +226,7 @@ func TestTestDataFactory_CreateTestLabel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			label := factory.CreateTestLabel(tt.labelName)
-			
+
 			if label.Name != tt.expectedName {
 				t.Errorf("Expected name '%s', got '%s'", tt.expectedName, label.Name)
 			}
@@ -271,15 +271,15 @@ func TestMockError(t *testing.T) {
 func TestNewMockError(t *testing.T) {
 	message := "test error from factory"
 	err := NewMockError(message)
-	
+
 	if err == nil {
 		t.Fatal("Expected error but got nil")
 	}
-	
+
 	if err.Error() != message {
 		t.Errorf("Expected error message '%s', got '%s'", message, err.Error())
 	}
-	
+
 	// Verify it's actually a MockError
 	mockErr, ok := err.(*MockError)
 	if !ok {
@@ -298,7 +298,7 @@ func TestMockLogger(t *testing.T) {
 
 	t.Run("Debug method", func(t *testing.T) {
 		logger.Debug("debug message: %s", "test")
-		
+
 		expectedMessage := "debug message: test"
 		if logger.LastMessage != expectedMessage {
 			t.Errorf("Expected LastMessage '%s', got '%s'", expectedMessage, logger.LastMessage)
@@ -313,7 +313,7 @@ func TestMockLogger(t *testing.T) {
 
 	t.Run("Info method", func(t *testing.T) {
 		logger.Info("info message: %s", "value")
-		
+
 		expectedMessage := "info message: value"
 		if logger.LastMessage != expectedMessage {
 			t.Errorf("Expected LastMessage '%s', got '%s'", expectedMessage, logger.LastMessage)
@@ -328,7 +328,7 @@ func TestMockLogger(t *testing.T) {
 
 	t.Run("Error method", func(t *testing.T) {
 		logger.Error("error message: %d", 404)
-		
+
 		expectedMessage := "error message: 404"
 		if logger.LastMessage != expectedMessage {
 			t.Errorf("Expected LastMessage '%s', got '%s'", expectedMessage, logger.LastMessage)
@@ -344,12 +344,12 @@ func TestMockLogger(t *testing.T) {
 	t.Run("multiple calls accumulate", func(t *testing.T) {
 		// Reset logger
 		logger = &MockLogger{}
-		
+
 		logger.Debug("debug 1")
 		logger.Debug("debug 2")
 		logger.Info("info 1")
 		logger.Error("error 1")
-		
+
 		if len(logger.DebugCalls) != 2 {
 			t.Errorf("Expected 2 debug calls, got %d", len(logger.DebugCalls))
 		}
@@ -369,9 +369,9 @@ func TestMockFactory_CreateErrorConfigMap(t *testing.T) {
 	factory := &MockFactory{}
 
 	tests := []struct {
-		name             string
-		errorOperations  map[string]string
-		expectedCount    int
+		name            string
+		errorOperations map[string]string
+		expectedCount   int
 	}{
 		{
 			name: "creates config map with multiple operations",
@@ -391,11 +391,11 @@ func TestMockFactory_CreateErrorConfigMap(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			configs := factory.CreateErrorConfigMap(tt.errorOperations)
-			
+
 			if len(configs) != tt.expectedCount {
 				t.Errorf("Expected %d configs, got %d", tt.expectedCount, len(configs))
 			}
-			
+
 			for operation, expectedMsg := range tt.errorOperations {
 				config, exists := configs[operation]
 				if !exists {
@@ -415,9 +415,9 @@ func TestMockFactory_CreateErrorConfigMap(t *testing.T) {
 
 func TestMockFactory_CreateSuccessfulErrorConfig(t *testing.T) {
 	factory := &MockFactory{}
-	
+
 	config := factory.CreateSuccessfulErrorConfig()
-	
+
 	if config.ShouldError {
 		t.Error("Expected ShouldError to be false")
 	}
@@ -430,9 +430,9 @@ func TestMockFactory_CreateLabelMap(t *testing.T) {
 	factory := &MockFactory{}
 
 	tests := []struct {
-		name           string
-		labels         []string
-		expectedCount  int
+		name          string
+		labels        []string
+		expectedCount int
 	}{
 		{
 			name:          "creates map with multiple labels",
@@ -454,11 +454,11 @@ func TestMockFactory_CreateLabelMap(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			labelMap := factory.CreateLabelMap(tt.labels...)
-			
+
 			if len(labelMap) != tt.expectedCount {
 				t.Errorf("Expected %d labels, got %d", tt.expectedCount, len(labelMap))
 			}
-			
+
 			for _, label := range tt.labels {
 				if !labelMap[label] {
 					t.Errorf("Expected label '%s' to be true in map", label)
@@ -472,10 +472,10 @@ func TestMockFactory_CreateTestCollections(t *testing.T) {
 	factory := &MockFactory{}
 
 	tests := []struct {
-		name            string
-		numIssues       int
-		numPRs          int
-		numDiscussions  int
+		name           string
+		numIssues      int
+		numPRs         int
+		numDiscussions int
 	}{
 		{
 			name:           "creates collections with specified counts",
@@ -500,7 +500,7 @@ func TestMockFactory_CreateTestCollections(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			issues, prs, discussions := factory.CreateTestCollections(tt.numIssues, tt.numPRs, tt.numDiscussions)
-			
+
 			if len(issues) != tt.numIssues {
 				t.Errorf("Expected %d issues, got %d", tt.numIssues, len(issues))
 			}
@@ -510,7 +510,7 @@ func TestMockFactory_CreateTestCollections(t *testing.T) {
 			if len(discussions) != tt.numDiscussions {
 				t.Errorf("Expected %d discussions, got %d", tt.numDiscussions, len(discussions))
 			}
-			
+
 			// Verify content of created items
 			for i, issue := range issues {
 				expectedTitle := fmt.Sprintf("Test Issue %d", i+1)
@@ -518,14 +518,14 @@ func TestMockFactory_CreateTestCollections(t *testing.T) {
 					t.Errorf("Expected issue %d title '%s', got '%s'", i, expectedTitle, issue.Title)
 				}
 			}
-			
+
 			for i, pr := range prs {
 				expectedTitle := fmt.Sprintf("Test PR %d", i+1)
 				if pr.Title != expectedTitle {
 					t.Errorf("Expected PR %d title '%s', got '%s'", i, expectedTitle, pr.Title)
 				}
 			}
-			
+
 			for i, discussion := range discussions {
 				expectedTitle := fmt.Sprintf("Test Discussion %d", i+1)
 				if discussion.Title != expectedTitle {
@@ -591,7 +591,7 @@ func TestGlobalInstances(t *testing.T) {
 	if DataFactory == nil {
 		t.Error("Expected DataFactory to be initialized")
 	}
-	
+
 	// Test that they are of the correct types
 	_, factoryOk := interface{}(Factory).(*MockFactory)
 	if !factoryOk {
@@ -616,7 +616,7 @@ func TestSimpleMockGraphQLClient(t *testing.T) {
 	t.Run("custom DoFunc is called", func(t *testing.T) {
 		var capturedQuery string
 		var capturedVariables map[string]interface{}
-		
+
 		client := &SimpleMockGraphQLClient{
 			DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 				capturedQuery = query
@@ -624,13 +624,13 @@ func TestSimpleMockGraphQLClient(t *testing.T) {
 				return NewMockError("custom error")
 			},
 		}
-		
+
 		ctx := context.Background()
 		testQuery := "test query"
 		testVariables := map[string]interface{}{"key": "value"}
-		
+
 		err := client.Do(ctx, testQuery, testVariables, nil)
-		
+
 		if err == nil {
 			t.Error("Expected error from custom DoFunc")
 		}
