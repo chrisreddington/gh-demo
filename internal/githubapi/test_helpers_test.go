@@ -112,7 +112,7 @@ func TestConfigurableMockGraphQLClient_HandlerFunctions(t *testing.T) {
 
 			// Create appropriate response struct based on handler type
 			var response interface{}
-			
+
 			// Extract operation type from test name for cleaner switch logic
 			operationType := ""
 			switch {
@@ -125,7 +125,7 @@ func TestConfigurableMockGraphQLClient_HandlerFunctions(t *testing.T) {
 			case strings.Contains(tt.name, "handlePullRequestCreationQuery"):
 				operationType = "pullRequest"
 			}
-			
+
 			switch operationType {
 			case "repository":
 				response = &struct {

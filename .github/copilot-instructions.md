@@ -5,43 +5,56 @@ This project (gh-demo) is a GitHub CLI Extension written in Go to automate repos
 
 ## Code Quality Standards
 
-### Go Language Standards
-- Follow standard Go idioms and best practices
-- Use comprehensive GoDoc comments for all exported symbols
-- Keep functions small and focused on a single responsibility (Ideally no more than 50 - 80 lines)
-- All method and variable names should be descriptive and follow Go naming conventions. No abbreviations unless they are well-known (e.g., `URL`, `ID`). Even pr should be pullRequest, as an example.
+### Go Language & Function Design
+- Follow standard Go idioms with comprehensive GoDoc comments for all exported symbols
+- **Maximum function size**: 80 lines including comments and blank lines
+- **Complex functions (>50 lines)** must be broken down into smaller, focused helper functions
+- Use Single Responsibility Principle - each function does exactly one thing well
+- Avoid deeply nested logic - use early returns and guard clauses
+- If a function takes >5 parameters, use struct or options pattern
 - Prefer strongly typed interfaces over `interface{}`
-- Separate interface definitions from implementations
+
+### Naming Standards
+- **Use full descriptive names**: `pullRequest` not `pr`, `repository` not `repo`, `discussion` not `disc`
+- **Avoid generic names**: `createIssueResponse` not `resp`, `validateUserError` not `err`
+- **Collections use plural**: `pullRequests` not `prs`, `repositories` not `repos`
+- **Boolean variables**: `shouldCreateLabels`, `hasValidationErrors`
+- **Function names**: verb-noun pattern - `validatePullRequestData`, `extractLabelNames`
+
+### Code Organization
+- Extract common patterns into helper functions (timeout context creation, error wrapping, response validation)
+- Group related functionality: validation, API calls, result processing in separate functions
+- Use composition over large functions - pipeline of smaller functions
+- Consistent error handling patterns across similar operations
 
 ### Testing Requirements
-- Write tests before implementation (TDD approach)
-- Achieve minimum 80% test coverage for all packages
-- Use table-driven tests for validation logic and multiple scenarios
+- Write tests before implementation (TDD approach) with minimum 80% coverage
+- Use table-driven tests with individual test cases ≤30 lines of setup
+- Break test functions >100 lines into multiple focused test functions
 - Mock ALL external dependencies (GitHub API, file system operations)
 - Test error paths, not just happy paths
+- Use descriptive test names: `TestCreatePullRequest_WithInvalidHead_ReturnsValidationError`
 
-### Pre-Commit Requirements
-- The code must build: `go build .`
-- All tests must pass: `go test ./...`
-- Code must be formatted: `go fmt ./...`
-- Linting must pass: `golangci-lint run`
-- No hardcoded paths - use relative paths from project root
-- Documentation updated for any API changes
+### Error Handling & Context
+- Use typed errors from `/internal/errors` package, never string-based matching
+- Wrap ALL errors with meaningful context: `fmt.Errorf("operation failed: %w", err)`
+- **ALL** I/O functions MUST accept `context.Context` as first parameter
+- Use `context.WithTimeout()` for all external API calls
+- Create specific error variables: `repositoryFetchError`, `pullRequestValidationError`
+- Always include relevant identifiers (IDs, names, paths) in error context
 
 ## Development Workflow
 
-### Build and Test Commands
-```bash
-go build                    # Build the application
-go test ./...               # Run all tests
-go fmt ./...                # Format code
-golangci-lint run           # Run linter (if available)
-go run main.go <subcommand> # Run with subcommand (e.g., hydrate)
-```
+### Pre-Commit Requirements
+- Code must build: `go build .`
+- All tests pass: `go test ./...`
+- Code formatted: `go fmt ./...`
+- Linting passes: `golangci-lint run`
+- No hardcoded paths - use relative paths from project root
 
 ### Repository Structure
 ```
-/cmd/           - CLI command implementations (hydrate.go, root.go)
+/cmd/           - CLI command implementations
 /internal/      - Internal packages and business logic
   /common/      - Shared utilities (logger, interfaces)
   /config/      - Configuration constants
@@ -55,47 +68,34 @@ main.go         - Application entry point
 
 ## Implementation Guidelines
 
-### API Client Design
-- Use the `go-gh` library for all GitHub API interactions
+### API Client & Commands
+- Use `go-gh` library for all GitHub API interactions with timeout handling
 - Define interfaces for all API clients to enable mocking
-- Never hardcode repository or owner names - accept as parameters
-- All API operations must include timeout handling
-
-### Command Structure
-- Add new features as subcommands following existing patterns
-- Provide clear, actionable error messages for users
+- Never hardcode repository/owner names - accept as parameters
+- Add features as subcommands with clear, actionable error messages
 - Ensure output works for both human reading and script parsing
-- Maintain consistency in command naming and option structure
 
-### Context Management
-- **ALL** functions that perform I/O operations MUST accept `context.Context` as the first parameter
-- Pass context through the entire call chain: CLI → business logic → API clients
-- Use `context.WithTimeout()` for all external API calls to prevent hanging
-
-### Documentation Standards
-- Update `README.md` for new features
-- As new coding quality standards emerge, update `.github/copilot-instructions.md`
-- Include usage examples for complex operations
-- Document design decisions and architectural choices
-- Maintain accurate API documentation for internal packages
-
-### Error Handling
-- Use typed errors from `/internal/errors` package, never string-based error matching
-- Wrap ALL errors with meaningful context using `fmt.Errorf("operation failed: %w", err)`
-- Every error must be handled. When fixing errcheck linting errors, you may not ignore them.
-  ```
-
-### File and Path Handling
+### Structured Logging & File Handling
+- Prefer structured logger from `/internal/common/logger.go` over `fmt.Printf` 
+- Use log levels: Debug (internal state), Info (user actions), Error (failures)
 - Always use paths relative to project root (see `findProjectRoot` utility)
-- Never hardcode absolute paths
 - Handle file operations gracefully with proper error context
 
-### Structured Logging
-- Replace ALL `fmt.Printf` statements with structured logger calls
-- Use the logger from `/internal/common/logger.go`
-- Include request IDs for tracing API operations
-- Log levels: Debug (internal state), Info (user actions), Error (failures)
-- Example:
-  ```go
-  logger.Info("creating issue", "title", issue.Title, "labels", len(issue.Labels))
-  ```
+### Refactoring Triggers
+- **When to refactor**: If function >50 lines, immediately break it down
+- **Code duplication**: If copy-pasting >3 lines, extract into helper function
+- **Magic numbers**: Replace with named constants in `/internal/config`
+- **Boy Scout Rule**: When touching code, improve at least one nearby issue
+
+### Performance & Documentation
+- Focus on readability first, optimize hot paths with benchmarks
+- Use `defer` for cleanup, check `ctx.Done()` in long-running operations
+- Document "why" not "what" - code should be self-documenting
+- Use TODO comments with GitHub issue references for technical debt
+- Update `README.md` and `.github/copilot-instructions.md` as new features and patterns emerge
+
+### Common Patterns
+- **Timeout helper**: Create standardized timeout creation functions
+- **Response processing**: Use descriptive variables like `repositoryResponse`, extract validation helpers
+- **Error handling helpers**: Create reusable patterns for common error scenarios
+- **Context passing**: Pass through entire call chain: CLI → business logic → API clients
