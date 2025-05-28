@@ -133,3 +133,21 @@ func LoadPreserveConfig(ctx context.Context, filePath string) (*PreserveConfig, 
 
 	return &config, nil
 }
+
+// CreateTimeoutContext creates a context with the default API timeout.
+// This provides a consistent timeout pattern across all API operations.
+func CreateTimeoutContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, APITimeout)
+}
+
+// CreateFileOperationContext creates a context with the default file operation timeout.
+// This provides a consistent timeout pattern for file I/O operations.
+func CreateFileOperationContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, FileOperationTimeout)
+}
+
+// CreateCustomTimeoutContext creates a context with a custom timeout duration.
+// Use this when the default timeouts are not appropriate for specific operations.
+func CreateCustomTimeoutContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, timeout)
+}

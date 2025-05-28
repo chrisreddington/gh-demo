@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/chrisreddington/gh-demo/internal/common"
 	"github.com/chrisreddington/gh-demo/internal/config"
@@ -66,7 +67,7 @@ func handleDeleteError(err error, collector *errors.ErrorCollector, logger commo
 	logger.Info("Failed to delete %s '%s': %v", itemType, title, err)
 }
 
-// handleLabelDeleteError creates, collects and logs error for label delete operation failures  
+// handleLabelDeleteError creates, collects and logs error for label delete operation failures
 func handleLabelDeleteError(err error, collector *errors.ErrorCollector, logger common.Logger, labelName string) {
 	wrappedErr := errors.WrapWithOperation(err, "cleanup", "delete_label", "failed to delete label")
 	wrappedErr = errors.WithContextSafe(wrappedErr, "label_name", labelName)
@@ -126,6 +127,18 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *
 	// Report label summary
 	logger.Info("Labels: %d total, %d successful, %d failed", labelSummary.Total, labelSummary.Success, labelSummary.Failures)
 
+	// Create issues, discussions, and pull requests
+	if err := createRepositoryContent(ctx, client, issues, discussions, pullRequests, includeIssues, includeDiscussions, includePullRequests, logger, dryRun); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// createRepositoryContent orchestrates the creation of all content types.
+// This function handles the creation of issues, discussions, and pull requests
+// and collects any errors that occur during the process.
+func createRepositoryContent(ctx context.Context, client githubapi.GitHubClient, issues []types.Issue, discussions []types.Discussion, pullRequests []types.PullRequest, includeIssues, includeDiscussions, includePullRequests bool, logger common.Logger, dryRun bool) error {
 	var allErrors []string
 
 	// Create issues, discussions, and pull requests
@@ -198,115 +211,84 @@ func prepareLabelsToEnsure(ctx context.Context, explicitLabels []types.Label, re
 	return labelsToEnsure
 }
 
-// createIssues creates all issues and collects any errors that occur.
-// It returns a slice of error messages for any issues that failed to create.
-func createIssues(ctx context.Context, client githubapi.GitHubClient, issues []types.Issue, logger common.Logger, dryRun bool) ([]string, error) {
-	if len(issues) == 0 {
+// createItems is a generic function for creating GitHub objects (issues, discussions, PRs).
+// It eliminates code duplication between the specific creation functions.
+func createItems[T any](
+	ctx context.Context,
+	client githubapi.GitHubClient,
+	items []T,
+	itemType string,
+	createFunc func(context.Context, T) error,
+	getTitleFunc func(T) string,
+	logger common.Logger,
+	dryRun bool,
+) ([]string, error) {
+	if len(items) == 0 {
 		return nil, nil
 	}
 
 	var errors []string
-	issueSummary := &SectionSummary{Name: "Issues", Total: len(issues)}
-	logger.Debug("Creating %d issues", len(issues))
+	summary := &SectionSummary{Name: itemType, Total: len(items)}
+	logger.Debug("Creating %d %s", len(items), strings.ToLower(itemType))
 
-	for i, issue := range issues {
-		// Check for cancellation before each issue creation
+	for i, item := range items {
+		// Check for cancellation before each item creation
 		if err := ctx.Err(); err != nil {
 			return errors, err
 		}
 
+		title := getTitleFunc(item)
 		if dryRun {
-			logger.Info("Would create issue: %s", issue.Title)
-			issueSummary.Success++
+			logger.Info("Would create %s: %s", strings.ToLower(itemType[:len(itemType)-1]), title)
+			summary.Success++
 		} else {
-			if err := client.CreateIssue(ctx, issue); err != nil {
-				errorMsg := fmt.Sprintf("Issue %d (%s): %v", i+1, issue.Title, err)
+			if err := createFunc(ctx, item); err != nil {
+				errorMsg := common.FormatCreationError(itemType[:len(itemType)-1], title, i, err)
 				errors = append(errors, errorMsg)
-				issueSummary.Errors = append(issueSummary.Errors, errorMsg)
-				issueSummary.Failures++
-				logger.Debug("Failed to create issue '%s': %v", issue.Title, err)
+				summary.Errors = append(summary.Errors, errorMsg)
+				summary.Failures++
+				logger.Debug("Failed to create %s '%s': %v", strings.ToLower(itemType[:len(itemType)-1]), title, err)
 			} else {
-				issueSummary.Success++
-				logger.Debug("Successfully created issue '%s'", issue.Title)
+				summary.Success++
+				logger.Debug("Successfully created %s '%s'", strings.ToLower(itemType[:len(itemType)-1]), title)
 			}
 		}
 	}
-	logger.Info("Issues: %d total, %d successful, %d failed", issueSummary.Total, issueSummary.Success, issueSummary.Failures)
+	logger.Info("%s: %d total, %d successful, %d failed", itemType, summary.Total, summary.Success, summary.Failures)
 	return errors, nil
+}
+
+// createIssues creates all issues and collects any errors that occur.
+// It returns a slice of error messages for any issues that failed to create.
+func createIssues(ctx context.Context, client githubapi.GitHubClient, issues []types.Issue, logger common.Logger, dryRun bool) ([]string, error) {
+	return createItems(
+		ctx, client, issues, "Issues",
+		client.CreateIssue,
+		func(issue types.Issue) string { return issue.Title },
+		logger, dryRun,
+	)
 }
 
 // createDiscussions creates all discussions and collects any errors that occur.
 // It returns a slice of error messages for any discussions that failed to create.
 func createDiscussions(ctx context.Context, client githubapi.GitHubClient, discussions []types.Discussion, logger common.Logger, dryRun bool) ([]string, error) {
-	if len(discussions) == 0 {
-		return nil, nil
-	}
-
-	var errors []string
-	discussionSummary := &SectionSummary{Name: "Discussions", Total: len(discussions)}
-	logger.Debug("Creating %d discussions", len(discussions))
-
-	for i, discussion := range discussions {
-		// Check for cancellation before each discussion creation
-		if err := ctx.Err(); err != nil {
-			return errors, err
-		}
-
-		if dryRun {
-			logger.Info("Would create discussion: %s", discussion.Title)
-			discussionSummary.Success++
-		} else {
-			if err := client.CreateDiscussion(ctx, discussion); err != nil {
-				errorMsg := fmt.Sprintf("Discussion %d (%s): %v", i+1, discussion.Title, err)
-				errors = append(errors, errorMsg)
-				discussionSummary.Errors = append(discussionSummary.Errors, errorMsg)
-				discussionSummary.Failures++
-				logger.Debug("Failed to create discussion '%s': %v", discussion.Title, err)
-			} else {
-				discussionSummary.Success++
-				logger.Debug("Successfully created discussion '%s'", discussion.Title)
-			}
-		}
-	}
-	logger.Info("Discussions: %d total, %d successful, %d failed", discussionSummary.Total, discussionSummary.Success, discussionSummary.Failures)
-	return errors, nil
+	return createItems(
+		ctx, client, discussions, "Discussions",
+		client.CreateDiscussion,
+		func(discussion types.Discussion) string { return discussion.Title },
+		logger, dryRun,
+	)
 }
 
 // createPullRequests creates all pull requests and collects any errors that occur.
 // It returns a slice of error messages for any pull requests that failed to create.
 func createPullRequests(ctx context.Context, client githubapi.GitHubClient, pullRequests []types.PullRequest, logger common.Logger, dryRun bool) ([]string, error) {
-	if len(pullRequests) == 0 {
-		return nil, nil
-	}
-
-	var errors []string
-	pullRequestSummary := &SectionSummary{Name: "Pull Requests", Total: len(pullRequests)}
-	logger.Debug("Creating %d pull requests", len(pullRequests))
-
-	for i, pullRequest := range pullRequests {
-		// Check for cancellation before each pull request creation
-		if err := ctx.Err(); err != nil {
-			return errors, err
-		}
-
-		if dryRun {
-			logger.Info("Would create pull request: %s", pullRequest.Title)
-			pullRequestSummary.Success++
-		} else {
-			if err := client.CreatePR(ctx, pullRequest); err != nil {
-				errorMsg := fmt.Sprintf("Pull Request %d (%s): %v", i+1, pullRequest.Title, err)
-				errors = append(errors, errorMsg)
-				pullRequestSummary.Errors = append(pullRequestSummary.Errors, errorMsg)
-				pullRequestSummary.Failures++
-				logger.Debug("Failed to create pull request '%s': %v", pullRequest.Title, err)
-			} else {
-				pullRequestSummary.Success++
-				logger.Debug("Successfully created pull request '%s'", pullRequest.Title)
-			}
-		}
-	}
-	logger.Info("Pull Requests: %d total, %d successful, %d failed", pullRequestSummary.Total, pullRequestSummary.Success, pullRequestSummary.Failures)
-	return errors, nil
+	return createItems(
+		ctx, client, pullRequests, "Pull Requests",
+		client.CreatePR,
+		func(pr types.PullRequest) string { return pr.Title },
+		logger, dryRun,
+	)
 }
 
 // EnsureDefinedLabelsExist creates any missing labels in the repository.
@@ -429,103 +411,97 @@ func CleanupBeforeHydration(ctx context.Context, client githubapi.GitHubClient, 
 	return summary, nil
 }
 
-// cleanupIssues handles cleanup of issues
-func cleanupIssues(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
-	collector := errors.NewErrorCollector("cleanup_issues")
+// cleanupItems is a generic function for cleaning up GitHub objects.
+// It eliminates code duplication between the specific cleanup functions.
+func cleanupItems[T any](
+	ctx context.Context,
+	client githubapi.GitHubClient,
+	options CleanupOptions,
+	summary *CleanupSummary,
+	logger common.Logger,
+	itemType string,
+	listFunc func(context.Context) ([]T, error),
+	preserveFunc func(context.Context, *config.PreserveConfig, T) bool,
+	deleteFunc func(context.Context, string) error,
+	getTitleFunc func(T) string,
+	getNodeIDFunc func(T) string,
+	updatePreservedCount func(*CleanupSummary),
+	updateDeletedCount func(*CleanupSummary),
+) []string {
+	operationName := common.FormatOperationContext("cleanup", itemType)
+	collector := errors.NewErrorCollector(operationName)
 
-	issues, err := client.ListIssues(ctx)
+	items, err := listFunc(ctx)
 	if err != nil {
-		return handleListError(err, "list_issues", "issues")
+		return handleListError(err, common.FormatOperationContext("list", itemType), strings.ToLower(itemType))
 	}
 
-	logger.Debug("Found %d issues to evaluate for cleanup", len(issues))
+	logger.Debug("Found %d %s to evaluate for cleanup", len(items), strings.ToLower(itemType))
 
-	for _, issue := range issues {
-		if options.PreserveConfig != nil && ShouldPreserveIssue(ctx, options.PreserveConfig, issue) {
-			summary.IssuesPreserved++
-			logger.Debug("Preserving issue: %s", issue.Title)
+	for _, item := range items {
+		title := getTitleFunc(item)
+		if options.PreserveConfig != nil && preserveFunc(ctx, options.PreserveConfig, item) {
+			updatePreservedCount(summary)
+			logger.Debug("Preserving %s: %s", strings.ToLower(itemType[:len(itemType)-1]), title)
 			continue
 		}
 
 		if options.DryRun {
-			logger.Info("Would delete issue: %s", issue.Title)
+			logger.Info("Would delete %s: %s", strings.ToLower(itemType[:len(itemType)-1]), title)
 		} else {
-			logger.Debug("Deleting issue: %s", issue.Title)
-			if err := client.DeleteIssue(ctx, issue.NodeID); err != nil {
-				handleDeleteError(err, collector, logger, "issue", issue.Title, issue.NodeID)
+			logger.Debug("Deleting %s: %s", strings.ToLower(itemType[:len(itemType)-1]), title)
+			nodeID := getNodeIDFunc(item)
+			if err := deleteFunc(ctx, nodeID); err != nil {
+				handleDeleteError(err, collector, logger, strings.ToLower(itemType[:len(itemType)-1]), title, nodeID)
 				continue
 			}
 		}
-		summary.IssuesDeleted++
+		updateDeletedCount(summary)
 	}
 
 	return convertErrorsToStringSlice(collector)
+}
+
+// cleanupIssues handles cleanup of issues
+func cleanupIssues(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
+	return cleanupItems(
+		ctx, client, options, summary, logger, "Issues",
+		client.ListIssues,
+		ShouldPreserveIssue,
+		client.DeleteIssue,
+		func(issue types.Issue) string { return issue.Title },
+		func(issue types.Issue) string { return issue.NodeID },
+		func(s *CleanupSummary) { s.IssuesPreserved++ },
+		func(s *CleanupSummary) { s.IssuesDeleted++ },
+	)
 }
 
 // cleanupDiscussions handles cleanup of discussions
 func cleanupDiscussions(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
-	collector := errors.NewErrorCollector("cleanup_discussions")
-
-	discussions, err := client.ListDiscussions(ctx)
-	if err != nil {
-		return handleListError(err, "list_discussions", "discussions")
-	}
-
-	logger.Debug("Found %d discussions to evaluate for cleanup", len(discussions))
-
-	for _, discussion := range discussions {
-		if options.PreserveConfig != nil && ShouldPreserveDiscussion(ctx, options.PreserveConfig, discussion) {
-			summary.DiscussionsPreserved++
-			logger.Debug("Preserving discussion: %s", discussion.Title)
-			continue
-		}
-
-		if options.DryRun {
-			logger.Info("Would delete discussion: %s", discussion.Title)
-		} else {
-			logger.Debug("Deleting discussion: %s", discussion.Title)
-			if err := client.DeleteDiscussion(ctx, discussion.NodeID); err != nil {
-				handleDeleteError(err, collector, logger, "discussion", discussion.Title, discussion.NodeID)
-				continue
-			}
-		}
-		summary.DiscussionsDeleted++
-	}
-
-	return convertErrorsToStringSlice(collector)
+	return cleanupItems(
+		ctx, client, options, summary, logger, "Discussions",
+		client.ListDiscussions,
+		ShouldPreserveDiscussion,
+		client.DeleteDiscussion,
+		func(discussion types.Discussion) string { return discussion.Title },
+		func(discussion types.Discussion) string { return discussion.NodeID },
+		func(s *CleanupSummary) { s.DiscussionsPreserved++ },
+		func(s *CleanupSummary) { s.DiscussionsDeleted++ },
+	)
 }
 
 // cleanupPRs handles cleanup of pull requests
 func cleanupPRs(ctx context.Context, client githubapi.GitHubClient, options CleanupOptions, summary *CleanupSummary, logger common.Logger) []string {
-	collector := errors.NewErrorCollector("cleanup_prs")
-
-	prs, err := client.ListPRs(ctx)
-	if err != nil {
-		return handleListError(err, "list_prs", "pull requests")
-	}
-
-	logger.Debug("Found %d pull requests to evaluate for cleanup", len(prs))
-
-	for _, pullRequest := range prs {
-		if options.PreserveConfig != nil && ShouldPreservePR(ctx, options.PreserveConfig, pullRequest) {
-			summary.PRsPreserved++
-			logger.Debug("Preserving PR: %s", pullRequest.Title)
-			continue
-		}
-
-		if options.DryRun {
-			logger.Info("Would delete PR: %s", pullRequest.Title)
-		} else {
-			logger.Debug("Deleting PR: %s", pullRequest.Title)
-			if err := client.DeletePR(ctx, pullRequest.NodeID); err != nil {
-				handleDeleteError(err, collector, logger, "PR", pullRequest.Title, pullRequest.NodeID)
-				continue
-			}
-		}
-		summary.PRsDeleted++
-	}
-
-	return convertErrorsToStringSlice(collector)
+	return cleanupItems(
+		ctx, client, options, summary, logger, "Pull Requests",
+		client.ListPRs,
+		ShouldPreservePR,
+		client.DeletePR,
+		func(pr types.PullRequest) string { return pr.Title },
+		func(pr types.PullRequest) string { return pr.NodeID },
+		func(s *CleanupSummary) { s.PRsPreserved++ },
+		func(s *CleanupSummary) { s.PRsDeleted++ },
+	)
 }
 
 // cleanupLabels handles cleanup of labels

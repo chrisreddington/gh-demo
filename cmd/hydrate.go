@@ -222,18 +222,27 @@ Cleanup flags allow you to clean existing objects before hydrating:
 		},
 	}
 
+	// Setup command line flags
+	setupHydrateCmdFlags(cmd, &owner, &repo, &configPath, &issues, &discussions, &pullRequests, &debug, &cleanupFlags)
+
+	return cmd
+}
+
+// setupHydrateCmdFlags configures all command line flags for the hydrate command.
+// This separates flag configuration from command creation for better maintainability.
+func setupHydrateCmdFlags(cmd *cobra.Command, owner, repo, configPath *string, issues, discussions, pullRequests, debug *bool, cleanupFlags *CleanupFlags) {
 	// Repository flags
-	cmd.Flags().StringVar(&owner, "owner", "", "GitHub repository owner (required)")
-	cmd.Flags().StringVar(&repo, "repo", "", "GitHub repository name (required)")
-	cmd.Flags().StringVar(&configPath, "config-path", config.DefaultConfigPath, "Path to configuration files relative to project root")
+	cmd.Flags().StringVar(owner, "owner", "", "GitHub repository owner (required)")
+	cmd.Flags().StringVar(repo, "repo", "", "GitHub repository name (required)")
+	cmd.Flags().StringVar(configPath, "config-path", config.DefaultConfigPath, "Path to configuration files relative to project root")
 
 	// Content type flags
-	cmd.Flags().BoolVar(&issues, "issues", true, "Include issues")
-	cmd.Flags().BoolVar(&discussions, "discussions", true, "Include discussions")
-	cmd.Flags().BoolVar(&pullRequests, "prs", true, "Include pull requests")
+	cmd.Flags().BoolVar(issues, "issues", true, "Include issues")
+	cmd.Flags().BoolVar(discussions, "discussions", true, "Include discussions")
+	cmd.Flags().BoolVar(pullRequests, "prs", true, "Include pull requests")
 
 	// Debug flag
-	cmd.Flags().BoolVar(&debug, "debug", false, "Enable debug mode for detailed logging")
+	cmd.Flags().BoolVar(debug, "debug", false, "Enable debug mode for detailed logging")
 
 	// Cleanup flags
 	cmd.Flags().BoolVar(&cleanupFlags.Clean, "clean", false, "Clean all existing objects before hydrating")
@@ -243,6 +252,4 @@ Cleanup flags allow you to clean existing objects before hydrating:
 	cmd.Flags().BoolVar(&cleanupFlags.CleanLabels, "clean-labels", false, "Clean existing labels before hydrating")
 	cmd.Flags().BoolVar(&cleanupFlags.DryRun, "dry-run", false, "Preview what would be created and deleted without actually performing operations")
 	cmd.Flags().StringVar(&cleanupFlags.PreserveConfig, "preserve-config", "", "Path to preserve configuration file (default: .github/demos/preserve.json)")
-
-	return cmd
 }

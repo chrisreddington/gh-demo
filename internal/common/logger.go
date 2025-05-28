@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -42,4 +43,16 @@ func (l *StandardLogger) Debug(format string, args ...interface{}) {
 // Info logs a message always
 func (l *StandardLogger) Info(format string, args ...interface{}) {
 	fmt.Printf("[%s] "+format+"\n", append([]interface{}{l.requestID}, args...)...)
+}
+
+// FormatCreationError creates a standardized error message for failed creation operations.
+// This ensures consistent error formatting across different object types.
+func FormatCreationError(itemType, title string, index int, err error) string {
+	return fmt.Sprintf("%s %d (%s): %v", itemType, index+1, title, err)
+}
+
+// FormatOperationContext creates a standardized context string for operations.
+// This provides consistent operation naming across the application.
+func FormatOperationContext(operation, itemType string) string {
+	return fmt.Sprintf("%s_%s", operation, strings.ToLower(strings.ReplaceAll(itemType, " ", "_")))
 }
