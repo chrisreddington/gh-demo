@@ -104,10 +104,17 @@ type CleanupFlags struct {
 	PreserveConfig   string
 }
 
+// ProjectFlags holds all project-related command line flags
+type ProjectFlags struct {
+	CreateProject        bool
+	ProjectConfig        string
+	FailOnProjectError   bool
+}
+
 // executeHydrate contains the core hydration logic separated from CLI concerns
 // executeHydrate performs the hydration operation with the given parameters.
 // It validates required parameters, resolves git context if needed, and orchestrates the hydration process.
-func executeHydrate(ctx context.Context, owner, repo, configPath string, issues, discussions, pullRequests, debug bool, cleanupFlags CleanupFlags) error {
+func executeHydrate(ctx context.Context, owner, repo, configPath string, issues, discussions, pullRequests, debug bool, cleanupFlags CleanupFlags, projectFlags ProjectFlags) error {
 	// Create logger for operations
 	logger := common.NewLogger(debug) // Use debug flag for logger
 
@@ -141,8 +148,25 @@ func executeHydrate(ctx context.Context, owner, repo, configPath string, issues,
 		}
 	}
 
-	// Perform hydration
-	err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, logger, cleanupFlags.DryRun)
+	// Perform hydration with project support
+	if projectFlags.CreateProject {
+		err = hydrate.HydrateWithProject(ctx, client, cfg, issues, discussions, pullRequests, logger, cleanupFlags.DryRun, true, projectFlags.ProjectConfig)
+	} else {
+		err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, logger, cleanupFlags.DryRun)
+	}
+
+	// Handle project-specific errors
+	if err != nil && projectFlags.CreateProject {
+		// Check if this is a project-related error
+		if errors.IsLayer(err, "project") && projectFlags.FailOnProjectError {
+			return err
+		} else if errors.IsLayer(err, "project") {
+			// Log project error but continue if FailOnProjectError is false
+			logger.Info("Project creation failed but continuing with standard hydration: %v", err)
+			// Retry with standard hydration
+			err = hydrate.HydrateWithLabels(ctx, client, cfg, issues, discussions, pullRequests, logger, cleanupFlags.DryRun)
+		}
+	}
 
 	// Handle the result
 	return handleHydrationResult(ctx, err, logger)
@@ -195,6 +219,9 @@ func NewHydrateCmd() *cobra.Command {
 
 	// Cleanup flags
 	var cleanupFlags CleanupFlags
+	
+	// Project flags
+	var projectFlags ProjectFlags
 
 	cmd := &cobra.Command{
 		Use:   "hydrate",
@@ -208,13 +235,18 @@ Cleanup flags allow you to clean existing objects before hydrating:
   --clean-prs: Clean only pull requests
   --clean-labels: Clean only labels
   --dry-run: Preview what would be created and deleted without actually performing operations
-  --preserve-config: Path to preserve configuration file (default: .github/demos/preserve.json)`,
+  --preserve-config: Path to preserve configuration file (default: .github/demos/preserve.json)
+
+Project flags allow you to create and organize content in a GitHub Project:
+  --create-project: Create a ProjectV2 and associate all created content with it
+  --project-config: Path to project configuration file (default: .github/demos/project-config.json)
+  --fail-on-project-error: Fail entire operation if project creation fails (default: continue with standard hydration)`,
 		Run: func(cmd *cobra.Command, args []string) {
 			// Create context with cancellation for Ctrl+C
 			ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
-			err := executeHydrate(ctx, owner, repo, configPath, issues, discussions, pullRequests, debug, cleanupFlags)
+			err := executeHydrate(ctx, owner, repo, configPath, issues, discussions, pullRequests, debug, cleanupFlags, projectFlags)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(1)
@@ -223,14 +255,14 @@ Cleanup flags allow you to clean existing objects before hydrating:
 	}
 
 	// Setup command line flags
-	setupHydrateCmdFlags(cmd, &owner, &repo, &configPath, &issues, &discussions, &pullRequests, &debug, &cleanupFlags)
+	setupHydrateCmdFlags(cmd, &owner, &repo, &configPath, &issues, &discussions, &pullRequests, &debug, &cleanupFlags, &projectFlags)
 
 	return cmd
 }
 
 // setupHydrateCmdFlags configures all command line flags for the hydrate command.
 // This separates flag configuration from command creation for better maintainability.
-func setupHydrateCmdFlags(cmd *cobra.Command, owner, repo, configPath *string, issues, discussions, pullRequests, debug *bool, cleanupFlags *CleanupFlags) {
+func setupHydrateCmdFlags(cmd *cobra.Command, owner, repo, configPath *string, issues, discussions, pullRequests, debug *bool, cleanupFlags *CleanupFlags, projectFlags *ProjectFlags) {
 	// Repository flags
 	cmd.Flags().StringVar(owner, "owner", "", "GitHub repository owner (required)")
 	cmd.Flags().StringVar(repo, "repo", "", "GitHub repository name (required)")
@@ -252,4 +284,9 @@ func setupHydrateCmdFlags(cmd *cobra.Command, owner, repo, configPath *string, i
 	cmd.Flags().BoolVar(&cleanupFlags.CleanLabels, "clean-labels", false, "Clean existing labels before hydrating")
 	cmd.Flags().BoolVar(&cleanupFlags.DryRun, "dry-run", false, "Preview what would be created and deleted without actually performing operations")
 	cmd.Flags().StringVar(&cleanupFlags.PreserveConfig, "preserve-config", "", "Path to preserve configuration file (default: .github/demos/preserve.json)")
+
+	// Project flags
+	cmd.Flags().BoolVar(&projectFlags.CreateProject, "create-project", false, "Create a ProjectV2 and associate all created content with it")
+	cmd.Flags().StringVar(&projectFlags.ProjectConfig, "project-config", "", "Path to project configuration file (default: .github/demos/project-config.json)")
+	cmd.Flags().BoolVar(&projectFlags.FailOnProjectError, "fail-on-project-error", false, "Fail entire operation if project creation fails (default: continue with standard hydration)")
 }
