@@ -322,17 +322,15 @@ const getLabelByNameQuery = `
 
 // createProjectV2Mutation creates a new ProjectV2 for a repository owner
 const createProjectV2Mutation = `
-	mutation CreateProjectV2($ownerId: ID!, $title: String!, $description: String) {
+	mutation CreateProjectV2($ownerId: ID!, $title: String!) {
 		createProjectV2(input: {
 			ownerId: $ownerId
 			title: $title
-			description: $description
 		}) {
 			projectV2 {
 				id
 				number
 				title
-				description
 				url
 			}
 		}

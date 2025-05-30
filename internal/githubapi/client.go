@@ -1357,19 +1357,17 @@ func (c *GHClient) CreateProjectV2(ctx context.Context, projectConfig types.Proj
 	var mutationResponse struct {
 		CreateProjectV2 struct {
 			ProjectV2 struct {
-				ID          string `json:"id"`
-				Number      int    `json:"number"`
-				Title       string `json:"title"`
-				Description string `json:"description"`
-				URL         string `json:"url"`
+				ID     string `json:"id"`
+				Number int    `json:"number"`
+				Title  string `json:"title"`
+				URL    string `json:"url"`
 			} `json:"projectV2"`
 		} `json:"createProjectV2"`
 	}
 
 	mutationVariables := map[string]interface{}{
-		"ownerId":     ownerID,
-		"title":       projectConfig.Title,
-		"description": projectConfig.Description,
+		"ownerId": ownerID,
+		"title":   projectConfig.Title,
 	}
 
 	createCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
@@ -1398,7 +1396,7 @@ func (c *GHClient) CreateProjectV2(ctx context.Context, projectConfig types.Proj
 		ID:          mutationResponse.CreateProjectV2.ProjectV2.ID,
 		Number:      mutationResponse.CreateProjectV2.ProjectV2.Number,
 		Title:       mutationResponse.CreateProjectV2.ProjectV2.Title,
-		Description: mutationResponse.CreateProjectV2.ProjectV2.Description,
+		Description: projectConfig.Description, // Use the original description from config
 		URL:         mutationResponse.CreateProjectV2.ProjectV2.URL,
 		Visibility:  projectConfig.Visibility,
 	}
