@@ -59,6 +59,14 @@ func TestGraphQLMutationSyntax(t *testing.T) {
 			name:     "addProjectV2ItemByIdMutation",
 			mutation: addProjectV2ItemByIdMutation,
 		},
+		{
+			name:     "createProjectV2FieldMutation",
+			mutation: createProjectV2FieldMutation,
+		},
+		{
+			name:     "createProjectV2SingleSelectFieldMutation",
+			mutation: createProjectV2SingleSelectFieldMutation,
+		},
 	}
 
 	for _, tt := range mutations {

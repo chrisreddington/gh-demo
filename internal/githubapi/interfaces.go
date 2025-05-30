@@ -16,12 +16,12 @@ type GitHubClient interface {
 	ListLabels(ctx context.Context) ([]string, error)
 	// CreateLabel creates a new label in the repository using the provided label data
 	CreateLabel(ctx context.Context, label types.Label) error
-	// CreateIssue creates a new issue in the repository using the provided issue data
-	CreateIssue(ctx context.Context, issue types.Issue) error
-	// CreateDiscussion creates a new discussion in the repository using the provided discussion data
-	CreateDiscussion(ctx context.Context, discussion types.Discussion) error
-	// CreatePR creates a new pull request in the repository using the provided pull request data
-	CreatePR(ctx context.Context, pullRequest types.PullRequest) error
+	// CreateIssue creates a new issue and returns detailed information about the created item
+	CreateIssue(ctx context.Context, issue types.Issue) (*types.CreatedItemInfo, error)
+	// CreateDiscussion creates a new discussion and returns detailed information about the created item
+	CreateDiscussion(ctx context.Context, discussion types.Discussion) (*types.CreatedItemInfo, error)
+	// CreatePR creates a new pull request and returns detailed information about the created item
+	CreatePR(ctx context.Context, pullRequest types.PullRequest) (*types.CreatedItemInfo, error)
 
 	// Listing operations for cleanup
 	// ListIssues retrieves all existing issues from the repository
@@ -44,6 +44,10 @@ type GitHubClient interface {
 	// ProjectV2 operations
 	// CreateProjectV2 creates a new ProjectV2 for the repository owner
 	CreateProjectV2(ctx context.Context, config types.ProjectV2Configuration) (*types.ProjectV2, error)
+	// ConfigureProjectV2Fields creates custom fields for a ProjectV2 based on the configuration
+	ConfigureProjectV2Fields(ctx context.Context, projectID string, fields []types.ProjectV2Field) error
+	// UpdateProjectV2Description updates the description of an existing ProjectV2
+	UpdateProjectV2Description(ctx context.Context, projectID, description string) error
 	// AddItemToProjectV2 adds an item (issue, PR, discussion) to a ProjectV2
 	AddItemToProjectV2(ctx context.Context, projectID, itemNodeID string) error
 	// GetProjectV2 retrieves project information by ID

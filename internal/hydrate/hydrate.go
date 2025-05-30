@@ -279,7 +279,7 @@ func createItems[T any](
 	client githubapi.GitHubClient,
 	items []T,
 	itemType string,
-	createFunc func(context.Context, T) error,
+	createFunc func(context.Context, T) (*types.CreatedItemInfo, error),
 	getTitleFunc func(T) string,
 	logger common.Logger,
 	dryRun bool,
@@ -303,7 +303,8 @@ func createItems[T any](
 			logger.Info("Would create %s: %s", strings.ToLower(itemType[:len(itemType)-1]), title)
 			summary.Success++
 		} else {
-			if err := createFunc(ctx, item); err != nil {
+			_, err := createFunc(ctx, item)
+			if err != nil {
 				errorMsg := common.FormatCreationError(itemType[:len(itemType)-1], title, i, err)
 				errors = append(errors, errorMsg)
 				summary.Errors = append(summary.Errors, errorMsg)
@@ -762,7 +763,7 @@ func createProjectV2(ctx context.Context, client githubapi.GitHubClient, cfg *co
 
 	logger.Info("Creating ProjectV2 '%s'", projectConfig.Title)
 
-	// Create the project
+	// Create the basic project
 	project, err := client.CreateProjectV2(ctx, *projectConfig)
 	if err != nil {
 		// Check for permission errors and provide helpful guidance
@@ -778,10 +779,48 @@ func createProjectV2(ctx context.Context, client githubapi.GitHubClient, cfg *co
 		return nil, errors.ProjectError("create_project", "failed to create ProjectV2", err)
 	}
 
-	logger.Info("Successfully created ProjectV2 '%s' (Number: %d, URL: %s)", 
+	logger.Info("Successfully created ProjectV2 '%s' (Number: %d, URL: %s)",
 		project.Title, project.Number, project.URL)
 
+	// Configure project with additional settings
+	err = configureProjectV2Additional(ctx, client, project.ID, *projectConfig, logger)
+	if err != nil {
+		logger.Info("Warning: Failed to configure some project settings: %v", err)
+		// Don't fail the entire operation - the basic project was created successfully
+	}
+
 	return project, nil
+}
+
+// configureProjectV2Additional configures additional project settings like description, fields, and views.
+func configureProjectV2Additional(ctx context.Context, client githubapi.GitHubClient, projectID string, projectConfig types.ProjectV2Configuration, logger common.Logger) error {
+	errorCollector := errors.NewErrorCollector("configure_project_additional")
+
+	// TODO: Update project description - currently disabled due to API schema issues
+	if strings.TrimSpace(projectConfig.Description) != "" {
+		logger.Debug("Project description configuration is currently disabled (GitHub API limitations)")
+		// Temporarily disabled: err := client.UpdateProjectV2Description(ctx, projectID, projectConfig.Description)
+	}
+
+	// Create custom fields - now working with updated GitHub API schema
+	if len(projectConfig.Fields) > 0 {
+		logger.Info("Creating %d custom fields for project", len(projectConfig.Fields))
+		err := client.ConfigureProjectV2Fields(ctx, projectID, projectConfig.Fields)
+		if err != nil {
+			logger.Info("Warning: Failed to create some custom fields: %v", err)
+			errorCollector.Add(errors.ProjectError("configure_project_fields", "failed to configure custom fields", err))
+		} else {
+			logger.Info("Successfully configured all custom fields")
+		}
+	}
+
+	// Note: Views are not currently supported by GitHub's GraphQL API
+	// They can only be created through the web interface
+	if len(projectConfig.Views) > 0 {
+		logger.Info("Note: Custom project views cannot be created via API - please configure them manually in the GitHub web interface")
+	}
+
+	return errorCollector.Result()
 }
 
 // createRepositoryContentWithProject orchestrates the creation of all content types with optional project association.
@@ -793,43 +832,41 @@ func createRepositoryContentWithProject(ctx context.Context, client githubapi.Gi
 
 	// Create issues
 	if includeIssues && len(issues) > 0 {
-		itemsCreated, err := createItemsWithTracking(ctx, client, issues, "Issues", func(ctx context.Context, item types.Issue) error {
+		itemsCreated, err := createItemsWithTracking(ctx, client, issues, "Issues", func(ctx context.Context, item types.Issue) (*types.CreatedItemInfo, error) {
 			return client.CreateIssue(ctx, item)
 		}, logger, dryRun)
 		if err != nil {
-			if !errors.IsPartialFailure(err) {
-				return errors.APIError("create_issues", "failed to create issues", err)
-			}
+			// Log the error but don't fail the entire operation
 			logger.Info("Some issues failed to create: %v", err)
 		}
+		// Always append created items, even if some failed
 		createdItems = append(createdItems, itemsCreated...)
 	}
 
 	// Create discussions
 	if includeDiscussions && len(discussions) > 0 {
-		itemsCreated, err := createItemsWithTracking(ctx, client, discussions, "Discussions", func(ctx context.Context, item types.Discussion) error {
+		itemsCreated, err := createItemsWithTracking(ctx, client, discussions, "Discussions", func(ctx context.Context, item types.Discussion) (*types.CreatedItemInfo, error) {
 			return client.CreateDiscussion(ctx, item)
 		}, logger, dryRun)
 		if err != nil {
-			if !errors.IsPartialFailure(err) {
-				return errors.APIError("create_discussions", "failed to create discussions", err)
-			}
+			// Log the error but don't fail the entire operation
 			logger.Info("Some discussions failed to create: %v", err)
 		}
+		// Always append created items, even if some failed
 		createdItems = append(createdItems, itemsCreated...)
 	}
 
 	// Create pull requests
 	if includePullRequests && len(pullRequests) > 0 {
-		itemsCreated, err := createItemsWithTracking(ctx, client, pullRequests, "Pull Requests", func(ctx context.Context, item types.PullRequest) error {
+		itemsCreated, err := createItemsWithTracking(ctx, client, pullRequests, "Pull Requests", func(ctx context.Context, item types.PullRequest) (*types.CreatedItemInfo, error) {
 			return client.CreatePR(ctx, item)
 		}, logger, dryRun)
 		if err != nil {
-			if !errors.IsPartialFailure(err) {
-				return errors.APIError("create_pull_requests", "failed to create pull requests", err)
-			}
+			// Log the error but don't fail the entire operation
+			// We want to add successfully created items to the project even if some PRs failed
 			logger.Info("Some pull requests failed to create: %v", err)
 		}
+		// Always append created items, even if some failed
 		createdItems = append(createdItems, itemsCreated...)
 	}
 
@@ -862,7 +899,7 @@ func createItemsWithTracking[T any](
 	client githubapi.GitHubClient,
 	items []T,
 	itemType string,
-	createFunc func(context.Context, T) error,
+	createFunc func(context.Context, T) (*types.CreatedItemInfo, error),
 	logger common.Logger,
 	dryRun bool,
 ) ([]CreatedItem, error) {
@@ -876,21 +913,17 @@ func createItemsWithTracking[T any](
 	errorCollector := errors.NewErrorCollector(fmt.Sprintf("create_%s", strings.ToLower(itemType)))
 
 	for i, item := range items {
-		// Extract title and node ID for tracking
+		// Extract title for tracking
 		var title string
-		var nodeID string
-		
-		// Use type assertions to get the title and node ID
+
+		// Use type assertions to get the title
 		switch v := any(item).(type) {
 		case types.Issue:
 			title = v.Title
-			nodeID = v.NodeID
 		case types.Discussion:
 			title = v.Title
-			nodeID = v.NodeID
 		case types.PullRequest:
 			title = v.Title
-			nodeID = v.NodeID
 		}
 
 		if dryRun {
@@ -904,23 +937,20 @@ func createItemsWithTracking[T any](
 			continue
 		}
 
-		if err := createFunc(ctx, item); err != nil {
-			wrappedErr := errors.APIError(fmt.Sprintf("create_%s", strings.ToLower(itemType[:len(itemType)-1])), 
+		createdItemInfo, err := createFunc(ctx, item)
+		if err != nil {
+			wrappedErr := errors.APIError(fmt.Sprintf("create_%s", strings.ToLower(itemType[:len(itemType)-1])),
 				fmt.Sprintf("failed to create %s", strings.ToLower(itemType[:len(itemType)-1])), err)
 			wrappedErr = errors.WithContextSafe(wrappedErr, "title", title)
 			errorCollector.Add(wrappedErr)
 			logger.Info("Failed to create %s '%s': %v", strings.ToLower(itemType[:len(itemType)-1]), title, err)
 		} else {
 			logger.Info("Created %s: %s", strings.ToLower(itemType[:len(itemType)-1]), title)
-			// Track successful creation (note: we need to get the actual node ID after creation)
-			// For now, we'll use the nodeID if available, otherwise generate a placeholder
-			if nodeID == "" {
-				nodeID = fmt.Sprintf("created-%s-%d", strings.ToLower(itemType), i)
-			}
+			// Track successful creation with actual node ID from GitHub
 			createdItems = append(createdItems, CreatedItem{
-				NodeID: nodeID,
-				Title:  title,
-				Type:   strings.ToLower(itemType[:len(itemType)-1]), // Remove 's' from plural
+				NodeID: createdItemInfo.NodeID,
+				Title:  createdItemInfo.Title,
+				Type:   createdItemInfo.Type,
 			})
 		}
 	}

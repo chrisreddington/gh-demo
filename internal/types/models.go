@@ -51,24 +51,24 @@ type Label struct {
 // ProjectV2 represents a GitHub ProjectV2 that can be created for organizing repository content.
 // It contains all the fields that can be specified when creating a project via the GitHub API.
 type ProjectV2 struct {
-	NodeID      string `json:"node_id,omitempty"`      // GitHub node ID for project operations
-	ID          string `json:"id,omitempty"`           // Project ID for API operations
-	Number      int    `json:"number,omitempty"`       // Project number for identification
-	Title       string `json:"title"`                  // Project title
-	Description string `json:"description,omitempty"`  // Project description
-	Visibility  string `json:"visibility,omitempty"`   // Project visibility (private/public)
-	URL         string `json:"url,omitempty"`          // Project URL
+	NodeID      string `json:"node_id,omitempty"`     // GitHub node ID for project operations
+	ID          string `json:"id,omitempty"`          // Project ID for API operations
+	Number      int    `json:"number,omitempty"`      // Project number for identification
+	Title       string `json:"title"`                 // Project title
+	Description string `json:"description,omitempty"` // Project description
+	Visibility  string `json:"visibility,omitempty"`  // Project visibility (private/public)
+	URL         string `json:"url,omitempty"`         // Project URL
 }
 
 // ProjectV2Configuration defines the configuration for creating a ProjectV2.
 // It provides options for customizing project creation with sensible defaults.
 type ProjectV2Configuration struct {
-	Title       string                     `json:"title"`                 // Project title (required)
-	Description string                     `json:"description,omitempty"` // Project description
-	Visibility  string                     `json:"visibility,omitempty"`  // Project visibility (private/public, defaults to private)
-	Fields      []ProjectV2Field           `json:"fields,omitempty"`      // Custom project fields
-	Views       []ProjectV2View            `json:"views,omitempty"`       // Project views/layouts
-	Templates   []ProjectV2ItemTemplate    `json:"templates,omitempty"`   // Item templates for different content types
+	Title       string                  `json:"title"`                 // Project title (required)
+	Description string                  `json:"description,omitempty"` // Project description
+	Visibility  string                  `json:"visibility,omitempty"`  // Project visibility (private/public, defaults to private)
+	Fields      []ProjectV2Field        `json:"fields,omitempty"`      // Custom project fields
+	Views       []ProjectV2View         `json:"views,omitempty"`       // Project views/layouts
+	Templates   []ProjectV2ItemTemplate `json:"templates,omitempty"`   // Item templates for different content types
 }
 
 // ProjectV2Field represents a custom field that can be added to a project.
@@ -88,13 +88,13 @@ type ProjectV2FieldOption struct {
 
 // ProjectV2View represents a view/layout configuration for a project.
 type ProjectV2View struct {
-	Name        string                     `json:"name"`                  // View name
-	Description string                     `json:"description,omitempty"` // View description
-	Layout      string                     `json:"layout,omitempty"`      // View layout (table, board, etc.)
-	Fields      []string                   `json:"fields,omitempty"`      // Fields to display in view
-	Filters     []ProjectV2ViewFilter      `json:"filters,omitempty"`     // View filters
-	GroupBy     string                     `json:"group_by,omitempty"`    // Field to group by
-	SortBy      []ProjectV2ViewSort        `json:"sort_by,omitempty"`     // Sort configuration
+	Name        string                `json:"name"`                  // View name
+	Description string                `json:"description,omitempty"` // View description
+	Layout      string                `json:"layout,omitempty"`      // View layout (table, board, etc.)
+	Fields      []string              `json:"fields,omitempty"`      // Fields to display in view
+	Filters     []ProjectV2ViewFilter `json:"filters,omitempty"`     // View filters
+	GroupBy     string                `json:"group_by,omitempty"`    // Field to group by
+	SortBy      []ProjectV2ViewSort   `json:"sort_by,omitempty"`     // Sort configuration
 }
 
 // ProjectV2ViewFilter represents a filter for project views.
@@ -112,7 +112,16 @@ type ProjectV2ViewSort struct {
 
 // ProjectV2ItemTemplate defines default field values for different content types.
 type ProjectV2ItemTemplate struct {
-	ContentType  string                 `json:"content_type"`           // Content type (issue, pull_request, discussion)
-	FieldValues  map[string]interface{} `json:"field_values,omitempty"` // Default field values
-	Description  string                 `json:"description,omitempty"`  // Template description
+	ContentType string                 `json:"content_type"`           // Content type (issue, pull_request, discussion)
+	FieldValues map[string]interface{} `json:"field_values,omitempty"` // Default field values
+	Description string                 `json:"description,omitempty"`  // Template description
+}
+
+// CreatedItemInfo represents information about a successfully created GitHub item.
+type CreatedItemInfo struct {
+	NodeID string // The GitHub node ID of the created item
+	Title  string // The title of the created item
+	Type   string // The type of item (issue, discussion, pull_request)
+	Number int    // The GitHub number of the created item
+	URL    string // The URL to the created item
 }

@@ -374,3 +374,72 @@ const getRepositoryOwnerIdQuery = `
 		}
 	}
 `
+
+// createProjectV2FieldMutation creates a custom field in a ProjectV2
+const createProjectV2FieldMutation = `
+	mutation CreateProjectV2Field($projectId: ID!, $dataType: ProjectV2CustomFieldType!, $name: String!) {
+		createProjectV2Field(input: {
+			projectId: $projectId
+			dataType: $dataType
+			name: $name
+		}) {
+			projectV2Field {
+				... on ProjectV2Field {
+					id
+					name
+					dataType
+				}
+				... on ProjectV2IterationField {
+					id
+					name
+					dataType
+				}
+				... on ProjectV2SingleSelectField {
+					id
+					name
+					dataType
+				}
+			}
+		}
+	}
+`
+
+// createProjectV2SingleSelectFieldMutation creates a single select field with options
+const createProjectV2SingleSelectFieldMutation = `
+	mutation CreateProjectV2SingleSelectField($projectId: ID!, $name: String!, $options: [ProjectV2SingleSelectFieldOptionInput!]!) {
+		createProjectV2Field(input: {
+			projectId: $projectId
+			dataType: SINGLE_SELECT
+			name: $name
+			singleSelectOptions: $options
+		}) {
+			projectV2Field {
+				... on ProjectV2SingleSelectField {
+					id
+					name
+					dataType
+					options {
+						id
+						name
+						nameHTML
+					}
+				}
+			}
+		}
+	}
+`
+
+// updateProjectV2Mutation updates a ProjectV2 with description
+const updateProjectV2Mutation = `
+	mutation UpdateProjectV2($projectId: ID!, $description: String) {
+		updateProjectV2(input: {
+			projectId: $projectId
+			description: $description
+		}) {
+			projectV2 {
+				id
+				description
+			}
+		}
+	}
+`

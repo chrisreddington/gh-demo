@@ -87,6 +87,8 @@ gh demo hydrate --help
 
 The `--create-project` flag creates a GitHub ProjectV2 and associates all created issues, discussions, and pull requests with it. Project configuration is defined in JSON format.
 
+**Custom Fields Support:** The tool now supports creating custom fields including single select options with proper color validation. All field types supported by GitHub ProjectV2 are available: `single_select`, `text`, `number`, and `date`.
+
 ### Project Configuration Schema
 
 | Field       | Type                    | Description                                    | Required |
@@ -105,9 +107,41 @@ The `--create-project` flag creates a GitHub ProjectV2 and associates all create
 | Field       | Type                         | Description                                    | Required |
 |-------------|------------------------------|------------------------------------------------|----------|
 | name        | string                       | Field name                                     | Yes      |
-| type        | string                       | Field type ("single_select", "text", "number")| Yes      |
+| type        | string                       | Field type ("single_select", "text", "number", "date") | Yes      |
 | description | string                       | Field description                              | No       |
-| options     | []ProjectV2FieldOption       | Options for select fields                      | No       |
+| options     | []ProjectV2FieldOption       | Options for single_select fields              | No       |
+
+#### ProjectV2FieldOption Schema
+
+| Field       | Type   | Description                                    | Required |
+|-------------|--------|------------------------------------------------|----------|
+| name        | string | Option display name                            | Yes      |
+| description | string | Option description                             | Yes      |
+| color       | string | Option color (see allowed values below)       | Yes      |
+
+#### Allowed Color Values for Single Select Options
+
+The `color` field must use one of the following GitHub enum values:
+
+- `GRAY` - Light gray
+- `BLUE` - Blue  
+- `GREEN` - Green
+- `YELLOW` - Yellow
+- `ORANGE` - Orange
+- `RED` - Red
+- `PINK` - Pink
+- `PURPLE` - Purple
+
+**Note:** Color values are case-insensitive. Invalid colors will default to `GRAY`.
+
+#### Reserved Field Names
+
+Avoid using these reserved field names which conflict with GitHub's built-in project fields:
+- `Status` - Use alternative names like "Workflow Status", "Progress", or "State"
+- `Assignees` - Built-in field for issue/PR assignees
+- `Labels` - Built-in field for issue/PR labels  
+- `Milestone` - Built-in field for milestones
+- `Repository` - Built-in field for the source repository
 
 ### Example Project Configuration
 
@@ -120,28 +154,68 @@ The `--create-project` flag creates a GitHub ProjectV2 and associates all create
     {
       "name": "Priority",
       "type": "single_select",
-      "description": "Priority level",
+      "description": "Priority level for the content item",
       "options": [
         {
-          "name": "High",
-          "color": "d73a4a"
+          "name": "🔥 Critical",
+          "description": "Urgent items requiring immediate attention",
+          "color": "RED"
         },
         {
-          "name": "Medium", 
-          "color": "fbca04"
+          "name": "⚠️ High",
+          "description": "Important items that should be addressed soon", 
+          "color": "ORANGE"
         },
         {
-          "name": "Low",
-          "color": "0e8a16"
+          "name": "📋 Medium",
+          "description": "Standard priority items",
+          "color": "YELLOW"
+        },
+        {
+          "name": "📝 Low",
+          "description": "Nice to have items",
+          "color": "GREEN"
         }
       ]
+    },
+    {
+      "name": "Status",
+      "type": "single_select", 
+      "description": "Current status of the item",
+      "options": [
+        {
+          "name": "📋 To Do",
+          "description": "Items that haven't been started",
+          "color": "GRAY"
+        },
+        {
+          "name": "🔄 In Progress", 
+          "description": "Items currently being worked on",
+          "color": "YELLOW"
+        },
+        {
+          "name": "✅ Done",
+          "description": "Completed items", 
+          "color": "GREEN"
+        }
+      ]
+    },
+    {
+      "name": "Effort Estimate",
+      "type": "text",
+      "description": "Estimated effort required"
+    },
+    {
+      "name": "Due Date",
+      "type": "date",
+      "description": "Target completion date"
     }
   ],
   "views": [
     {
       "name": "All Items",
       "description": "Complete view of all project items",
-      "layout": "table",
+      "layout": "table", 
       "fields": ["title", "assignees", "status", "priority"]
     }
   ]

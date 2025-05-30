@@ -369,12 +369,12 @@ func (c *GHClient) resolveUserIDs(ctx context.Context, userLogins []string) ([]s
 	return userIDs, nil
 }
 
-// CreateIssue creates a new issue in the repository using the provided issue data.
+// CreateIssue creates a new issue in the repository and returns detailed information about the created item.
 // It validates that the GraphQL client is initialized and creates the issue with
 // the specified title, body, labels, and assignees using GraphQL mutations.
-func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
+func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) (*types.CreatedItemInfo, error) {
 	if c.gqlClient == nil {
-		return errors.ValidationError("validate_client", "GraphQL client is not initialized")
+		return nil, errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
 
 	c.debugLog("Creating issue '%s' in repository %s/%s", issue.Title, c.Owner, c.Repo)
@@ -399,27 +399,27 @@ func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 	if err != nil {
 		c.debugLog("Failed to fetch repository ID for issue creation: %v", err)
 		if errors.IsContextError(err) {
-			return errors.ContextError("get_repository_id", err)
+			return nil, errors.ContextError("get_repository_id", err)
 		}
-		return errors.APIError("get_repository_id", "failed to fetch repository ID", err)
+		return nil, errors.APIError("get_repository_id", "failed to fetch repository ID", err)
 	}
 
 	if repoResponse.Repository.ID == "" {
-		return errors.ValidationError("validate_repository", "repository not found")
+		return nil, errors.ValidationError("validate_repository", "repository not found")
 	}
 
 	// Resolve label names to IDs
 	labelIDs, err := c.resolveLabelIDs(ctx, issue.Labels)
 	if err != nil {
 		c.debugLog("Failed to resolve label IDs: %v", err)
-		return errors.APIError("resolve_labels", "failed to resolve label IDs", err)
+		return nil, errors.APIError("resolve_labels", "failed to resolve label IDs", err)
 	}
 
 	// Resolve assignee logins to IDs
 	assigneeIDs, err := c.resolveUserIDs(ctx, issue.Assignees)
 	if err != nil {
 		c.debugLog("Failed to resolve assignee IDs: %v", err)
-		return errors.APIError("resolve_assignees", "failed to resolve assignee IDs", err)
+		return nil, errors.APIError("resolve_assignees", "failed to resolve assignee IDs", err)
 	}
 
 	// Create the issue using GraphQL mutation
@@ -450,30 +450,37 @@ func (c *GHClient) CreateIssue(ctx context.Context, issue types.Issue) error {
 	if err != nil {
 		c.debugLog("Failed to create issue '%s': %v", issue.Title, err)
 		if errors.IsContextError(err) {
-			return errors.ContextError("create_issue", err)
+			return nil, errors.ContextError("create_issue", err)
 		}
 		layeredErr := errors.NewLayeredError("api", "create_issue", "failed to create GitHub issue", err)
-		return layeredErr.WithContext("title", issue.Title)
+		return nil, layeredErr.WithContext("title", issue.Title)
 	}
 
 	// Verify issue was created
 	if mutationResponse.CreateIssue.Issue.ID == "" {
 		c.debugLog("Issue creation for '%s' failed - no Issue ID returned", issue.Title)
 		err := errors.APIError("create_issue", "issue creation failed - no Issue ID returned from GitHub API", nil)
-		return errors.WithContextSafe(err, "title", issue.Title)
+		return nil, errors.WithContextSafe(err, "title", issue.Title)
 	}
 
 	c.debugLog("Successfully created issue '%s' (Number: %d, URL: %s)",
 		issue.Title, mutationResponse.CreateIssue.Issue.Number, mutationResponse.CreateIssue.Issue.URL)
-	return nil
+
+	return &types.CreatedItemInfo{
+		NodeID: mutationResponse.CreateIssue.Issue.ID,
+		Title:  mutationResponse.CreateIssue.Issue.Title,
+		Type:   "issue",
+		Number: mutationResponse.CreateIssue.Issue.Number,
+		URL:    mutationResponse.CreateIssue.Issue.URL,
+	}, nil
 }
 
-// CreateDiscussion creates a new discussion in the repository using the provided discussion data.
+// CreateDiscussion creates a new discussion in the repository and returns detailed information about the created item.
 // It uses GraphQL to create the discussion with the specified title, body, category, and labels.
 // The method automatically finds the correct category ID and adds labels after creation.
-func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discussion) error {
+func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discussion) (*types.CreatedItemInfo, error) {
 	if c.gqlClient == nil {
-		return errors.ValidationError("validate_client", "GraphQL client is not initialized")
+		return nil, errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
 
 	c.debugLog("Creating discussion '%s' in repository %s/%s", discussion.Title, c.Owner, c.Repo)
@@ -504,7 +511,7 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	err := c.gqlClient.Do(apiCtx, repositoryWithDiscussionCategoriesQuery, repoVariables, &repoResponse)
 	if err != nil {
 		c.debugLog("Failed to fetch repository info for discussion: %v", err)
-		return errors.APIError("fetch_repository_info", "failed to fetch repository info", err)
+		return nil, errors.APIError("fetch_repository_info", "failed to fetch repository info", err)
 	}
 
 	// Get available categories for debugging
@@ -531,7 +538,7 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 			discussion.Category, availableCategories)
 		err := errors.ValidationError("validate_discussion_category", fmt.Sprintf("discussion category '%s' not found in available categories", discussion.Category))
 		err = errors.WithContextSafe(err, "requested_category", discussion.Category)
-		return errors.WithContextSafe(err, "available_categories", fmt.Sprintf("%v", availableCategories))
+		return nil, errors.WithContextSafe(err, "available_categories", fmt.Sprintf("%v", availableCategories))
 	}
 
 	c.debugLog("Found matching category ID for '%s': %s (actual: '%s')",
@@ -570,7 +577,7 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	err = c.gqlClient.Do(createCtx, createDiscussionMutation, mutationVariables, &mutationResponse)
 	if err != nil {
 		c.debugLog("Failed to create discussion '%s': %v", discussion.Title, err)
-		return errors.APIError("create_discussion", "failed to create discussion", err)
+		return nil, errors.APIError("create_discussion", "failed to create discussion", err)
 	}
 
 	// Debug: Log what we got back from GitHub
@@ -584,7 +591,7 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	if mutationResponse.CreateDiscussion.Discussion.ID == "" {
 		c.debugLog("Discussion creation for '%s' failed - no Discussion ID returned", discussion.Title)
 		err := errors.APIError("create_discussion", "discussion creation failed - no Discussion ID returned from GitHub API", nil)
-		return errors.WithContextSafe(err, "title", discussion.Title)
+		return nil, errors.WithContextSafe(err, "title", discussion.Title)
 	}
 
 	discussionID := mutationResponse.CreateDiscussion.Discussion.ID
@@ -608,7 +615,13 @@ func (c *GHClient) CreateDiscussion(ctx context.Context, discussion types.Discus
 	}
 
 	c.debugLog("Successfully created discussion '%s' (URL: %s)", discussion.Title, discussionURL)
-	return nil
+	return &types.CreatedItemInfo{
+		NodeID: mutationResponse.CreateDiscussion.Discussion.ID,
+		Title:  mutationResponse.CreateDiscussion.Discussion.Title,
+		Type:   "discussion",
+		Number: mutationResponse.CreateDiscussion.Discussion.Number,
+		URL:    mutationResponse.CreateDiscussion.Discussion.URL,
+	}, nil
 }
 
 // addLabelToDiscussion is a helper method to add a label to a discussion
@@ -747,11 +760,11 @@ func (c *GHClient) addLabelsAndAssigneesToPR(ctx context.Context, prID string, l
 	return nil
 }
 
-// CreatePR creates a new pull request in the repository using the provided pull request data.
+// CreatePR creates a new pull request in the repository and returns detailed information about the created item.
 // It validates the head and base branches, creates the PR via GraphQL API, and adds labels/assignees if specified.
-func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) error {
+func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) (*types.CreatedItemInfo, error) {
 	if c.gqlClient == nil {
-		return errors.ValidationError("validate_client", "GraphQL client is not initialized")
+		return nil, errors.ValidationError("validate_client", "GraphQL client is not initialized")
 	}
 
 	c.debugLog("Creating pull request '%s' in repository %s/%s (head: %s, base: %s)", pullRequest.Title, c.Owner, c.Repo, pullRequest.Head, pullRequest.Base)
@@ -759,15 +772,15 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 	// Basic validation
 	if pullRequest.Head == "" {
 		c.debugLog("PR head branch is empty")
-		return errors.ValidationError("validate_pr", "head branch cannot be empty")
+		return nil, errors.ValidationError("validate_pr", "head branch cannot be empty")
 	}
 	if pullRequest.Base == "" {
 		c.debugLog("PR base branch is empty")
-		return errors.ValidationError("validate_pr", "base branch cannot be empty")
+		return nil, errors.ValidationError("validate_pr", "base branch cannot be empty")
 	}
 	if pullRequest.Head == pullRequest.Base {
 		c.debugLog("PR head and base branches are the same: %s", pullRequest.Head)
-		return errors.ValidationError("validate_pr", fmt.Sprintf("head and base branches cannot be the same (%s)", pullRequest.Head))
+		return nil, errors.ValidationError("validate_pr", fmt.Sprintf("head and base branches cannot be the same (%s)", pullRequest.Head))
 	}
 
 	// First, get the repository ID
@@ -790,13 +803,13 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 	if err != nil {
 		c.debugLog("Failed to fetch repository ID for PR creation: %v", err)
 		if errors.IsContextError(err) {
-			return errors.ContextError("get_repository_id", err)
+			return nil, errors.ContextError("get_repository_id", err)
 		}
-		return errors.APIError("get_repository_id", "failed to fetch repository ID", err)
+		return nil, errors.APIError("get_repository_id", "failed to fetch repository ID", err)
 	}
 
 	if repoResponse.Repository.ID == "" {
-		return errors.ValidationError("validate_repository", "repository not found")
+		return nil, errors.ValidationError("validate_repository", "repository not found")
 	}
 
 	// Create the pull request using GraphQL mutation
@@ -827,19 +840,19 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 	if err != nil {
 		c.debugLog("Failed to create pull request '%s': %v", pullRequest.Title, err)
 		if errors.IsContextError(err) {
-			return errors.ContextError("create_pull_request", err)
+			return nil, errors.ContextError("create_pull_request", err)
 		}
 		err = errors.APIError("create_pull_request", "failed to create pull request", err)
 		err = errors.WithContextSafe(err, "title", pullRequest.Title)
 		err = errors.WithContextSafe(err, "head", pullRequest.Head)
-		return errors.WithContextSafe(err, "base", pullRequest.Base)
+		return nil, errors.WithContextSafe(err, "base", pullRequest.Base)
 	}
 
 	// Verify PR was created
 	if mutationResponse.CreatePullRequest.PullRequest.ID == "" {
 		c.debugLog("PR creation for '%s' failed - no PR ID returned", pullRequest.Title)
 		err := errors.APIError("create_pull_request", "pull request creation failed - no PR ID returned from GitHub API", nil)
-		return errors.WithContextSafe(err, "title", pullRequest.Title)
+		return nil, errors.WithContextSafe(err, "title", pullRequest.Title)
 	}
 
 	prID := mutationResponse.CreatePullRequest.PullRequest.ID
@@ -853,12 +866,18 @@ func (c *GHClient) CreatePR(ctx context.Context, pullRequest types.PullRequest) 
 		if err != nil {
 			c.debugLog("Failed to add labels/assignees to PR '%s': %v", pullRequest.Title, err)
 			err = errors.APIError("add_pr_labels_assignees", "created PR but failed to add labels/assignees", err)
-			return errors.WithContextSafe(err, "title", pullRequest.Title)
+			return nil, errors.WithContextSafe(err, "title", pullRequest.Title)
 		}
 	}
 
 	c.debugLog("Successfully created pull request '%s'", pullRequest.Title)
-	return nil
+	return &types.CreatedItemInfo{
+		NodeID: mutationResponse.CreatePullRequest.PullRequest.ID,
+		Title:  mutationResponse.CreatePullRequest.PullRequest.Title,
+		Type:   "pull_request",
+		Number: mutationResponse.CreatePullRequest.PullRequest.Number,
+		URL:    mutationResponse.CreatePullRequest.PullRequest.URL,
+	}, nil
 }
 
 // Listing operations for cleanup
@@ -1379,15 +1398,15 @@ func (c *GHClient) CreateProjectV2(ctx context.Context, projectConfig types.Proj
 		if errors.IsContextError(err) {
 			return nil, errors.ContextError("create_project", err)
 		}
-		
+
 		// Check for permission errors
-		if strings.Contains(strings.ToLower(err.Error()), "permission") || 
-		   strings.Contains(strings.ToLower(err.Error()), "forbidden") ||
-		   strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
-			return nil, errors.ProjectPermissionError("create_project", 
+		if strings.Contains(strings.ToLower(err.Error()), "permission") ||
+			strings.Contains(strings.ToLower(err.Error()), "forbidden") ||
+			strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
+			return nil, errors.ProjectPermissionError("create_project",
 				"insufficient permissions to create projects - ensure token has write:org or write:user scope", err)
 		}
-		
+
 		return nil, errors.ProjectError("create_project", "failed to create ProjectV2", err)
 	}
 
@@ -1405,6 +1424,232 @@ func (c *GHClient) CreateProjectV2(ctx context.Context, projectConfig types.Proj
 		project.Title, project.ID, project.Number, project.URL)
 
 	return project, nil
+}
+
+// ConfigureProjectV2Fields creates custom fields for a ProjectV2 based on the configuration.
+// This should be called after creating the basic project to add custom fields like Priority, Status, etc.
+func (c *GHClient) ConfigureProjectV2Fields(ctx context.Context, projectID string, fields []types.ProjectV2Field) error {
+	if c.gqlClient == nil {
+		return errors.ValidationError("configure_project_fields", "GraphQL client is not initialized")
+	}
+
+	if len(fields) == 0 {
+		c.debugLog("No custom fields to create for project")
+		return nil
+	}
+
+	c.debugLog("Creating %d custom fields for ProjectV2", len(fields))
+
+	errorCollector := errors.NewErrorCollector("configure_project_fields")
+
+	for _, field := range fields {
+		err := c.createProjectV2Field(ctx, projectID, field)
+		if err != nil {
+			wrappedErr := errors.ProjectError("create_project_field", "failed to create project field", err)
+			wrappedErr = errors.WithContextSafe(wrappedErr, "field_name", field.Name)
+			wrappedErr = errors.WithContextSafe(wrappedErr, "field_type", field.Type)
+			errorCollector.Add(wrappedErr)
+			c.debugLog("Failed to create field '%s': %v", field.Name, err)
+		} else {
+			c.debugLog("Successfully created field '%s' (type: %s)", field.Name, field.Type)
+		}
+	}
+
+	return errorCollector.Result()
+}
+
+// createProjectV2Field creates a single custom field for a ProjectV2.
+func (c *GHClient) createProjectV2Field(ctx context.Context, projectID string, field types.ProjectV2Field) error {
+	if field.Type == "single_select" && len(field.Options) > 0 {
+		// Create single select field with options
+		return c.createProjectV2SingleSelectField(ctx, projectID, field)
+	}
+
+	// Create basic field (text, number, date, etc.)
+	var mutationResponse struct {
+		CreateProjectV2Field struct {
+			ProjectV2Field struct {
+				ID       string `json:"id"`
+				Name     string `json:"name"`
+				DataType string `json:"dataType"`
+			} `json:"projectV2Field"`
+		} `json:"createProjectV2Field"`
+	}
+
+	// Map field type to GraphQL enum - these are the valid ProjectV2CustomFieldType values
+	dataType := strings.ToUpper(field.Type)
+	switch dataType {
+	case "TEXT":
+		dataType = "TEXT"
+	case "NUMBER":
+		dataType = "NUMBER"
+	case "DATE":
+		dataType = "DATE"
+	case "SINGLE_SELECT":
+		// This should not happen here as single_select is handled separately
+		return errors.ValidationError("create_project_field", "single_select fields should use createProjectV2SingleSelectField")
+	default:
+		return errors.ValidationError("create_project_field", fmt.Sprintf("unsupported field type: %s. Supported types: text, number, date, single_select", field.Type))
+	}
+
+	mutationVariables := map[string]interface{}{
+		"projectId": projectID,
+		"dataType":  dataType,
+		"name":      field.Name,
+	}
+
+	createCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(createCtx, createProjectV2FieldMutation, mutationVariables, &mutationResponse)
+	if err != nil {
+		return errors.APIError("create_project_field", fmt.Sprintf("failed to create project field '%s'", field.Name), err)
+	}
+
+	c.debugLog("Successfully created project field: %s (type: %s)", field.Name, dataType)
+	return nil
+}
+
+// createProjectV2SingleSelectField creates a single select field with options.
+func (c *GHClient) createProjectV2SingleSelectField(ctx context.Context, projectID string, field types.ProjectV2Field) error {
+	// Convert field options to GraphQL format using ProjectV2SingleSelectFieldOptionInput structure
+	var options []map[string]interface{}
+	for _, option := range field.Options {
+		// Ensure description is not empty as it's required by GitHub API
+		description := option.Description
+		if description == "" {
+			description = option.Name // Use name as fallback description
+		}
+		
+		gqlOption := map[string]interface{}{
+			"name":        option.Name,
+			"description": description,
+		}
+		
+		// Map color to valid ProjectV2SingleSelectFieldOptionColor enum values
+		// If no color specified, default to GRAY
+		color := strings.ToUpper(option.Color)
+		if color == "" {
+			color = "GRAY"
+		}
+		
+		// Validate color against GitHub's enum values
+		validColors := map[string]bool{
+			"GRAY": true, "BLUE": true, "GREEN": true, "YELLOW": true,
+			"ORANGE": true, "RED": true, "PINK": true, "PURPLE": true,
+		}
+		
+		if !validColors[color] {
+			// Default to GRAY for invalid colors
+			c.debugLog("Invalid color '%s' for option '%s', using GRAY", option.Color, option.Name)
+			color = "GRAY"
+		}
+		
+		gqlOption["color"] = color
+		options = append(options, gqlOption)
+	}
+
+	if len(options) == 0 {
+		return errors.ValidationError("create_single_select_field", "single_select fields must have at least one option")
+	}
+
+	var mutationResponse struct {
+		CreateProjectV2Field struct {
+			ProjectV2Field struct {
+				ID       string `json:"id"`
+				Name     string `json:"name"`
+				DataType string `json:"dataType"`
+			} `json:"projectV2Field"`
+		} `json:"createProjectV2Field"`
+	}
+
+	mutationVariables := map[string]interface{}{
+		"projectId": projectID,
+		"name":      field.Name,
+		"options":   options,
+	}
+
+	createCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(createCtx, createProjectV2SingleSelectFieldMutation, mutationVariables, &mutationResponse)
+	if err != nil {
+		return errors.APIError("create_single_select_field", fmt.Sprintf("failed to create single select field '%s'", field.Name), err)
+	}
+
+	c.debugLog("Successfully created single select field: %s with %d options", field.Name, len(options))
+	return nil
+}
+
+// UpdateProjectV2Description updates the description of an existing ProjectV2.
+func (c *GHClient) UpdateProjectV2Description(ctx context.Context, projectID, description string) error {
+	if c.gqlClient == nil {
+		return errors.ValidationError("update_project_description", "GraphQL client is not initialized")
+	}
+
+	if strings.TrimSpace(description) == "" {
+		c.debugLog("No description to update for project")
+		return nil
+	}
+
+	c.debugLog("Updating ProjectV2 description")
+
+	var mutationResponse struct {
+		UpdateProjectV2 struct {
+			ProjectV2 struct {
+				ID          string `json:"id"`
+				Description string `json:"description"`
+			} `json:"projectV2"`
+		} `json:"updateProjectV2"`
+	}
+
+	mutationVariables := map[string]interface{}{
+		"projectId":   projectID,
+		"description": description,
+	}
+
+	updateCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(updateCtx, updateProjectV2Mutation, mutationVariables, &mutationResponse)
+	if err != nil {
+		return errors.APIError("update_project_description", "failed to update project description", err)
+	}
+
+	c.debugLog("Successfully updated ProjectV2 description")
+	return nil
+}
+
+// getRepositoryOwnerID retrieves the node ID for the repository owner (needed for project creation).
+func (c *GHClient) getRepositoryOwnerID(ctx context.Context) (string, error) {
+	var ownerResponse struct {
+		RepositoryOwner struct {
+			ID string `json:"id"`
+		} `json:"repositoryOwner"`
+	}
+
+	ownerVariables := map[string]interface{}{
+		"owner": c.Owner,
+	}
+
+	ownerCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	defer cancel()
+
+	err := c.gqlClient.Do(ownerCtx, getRepositoryOwnerIdQuery, ownerVariables, &ownerResponse)
+	if err != nil {
+		c.debugLog("Failed to fetch repository owner ID: %v", err)
+		if errors.IsContextError(err) {
+			return "", errors.ContextError("get_repository_owner_id", err)
+		}
+		return "", errors.APIError("get_repository_owner_id", "failed to fetch repository owner ID", err)
+	}
+
+	if ownerResponse.RepositoryOwner.ID == "" {
+		return "", errors.ValidationError("validate_repository_owner", "repository owner not found")
+	}
+
+	c.debugLog("Retrieved owner ID %s for %s", ownerResponse.RepositoryOwner.ID, c.Owner)
+	return ownerResponse.RepositoryOwner.ID, nil
 }
 
 // AddItemToProjectV2 adds an item (issue, PR, discussion) to a ProjectV2 by item node ID.
@@ -1442,27 +1687,19 @@ func (c *GHClient) AddItemToProjectV2(ctx context.Context, projectID, itemNodeID
 
 	err := c.gqlClient.Do(addCtx, addProjectV2ItemByIdMutation, mutationVariables, &mutationResponse)
 	if err != nil {
-		c.debugLog("Failed to add item %s to ProjectV2 %s: %v", itemNodeID, projectID, err)
+		c.debugLog("Failed to add item to ProjectV2: %v", err)
 		if errors.IsContextError(err) {
 			return errors.ContextError("add_item_to_project", err)
 		}
-		
-		// Check for permission errors
-		if strings.Contains(strings.ToLower(err.Error()), "permission") || 
-		   strings.Contains(strings.ToLower(err.Error()), "forbidden") ||
-		   strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
-			return errors.ProjectPermissionError("add_item_to_project", 
-				"insufficient permissions to add items to project", err)
-		}
-		
-		err = errors.ProjectError("add_item_to_project", "failed to add item to ProjectV2", err)
-		err = errors.WithContextSafe(err, "project_id", projectID)
-		return errors.WithContextSafe(err, "item_node_id", itemNodeID)
+		return errors.APIError("add_item_to_project", "failed to add item to project", err)
 	}
 
-	c.debugLog("Successfully added item %s to ProjectV2 %s (Item ID: %s)",
-		itemNodeID, projectID, mutationResponse.AddProjectV2ItemById.Item.ID)
+	if mutationResponse.AddProjectV2ItemById.Item.ID == "" {
+		c.debugLog("Item addition failed - no item ID returned")
+		return errors.APIError("add_item_to_project", "item addition failed - no item ID returned from GitHub API", nil)
+	}
 
+	c.debugLog("Successfully added item %s to ProjectV2", itemNodeID)
 	return nil
 }
 
@@ -1493,20 +1730,20 @@ func (c *GHClient) GetProjectV2(ctx context.Context, projectID string) (*types.P
 		"projectId": projectID,
 	}
 
-	getCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
+	queryCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
 	defer cancel()
 
-	err := c.gqlClient.Do(getCtx, getProjectV2Query, queryVariables, &queryResponse)
+	err := c.gqlClient.Do(queryCtx, getProjectV2Query, queryVariables, &queryResponse)
 	if err != nil {
-		c.debugLog("Failed to retrieve ProjectV2 %s: %v", projectID, err)
+		c.debugLog("Failed to retrieve ProjectV2: %v", err)
 		if errors.IsContextError(err) {
 			return nil, errors.ContextError("get_project", err)
 		}
-		return nil, errors.ProjectError("get_project", "failed to retrieve ProjectV2", err)
+		return nil, errors.APIError("get_project", "failed to retrieve project", err)
 	}
 
 	if queryResponse.Node.ID == "" {
-		return nil, errors.ProjectNotFoundError("get_project", projectID)
+		return nil, errors.ValidationError("validate_project", "project not found")
 	}
 
 	project := &types.ProjectV2{
@@ -1518,40 +1755,6 @@ func (c *GHClient) GetProjectV2(ctx context.Context, projectID string) (*types.P
 		URL:         queryResponse.Node.URL,
 	}
 
-	c.debugLog("Successfully retrieved ProjectV2 '%s' (ID: %s, Number: %d)",
-		project.Title, project.ID, project.Number)
-
+	c.debugLog("Successfully retrieved ProjectV2 '%s'", project.Title)
 	return project, nil
-}
-
-// getRepositoryOwnerID retrieves the node ID for the repository owner (needed for project creation).
-func (c *GHClient) getRepositoryOwnerID(ctx context.Context) (string, error) {
-	var queryResponse struct {
-		RepositoryOwner struct {
-			ID string `json:"id"`
-		} `json:"repositoryOwner"`
-	}
-
-	queryVariables := map[string]interface{}{
-		"owner": c.Owner,
-	}
-
-	ownerCtx, cancel := context.WithTimeout(ctx, config.APITimeout)
-	defer cancel()
-
-	err := c.gqlClient.Do(ownerCtx, getRepositoryOwnerIdQuery, queryVariables, &queryResponse)
-	if err != nil {
-		c.debugLog("Failed to get owner ID for %s: %v", c.Owner, err)
-		if errors.IsContextError(err) {
-			return "", errors.ContextError("get_owner_id", err)
-		}
-		return "", errors.APIError("get_owner_id", "failed to get repository owner ID", err)
-	}
-
-	if queryResponse.RepositoryOwner.ID == "" {
-		return "", errors.ValidationError("get_owner_id", fmt.Sprintf("owner '%s' not found", c.Owner))
-	}
-
-	c.debugLog("Retrieved owner ID %s for %s", queryResponse.RepositoryOwner.ID, c.Owner)
-	return queryResponse.RepositoryOwner.ID, nil
 }

@@ -11,49 +11,49 @@
         {
           "name": "🔥 Critical",
           "description": "Urgent items requiring immediate attention",
-          "color": "d73a4a"
+          "color": "RED"
         },
         {
           "name": "⚠️ High",
           "description": "Important items that should be addressed soon",
-          "color": "ff9500"
+          "color": "ORANGE"
         },
         {
           "name": "📋 Medium",
           "description": "Standard priority items",
-          "color": "fbca04"
+          "color": "YELLOW"
         },
         {
           "name": "📝 Low",
           "description": "Nice to have items",
-          "color": "0e8a16"
+          "color": "GREEN"
         }
       ]
     },
     {
-      "name": "Status",
+      "name": "Workflow Status",
       "type": "single_select",
       "description": "Current status of the item",
       "options": [
         {
           "name": "📋 To Do",
           "description": "Items that haven't been started",
-          "color": "ededed"
+          "color": "GRAY"
         },
         {
           "name": "🔄 In Progress",
           "description": "Items currently being worked on",
-          "color": "fbca04"
+          "color": "YELLOW"
         },
         {
           "name": "👀 In Review",
           "description": "Items under review",
-          "color": "0052cc"
+          "color": "BLUE"
         },
         {
           "name": "✅ Done",
           "description": "Completed items",
-          "color": "0e8a16"
+          "color": "GREEN"
         }
       ]
     },
@@ -65,22 +65,22 @@
         {
           "name": "S",
           "description": "Small - 1-2 hours",
-          "color": "0e8a16"
+          "color": "GREEN"
         },
         {
           "name": "M", 
           "description": "Medium - 0.5-1 day",
-          "color": "fbca04"
+          "color": "YELLOW"
         },
         {
           "name": "L",
           "description": "Large - 1-3 days",
-          "color": "ff9500"
+          "color": "ORANGE"
         },
         {
           "name": "XL",
           "description": "Extra Large - 1+ weeks",
-          "color": "d73a4a"
+          "color": "RED"
         }
       ]
     },
@@ -92,27 +92,27 @@
         {
           "name": "🐛 Bug",
           "description": "Bug reports and fixes",
-          "color": "d73a4a"
+          "color": "RED"
         },
         {
           "name": "✨ Feature",
           "description": "New features and enhancements",
-          "color": "a2eeef"
+          "color": "BLUE"
         },
         {
           "name": "📚 Documentation",
           "description": "Documentation updates",
-          "color": "0052cc"
+          "color": "BLUE"
         },
         {
           "name": "🔧 Maintenance",
           "description": "Code maintenance and refactoring",
-          "color": "ededed"
+          "color": "GRAY"
         },
         {
           "name": "💬 Discussion",
           "description": "Community discussions and ideas",
-          "color": "d4c5f9"
+          "color": "PURPLE"
         }
       ]
     }
