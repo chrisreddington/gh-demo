@@ -317,3 +317,129 @@ const getLabelByNameQuery = `
 		}
 	}
 `
+
+// ProjectV2 mutations and queries
+
+// createProjectV2Mutation creates a new ProjectV2 for a repository owner
+const createProjectV2Mutation = `
+	mutation CreateProjectV2($ownerId: ID!, $title: String!) {
+		createProjectV2(input: {
+			ownerId: $ownerId
+			title: $title
+		}) {
+			projectV2 {
+				id
+				number
+				title
+				url
+			}
+		}
+	}
+`
+
+// addProjectV2ItemByIdMutation adds an item to a ProjectV2 by content ID
+const addProjectV2ItemByIdMutation = `
+	mutation AddProjectV2ItemById($projectId: ID!, $contentId: ID!) {
+		addProjectV2ItemById(input: {
+			projectId: $projectId
+			contentId: $contentId
+		}) {
+			item {
+				id
+			}
+		}
+	}
+`
+
+// getProjectV2Query retrieves a ProjectV2 by ID
+const getProjectV2Query = `
+	query GetProjectV2($projectId: ID!) {
+		node(id: $projectId) {
+			... on ProjectV2 {
+				id
+				number
+				title
+				description
+				url
+			}
+		}
+	}
+`
+
+// getRepositoryOwnerIdQuery gets the owner ID for creating projects
+const getRepositoryOwnerIdQuery = `
+	query GetRepositoryOwnerId($owner: String!) {
+		repositoryOwner(login: $owner) {
+			id
+		}
+	}
+`
+
+// createProjectV2FieldMutation creates a custom field in a ProjectV2
+const createProjectV2FieldMutation = `
+	mutation CreateProjectV2Field($projectId: ID!, $dataType: ProjectV2CustomFieldType!, $name: String!) {
+		createProjectV2Field(input: {
+			projectId: $projectId
+			dataType: $dataType
+			name: $name
+		}) {
+			projectV2Field {
+				... on ProjectV2Field {
+					id
+					name
+					dataType
+				}
+				... on ProjectV2IterationField {
+					id
+					name
+					dataType
+				}
+				... on ProjectV2SingleSelectField {
+					id
+					name
+					dataType
+				}
+			}
+		}
+	}
+`
+
+// createProjectV2SingleSelectFieldMutation creates a single select field with options
+const createProjectV2SingleSelectFieldMutation = `
+	mutation CreateProjectV2SingleSelectField($projectId: ID!, $name: String!, $options: [ProjectV2SingleSelectFieldOptionInput!]!) {
+		createProjectV2Field(input: {
+			projectId: $projectId
+			dataType: SINGLE_SELECT
+			name: $name
+			singleSelectOptions: $options
+		}) {
+			projectV2Field {
+				... on ProjectV2SingleSelectField {
+					id
+					name
+					dataType
+					options {
+						id
+						name
+						nameHTML
+					}
+				}
+			}
+		}
+	}
+`
+
+// updateProjectV2Mutation updates a ProjectV2 with description
+const updateProjectV2Mutation = `
+	mutation UpdateProjectV2($projectId: ID!, $description: String) {
+		updateProjectV2(input: {
+			projectId: $projectId
+			description: $description
+		}) {
+			projectV2 {
+				id
+				description
+			}
+		}
+	}
+`
