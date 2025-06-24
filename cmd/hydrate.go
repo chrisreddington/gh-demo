@@ -106,9 +106,9 @@ type CleanupFlags struct {
 
 // ProjectFlags holds all project-related command line flags
 type ProjectFlags struct {
-	CreateProject        bool
-	ProjectConfig        string
-	FailOnProjectError   bool
+	CreateProject      bool
+	ProjectConfig      string
+	FailOnProjectError bool
 }
 
 // executeHydrate contains the core hydration logic separated from CLI concerns
@@ -219,7 +219,7 @@ func NewHydrateCmd() *cobra.Command {
 
 	// Cleanup flags
 	var cleanupFlags CleanupFlags
-	
+
 	// Project flags
 	var projectFlags ProjectFlags
 

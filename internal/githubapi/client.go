@@ -1520,31 +1520,31 @@ func (c *GHClient) createProjectV2SingleSelectField(ctx context.Context, project
 		if description == "" {
 			description = option.Name // Use name as fallback description
 		}
-		
+
 		gqlOption := map[string]interface{}{
 			"name":        option.Name,
 			"description": description,
 		}
-		
+
 		// Map color to valid ProjectV2SingleSelectFieldOptionColor enum values
 		// If no color specified, default to GRAY
 		color := strings.ToUpper(option.Color)
 		if color == "" {
 			color = "GRAY"
 		}
-		
+
 		// Validate color against GitHub's enum values
 		validColors := map[string]bool{
 			"GRAY": true, "BLUE": true, "GREEN": true, "YELLOW": true,
 			"ORANGE": true, "RED": true, "PINK": true, "PURPLE": true,
 		}
-		
+
 		if !validColors[color] {
 			// Default to GRAY for invalid colors
 			c.debugLog("Invalid color '%s' for option '%s', using GRAY", option.Color, option.Name)
 			color = "GRAY"
 		}
-		
+
 		gqlOption["color"] = color
 		options = append(options, gqlOption)
 	}

@@ -12,17 +12,17 @@ import (
 
 // MockConfig allows configuration of the mock GitHubClient behavior
 type MockConfig struct {
-	ExistingLabels          map[string]bool
-	Issues                  testutil.ErrorConfig
-	PRs                     testutil.ErrorConfig
-	Discussions             testutil.ErrorConfig
-	ListLabels              testutil.ErrorConfig
-	CreateLabel             testutil.ErrorConfig
-	FailProjectCreation     bool
-	FailProjectItemAddition bool
-	FailProjectRetrieval    bool
+	ExistingLabels                map[string]bool
+	Issues                        testutil.ErrorConfig
+	PRs                           testutil.ErrorConfig
+	Discussions                   testutil.ErrorConfig
+	ListLabels                    testutil.ErrorConfig
+	CreateLabel                   testutil.ErrorConfig
+	FailProjectCreation           bool
+	FailProjectItemAddition       bool
+	FailProjectRetrieval          bool
 	FailProjectFieldConfiguration bool
-	FailProjectDescriptionUpdate bool
+	FailProjectDescriptionUpdate  bool
 }
 
 // ConfigurableMockGitHubClient provides a configurable mock implementation of GitHubClient

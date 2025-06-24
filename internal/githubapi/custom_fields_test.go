@@ -23,7 +23,7 @@ func TestCreateProjectV2Field_BasicTypes(t *testing.T) {
 		},
 		{
 			name:      "number field",
-			fieldType: "number", 
+			fieldType: "number",
 			wantType:  "NUMBER",
 		},
 		{
@@ -41,12 +41,12 @@ func TestCreateProjectV2Field_BasicTypes(t *testing.T) {
 					if !strings.Contains(query, "createProjectV2Field") {
 						t.Errorf("Expected createProjectV2Field mutation, got: %s", query)
 					}
-					
+
 					// Verify variables contain correct data type
 					if dataType, ok := variables["dataType"]; !ok || dataType != tt.wantType {
 						t.Errorf("Expected dataType %s, got %v", tt.wantType, dataType)
 					}
-					
+
 					// Mock successful response
 					mockResponse := map[string]interface{}{
 						"createProjectV2Field": map[string]interface{}{
@@ -57,14 +57,14 @@ func TestCreateProjectV2Field_BasicTypes(t *testing.T) {
 							},
 						},
 					}
-					
+
 					respBytes, _ := json.Marshal(mockResponse)
 					return json.Unmarshal(respBytes, response)
 				},
 			}
 
 			client := createTestClientWithGraphQL(mockClient)
-			
+
 			field := types.ProjectV2Field{
 				Name: "Test Field",
 				Type: tt.fieldType,
@@ -88,7 +88,7 @@ func TestCreateProjectV2Field_InvalidType(t *testing.T) {
 	}
 
 	client := createTestClientWithGraphQL(mockClient)
-	
+
 	field := types.ProjectV2Field{
 		Name: "Test Field",
 		Type: "invalid_type",
@@ -98,7 +98,7 @@ func TestCreateProjectV2Field_InvalidType(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for invalid field type, got nil")
 	}
-	
+
 	if !strings.Contains(err.Error(), "unsupported field type") {
 		t.Errorf("Expected unsupported field type error, got: %v", err)
 	}
@@ -112,21 +112,21 @@ func TestCreateProjectV2SingleSelectField(t *testing.T) {
 			if !strings.Contains(query, "createProjectV2Field") {
 				t.Errorf("Expected createProjectV2Field mutation, got: %s", query)
 			}
-			
+
 			if !strings.Contains(query, "singleSelectOptions") {
 				t.Errorf("Expected singleSelectOptions in mutation, got: %s", query)
 			}
-			
+
 			// Verify options structure
 			options, ok := variables["options"].([]map[string]interface{})
 			if !ok {
 				t.Errorf("Expected options as []map[string]interface{}, got %T", variables["options"])
 			}
-			
+
 			if len(options) != 2 {
 				t.Errorf("Expected 2 options, got %d", len(options))
 			}
-			
+
 			// Verify first option has required fields
 			option1 := options[0]
 			if option1["name"] != "High" {
@@ -138,7 +138,7 @@ func TestCreateProjectV2SingleSelectField(t *testing.T) {
 			if option1["color"] != "RED" {
 				t.Errorf("Expected option color 'RED', got %v", option1["color"])
 			}
-			
+
 			// Verify second option with fallback description
 			option2 := options[1]
 			if option2["name"] != "Low" {
@@ -150,7 +150,7 @@ func TestCreateProjectV2SingleSelectField(t *testing.T) {
 			if option2["color"] != "GRAY" { // Should default to GRAY
 				t.Errorf("Expected option color 'GRAY' (default), got %v", option2["color"])
 			}
-			
+
 			// Mock successful response
 			mockResponse := map[string]interface{}{
 				"createProjectV2Field": map[string]interface{}{
@@ -161,14 +161,14 @@ func TestCreateProjectV2SingleSelectField(t *testing.T) {
 					},
 				},
 			}
-			
+
 			respBytes, _ := json.Marshal(mockResponse)
 			return json.Unmarshal(respBytes, response)
 		},
 	}
 
 	client := createTestClientWithGraphQL(mockClient)
-	
+
 	field := types.ProjectV2Field{
 		Name: "Priority",
 		Type: "single_select",
@@ -181,7 +181,7 @@ func TestCreateProjectV2SingleSelectField(t *testing.T) {
 			{
 				Name:        "Low",
 				Description: "", // Should fallback to name
-				Color:       "",  // Should default to GRAY
+				Color:       "", // Should default to GRAY
 			},
 		},
 	}
@@ -202,7 +202,7 @@ func TestCreateProjectV2SingleSelectField_NoOptions(t *testing.T) {
 	}
 
 	client := createTestClientWithGraphQL(mockClient)
-	
+
 	field := types.ProjectV2Field{
 		Name:    "Priority",
 		Type:    "single_select",
@@ -213,7 +213,7 @@ func TestCreateProjectV2SingleSelectField_NoOptions(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for single select field without options, got nil")
 	}
-	
+
 	if !strings.Contains(err.Error(), "must have at least one option") {
 		t.Errorf("Expected validation error for missing options, got: %v", err)
 	}
@@ -222,14 +222,14 @@ func TestCreateProjectV2SingleSelectField_NoOptions(t *testing.T) {
 // TestCreateProjectV2Field_RoutesToSingleSelect tests that single_select type routes to the correct method
 func TestCreateProjectV2Field_RoutesToSingleSelect(t *testing.T) {
 	singleSelectCalled := false
-	
+
 	mockClient := &ConfigurableMockGraphQLClient{
 		DoFunc: func(ctx context.Context, query string, variables map[string]interface{}, response interface{}) error {
 			// This should be the single select mutation
 			if strings.Contains(query, "singleSelectOptions") {
 				singleSelectCalled = true
 			}
-			
+
 			// Mock successful response
 			mockResponse := map[string]interface{}{
 				"createProjectV2Field": map[string]interface{}{
@@ -240,14 +240,14 @@ func TestCreateProjectV2Field_RoutesToSingleSelect(t *testing.T) {
 					},
 				},
 			}
-			
+
 			respBytes, _ := json.Marshal(mockResponse)
 			return json.Unmarshal(respBytes, response)
 		},
 	}
 
 	client := createTestClientWithGraphQL(mockClient)
-	
+
 	field := types.ProjectV2Field{
 		Name: "Priority",
 		Type: "single_select",
@@ -260,7 +260,7 @@ func TestCreateProjectV2Field_RoutesToSingleSelect(t *testing.T) {
 	if err != nil {
 		t.Errorf("createProjectV2Field() error = %v", err)
 	}
-	
+
 	if !singleSelectCalled {
 		t.Error("Expected single select mutation to be called for single_select field type")
 	}
