@@ -56,11 +56,170 @@ gh demo hydrate --owner myuser --repo myrepo --clean --preserve-config .github/d
 gh demo hydrate --owner myuser --repo myrepo --clean --dry-run
 ```
 
+### ProjectV2 Integration
+
+Create a GitHub ProjectV2 and automatically organize all hydrated content:
+
+```bash
+# Create a project with default configuration
+gh demo hydrate --owner myuser --repo myrepo --create-project
+
+# Create a project with custom configuration
+gh demo hydrate --owner myuser --repo myrepo --create-project --project-config .github/demos/my-project.json
+
+# Fail if project creation fails (default: continue without project)
+gh demo hydrate --owner myuser --repo myrepo --create-project --fail-on-project-error
+
+# Preview project creation
+gh demo hydrate --owner myuser --repo myrepo --create-project --dry-run
+```
+
+**Important**: Project creation requires your GitHub token to have `write:org` (for organization projects) or `write:user` (for user projects) scope. If project creation fails due to insufficient permissions, the command will continue with standard hydration unless `--fail-on-project-error` is specified.
+
 ### Help
 
 ```bash
 # Get help
 gh demo hydrate --help
+```
+
+## Project Configuration
+
+The `--create-project` flag creates a GitHub ProjectV2 and associates all created issues, discussions, and pull requests with it. Project configuration is defined in JSON format.
+
+**Custom Fields Support:** The tool now supports creating custom fields including single select options with proper color validation. All field types supported by GitHub ProjectV2 are available: `single_select`, `text`, `number`, and `date`.
+
+### Project Configuration Schema
+
+| Field       | Type                    | Description                                    | Required |
+|-------------|-------------------------|------------------------------------------------|----------|
+| title       | string                  | Project title                                  | No*      |
+| description | string                  | Project description                            | No       |
+| visibility  | string                  | Project visibility ("private" or "public")    | No*      |
+| fields      | []ProjectV2Field        | Custom project fields                          | No       |
+| views       | []ProjectV2View         | Project views and layouts                      | No       |
+| templates   | []ProjectV2Template     | Default field values for content types        | No       |
+
+*Default values are provided if not specified.
+
+### Project Field Schema
+
+| Field       | Type                         | Description                                    | Required |
+|-------------|------------------------------|------------------------------------------------|----------|
+| name        | string                       | Field name                                     | Yes      |
+| type        | string                       | Field type ("single_select", "text", "number", "date") | Yes      |
+| description | string                       | Field description                              | No       |
+| options     | []ProjectV2FieldOption       | Options for single_select fields              | No       |
+
+#### ProjectV2FieldOption Schema
+
+| Field       | Type   | Description                                    | Required |
+|-------------|--------|------------------------------------------------|----------|
+| name        | string | Option display name                            | Yes      |
+| description | string | Option description                             | Yes      |
+| color       | string | Option color (see allowed values below)       | Yes      |
+
+#### Allowed Color Values for Single Select Options
+
+The `color` field must use one of the following GitHub enum values:
+
+- `GRAY` - Light gray
+- `BLUE` - Blue  
+- `GREEN` - Green
+- `YELLOW` - Yellow
+- `ORANGE` - Orange
+- `RED` - Red
+- `PINK` - Pink
+- `PURPLE` - Purple
+
+**Note:** Color values are case-insensitive. Invalid colors will default to `GRAY`.
+
+#### Reserved Field Names
+
+Avoid using these reserved field names which conflict with GitHub's built-in project fields:
+- `Status` - Use alternative names like "Workflow Status", "Progress", or "State"
+- `Assignees` - Built-in field for issue/PR assignees
+- `Labels` - Built-in field for issue/PR labels  
+- `Milestone` - Built-in field for milestones
+- `Repository` - Built-in field for the source repository
+
+### Example Project Configuration
+
+```json
+{
+  "title": "Repository Demo Project",
+  "description": "Demonstration project for repository hydration",
+  "visibility": "private",
+  "fields": [
+    {
+      "name": "Priority",
+      "type": "single_select",
+      "description": "Priority level for the content item",
+      "options": [
+        {
+          "name": "🔥 Critical",
+          "description": "Urgent items requiring immediate attention",
+          "color": "RED"
+        },
+        {
+          "name": "⚠️ High",
+          "description": "Important items that should be addressed soon", 
+          "color": "ORANGE"
+        },
+        {
+          "name": "📋 Medium",
+          "description": "Standard priority items",
+          "color": "YELLOW"
+        },
+        {
+          "name": "📝 Low",
+          "description": "Nice to have items",
+          "color": "GREEN"
+        }
+      ]
+    },
+    {
+      "name": "Status",
+      "type": "single_select", 
+      "description": "Current status of the item",
+      "options": [
+        {
+          "name": "📋 To Do",
+          "description": "Items that haven't been started",
+          "color": "GRAY"
+        },
+        {
+          "name": "🔄 In Progress", 
+          "description": "Items currently being worked on",
+          "color": "YELLOW"
+        },
+        {
+          "name": "✅ Done",
+          "description": "Completed items", 
+          "color": "GREEN"
+        }
+      ]
+    },
+    {
+      "name": "Effort Estimate",
+      "type": "text",
+      "description": "Estimated effort required"
+    },
+    {
+      "name": "Due Date",
+      "type": "date",
+      "description": "Target completion date"
+    }
+  ],
+  "views": [
+    {
+      "name": "All Items",
+      "description": "Complete view of all project items",
+      "layout": "table", 
+      "fields": ["title", "assignees", "status", "priority"]
+    }
+  ]
+}
 ```
 
 ## Schema Documentation
@@ -203,6 +362,7 @@ The hydration tool uses JSON configuration files to define the content to create
 - `<config-path>/prs.json`: Array of pull request objects
 - `<config-path>/labels.json`: Array of label objects (optional - labels referenced in other files will be auto-created with defaults)
 - `<config-path>/preserve.json`: Configuration for objects to preserve during cleanup operations (optional)
+- `<config-path>/project-config.json`: ProjectV2 configuration for project creation (optional)
 
 ### Example Configuration Files
 
@@ -213,6 +373,7 @@ Example configuration files are included in the `.github/demos/` directory:
 - [`prs.json`](.github/demos/prs.json) - Sample pull request definitions
 - [`labels.json`](.github/demos/labels.json) - Sample label definitions with colors
 - [`preserve.json`](.github/demos/preserve.json) - Preservation rules for cleanup operations
+- [`project-config.json`](.github/demos/project-config.json) - Sample project configuration with fields and views
 
 ## Development
 

@@ -68,7 +68,7 @@ func (m *ConfigurableMockGraphQLClient) handleRepositoryQuery(response interface
 	return nil
 }
 
-// handleLabelsQuery handles ListLabels queries  
+// handleLabelsQuery handles ListLabels queries
 func (m *ConfigurableMockGraphQLClient) handleLabelsQuery(response interface{}) error {
 	resp := response.(*struct {
 		Repository struct {

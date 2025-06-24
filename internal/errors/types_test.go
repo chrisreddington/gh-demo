@@ -442,7 +442,7 @@ func TestWithContextSafe(t *testing.T) {
 // TestWrapWithOperation tests error wrapping helper
 func TestWrapWithOperation(t *testing.T) {
 	originalErr := fmt.Errorf("original error")
-	
+
 	// Test with regular error
 	result := WrapWithOperation(originalErr, "test_layer", "test_op", "test message")
 	layeredResult := AsLayeredError(result)

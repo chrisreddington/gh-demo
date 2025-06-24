@@ -135,6 +135,67 @@ func HydrateWithLabels(ctx context.Context, client githubapi.GitHubClient, cfg *
 	return nil
 }
 
+// HydrateWithProject loads content, collects all labels, ensures labels exist, and optionally creates a ProjectV2.
+// When createProject is true, it creates a project and associates all created content with it.
+// It supports both explicit label definitions from labels.json and auto-generated labels with defaults.
+// It continues processing even if individual items fail, collecting all errors and reporting them at the end.
+func HydrateWithProject(ctx context.Context, client githubapi.GitHubClient, cfg *config.Configuration, includeIssues, includeDiscussions, includePullRequests bool, logger common.Logger, dryRun bool, createProject bool, projectConfigPath string) error {
+	if dryRun {
+		logger.Info("Starting hydration operations (dry-run: true)")
+	}
+
+	// Load content configuration
+	issues, discussions, pullRequests, err := HydrateFromConfiguration(ctx, cfg, includeIssues, includeDiscussions, includePullRequests)
+	if err != nil {
+		return errors.ConfigError("load_config_files", "failed to load configuration files", err)
+	}
+
+	// Try to read explicit label definitions from labels.json
+	explicitLabels, err := ReadLabelsJSON(ctx, cfg.LabelsPath)
+	if err != nil {
+		err = errors.WrapWithOperation(err, "config", "read_labels_config", "failed to read labels configuration")
+		return errors.WithContextSafe(err, "path", cfg.LabelsPath)
+	}
+
+	// Collect label names referenced in content
+	referencedLabelNames := CollectLabels(ctx, issues, discussions, pullRequests)
+
+	// Prepare the final list of labels to ensure exist
+	labelsToEnsure := prepareLabelsToEnsure(ctx, explicitLabels, referencedLabelNames)
+
+	labelSummary := &SectionSummary{Name: "Labels", Total: len(labelsToEnsure)}
+
+	if len(explicitLabels) > 0 {
+		logger.Debug("Found %d explicit label definitions from %s", len(explicitLabels), cfg.LabelsPath)
+	}
+	logger.Debug("Found %d total labels to ensure exist", len(labelsToEnsure))
+
+	if err := EnsureDefinedLabelsExist(ctx, client, labelsToEnsure, logger, labelSummary, dryRun); err != nil {
+		return errors.APIError("ensure_labels", "failed to ensure labels exist", err)
+	}
+
+	// Report label summary
+	logger.Info("Labels: %d total, %d successful, %d failed", labelSummary.Total, labelSummary.Success, labelSummary.Failures)
+
+	// Create project if requested
+	var project *types.ProjectV2
+	if createProject && !dryRun {
+		project, err = createProjectV2(ctx, client, cfg, projectConfigPath, logger)
+		if err != nil {
+			return err
+		}
+	} else if createProject && dryRun {
+		logger.Info("Would create ProjectV2 (skipped in dry-run mode)")
+	}
+
+	// Create issues, discussions, and pull requests (with project tracking)
+	if err := createRepositoryContentWithProject(ctx, client, issues, discussions, pullRequests, includeIssues, includeDiscussions, includePullRequests, logger, dryRun, project); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // createRepositoryContent orchestrates the creation of all content types.
 // This function handles the creation of issues, discussions, and pull requests
 // and collects any errors that occur during the process.
@@ -218,7 +279,7 @@ func createItems[T any](
 	client githubapi.GitHubClient,
 	items []T,
 	itemType string,
-	createFunc func(context.Context, T) error,
+	createFunc func(context.Context, T) (*types.CreatedItemInfo, error),
 	getTitleFunc func(T) string,
 	logger common.Logger,
 	dryRun bool,
@@ -242,7 +303,8 @@ func createItems[T any](
 			logger.Info("Would create %s: %s", strings.ToLower(itemType[:len(itemType)-1]), title)
 			summary.Success++
 		} else {
-			if err := createFunc(ctx, item); err != nil {
+			_, err := createFunc(ctx, item)
+			if err != nil {
 				errorMsg := common.FormatCreationError(itemType[:len(itemType)-1], title, i, err)
 				errors = append(errors, errorMsg)
 				summary.Errors = append(summary.Errors, errorMsg)
@@ -681,4 +743,251 @@ func FindProjectRoot(ctx context.Context) (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// createProjectV2 creates a new ProjectV2 based on configuration and returns it for item association.
+func createProjectV2(ctx context.Context, client githubapi.GitHubClient, cfg *config.Configuration, projectConfigPath string, logger common.Logger) (*types.ProjectV2, error) {
+	// Determine the project configuration path
+	configPath := projectConfigPath
+	if configPath == "" {
+		configPath = cfg.ProjectConfigPath
+	}
+
+	logger.Info("Loading project configuration from %s", configPath)
+
+	// Load project configuration
+	projectConfig, err := config.LoadProjectConfiguration(ctx, configPath)
+	if err != nil {
+		return nil, errors.ProjectConfigurationError("load_project_config", "failed to load project configuration", err)
+	}
+
+	logger.Info("Creating ProjectV2 '%s'", projectConfig.Title)
+
+	// Create the basic project
+	project, err := client.CreateProjectV2(ctx, *projectConfig)
+	if err != nil {
+		// Check for permission errors and provide helpful guidance
+		if errors.IsLayer(err, "project") {
+			if layeredErr := errors.AsLayeredError(err); layeredErr != nil {
+				if layeredErr.Context["type"] == "permission" {
+					logger.Info("Failed to create project due to insufficient permissions")
+					logger.Info("Ensure your GitHub token has 'write:org' or 'write:user' scope")
+					return nil, err
+				}
+			}
+		}
+		return nil, errors.ProjectError("create_project", "failed to create ProjectV2", err)
+	}
+
+	logger.Info("Successfully created ProjectV2 '%s' (Number: %d, URL: %s)",
+		project.Title, project.Number, project.URL)
+
+	// Configure project with additional settings
+	err = configureProjectV2Additional(ctx, client, project.ID, *projectConfig, logger)
+	if err != nil {
+		logger.Info("Warning: Failed to configure some project settings: %v", err)
+		// Don't fail the entire operation - the basic project was created successfully
+	}
+
+	return project, nil
+}
+
+// configureProjectV2Additional configures additional project settings like description, fields, and views.
+func configureProjectV2Additional(ctx context.Context, client githubapi.GitHubClient, projectID string, projectConfig types.ProjectV2Configuration, logger common.Logger) error {
+	errorCollector := errors.NewErrorCollector("configure_project_additional")
+
+	// TODO: Update project description - currently disabled due to API schema issues
+	if strings.TrimSpace(projectConfig.Description) != "" {
+		logger.Debug("Project description configuration is currently disabled (GitHub API limitations)")
+		// Temporarily disabled: err := client.UpdateProjectV2Description(ctx, projectID, projectConfig.Description)
+	}
+
+	// Create custom fields - now working with updated GitHub API schema
+	if len(projectConfig.Fields) > 0 {
+		logger.Info("Creating %d custom fields for project", len(projectConfig.Fields))
+		err := client.ConfigureProjectV2Fields(ctx, projectID, projectConfig.Fields)
+		if err != nil {
+			logger.Info("Warning: Failed to create some custom fields: %v", err)
+			errorCollector.Add(errors.ProjectError("configure_project_fields", "failed to configure custom fields", err))
+		} else {
+			logger.Info("Successfully configured all custom fields")
+		}
+	}
+
+	// Note: Views are not currently supported by GitHub's GraphQL API
+	// They can only be created through the web interface
+	if len(projectConfig.Views) > 0 {
+		logger.Info("Note: Custom project views cannot be created via API - please configure them manually in the GitHub web interface")
+	}
+
+	return errorCollector.Result()
+}
+
+// createRepositoryContentWithProject orchestrates the creation of all content types with optional project association.
+// This function handles the creation of issues, discussions, and pull requests, and if a project is provided,
+// associates all created items with the project.
+func createRepositoryContentWithProject(ctx context.Context, client githubapi.GitHubClient, issues []types.Issue, discussions []types.Discussion, pullRequests []types.PullRequest, includeIssues, includeDiscussions, includePullRequests bool, logger common.Logger, dryRun bool, project *types.ProjectV2) error {
+	// Track created items for project association
+	var createdItems []CreatedItem
+
+	// Create issues
+	if includeIssues && len(issues) > 0 {
+		itemsCreated, err := createItemsWithTracking(ctx, client, issues, "Issues", func(ctx context.Context, item types.Issue) (*types.CreatedItemInfo, error) {
+			return client.CreateIssue(ctx, item)
+		}, logger, dryRun)
+		if err != nil {
+			// Log the error but don't fail the entire operation
+			logger.Info("Some issues failed to create: %v", err)
+		}
+		// Always append created items, even if some failed
+		createdItems = append(createdItems, itemsCreated...)
+	}
+
+	// Create discussions
+	if includeDiscussions && len(discussions) > 0 {
+		itemsCreated, err := createItemsWithTracking(ctx, client, discussions, "Discussions", func(ctx context.Context, item types.Discussion) (*types.CreatedItemInfo, error) {
+			return client.CreateDiscussion(ctx, item)
+		}, logger, dryRun)
+		if err != nil {
+			// Log the error but don't fail the entire operation
+			logger.Info("Some discussions failed to create: %v", err)
+		}
+		// Always append created items, even if some failed
+		createdItems = append(createdItems, itemsCreated...)
+	}
+
+	// Create pull requests
+	if includePullRequests && len(pullRequests) > 0 {
+		itemsCreated, err := createItemsWithTracking(ctx, client, pullRequests, "Pull Requests", func(ctx context.Context, item types.PullRequest) (*types.CreatedItemInfo, error) {
+			return client.CreatePR(ctx, item)
+		}, logger, dryRun)
+		if err != nil {
+			// Log the error but don't fail the entire operation
+			// We want to add successfully created items to the project even if some PRs failed
+			logger.Info("Some pull requests failed to create: %v", err)
+		}
+		// Always append created items, even if some failed
+		createdItems = append(createdItems, itemsCreated...)
+	}
+
+	// Associate created items with project if provided
+	if project != nil && len(createdItems) > 0 && !dryRun {
+		logger.Info("Adding %d items to ProjectV2 '%s'", len(createdItems), project.Title)
+		err := addItemsToProject(ctx, client, project.ID, createdItems, logger)
+		if err != nil {
+			// Log error but don't fail the entire operation
+			logger.Info("Failed to add some items to project: %v", err)
+		}
+	} else if project != nil && dryRun {
+		logger.Info("Would add %d items to ProjectV2 '%s' (skipped in dry-run mode)", len(createdItems), project.Title)
+	}
+
+	return nil
+}
+
+// CreatedItem represents an item that was successfully created and can be added to a project.
+type CreatedItem struct {
+	NodeID string // The GitHub node ID of the created item
+	Title  string // The title of the created item for logging
+	Type   string // The type of item (issue, discussion, pull_request)
+}
+
+// createItemsWithTracking is a generic function for creating GitHub objects with tracking support.
+// It eliminates code duplication between the specific creation functions and tracks successful creations.
+func createItemsWithTracking[T any](
+	ctx context.Context,
+	client githubapi.GitHubClient,
+	items []T,
+	itemType string,
+	createFunc func(context.Context, T) (*types.CreatedItemInfo, error),
+	logger common.Logger,
+	dryRun bool,
+) ([]CreatedItem, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+
+	logger.Info("Creating %d %s", len(items), strings.ToLower(itemType))
+
+	var createdItems []CreatedItem
+	errorCollector := errors.NewErrorCollector(fmt.Sprintf("create_%s", strings.ToLower(itemType)))
+
+	for i, item := range items {
+		// Extract title for tracking
+		var title string
+
+		// Use type assertions to get the title
+		switch v := any(item).(type) {
+		case types.Issue:
+			title = v.Title
+		case types.Discussion:
+			title = v.Title
+		case types.PullRequest:
+			title = v.Title
+		}
+
+		if dryRun {
+			logger.Info("Would create %s: %s", strings.ToLower(itemType[:len(itemType)-1]), title)
+			// In dry run mode, simulate successful creation for tracking
+			createdItems = append(createdItems, CreatedItem{
+				NodeID: fmt.Sprintf("dry-run-%s-%d", strings.ToLower(itemType), i),
+				Title:  title,
+				Type:   strings.ToLower(itemType[:len(itemType)-1]), // Remove 's' from plural
+			})
+			continue
+		}
+
+		createdItemInfo, err := createFunc(ctx, item)
+		if err != nil {
+			wrappedErr := errors.APIError(fmt.Sprintf("create_%s", strings.ToLower(itemType[:len(itemType)-1])),
+				fmt.Sprintf("failed to create %s", strings.ToLower(itemType[:len(itemType)-1])), err)
+			wrappedErr = errors.WithContextSafe(wrappedErr, "title", title)
+			errorCollector.Add(wrappedErr)
+			logger.Info("Failed to create %s '%s': %v", strings.ToLower(itemType[:len(itemType)-1]), title, err)
+		} else {
+			logger.Info("Created %s: %s", strings.ToLower(itemType[:len(itemType)-1]), title)
+			// Track successful creation with actual node ID from GitHub
+			createdItems = append(createdItems, CreatedItem{
+				NodeID: createdItemInfo.NodeID,
+				Title:  createdItemInfo.Title,
+				Type:   createdItemInfo.Type,
+			})
+		}
+	}
+
+	return createdItems, errorCollector.Result()
+}
+
+// addItemsToProject adds all created items to the specified ProjectV2.
+func addItemsToProject(ctx context.Context, client githubapi.GitHubClient, projectID string, items []CreatedItem, logger common.Logger) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	errorCollector := errors.NewErrorCollector("add_items_to_project")
+	successCount := 0
+
+	for _, item := range items {
+		// Skip items without valid node IDs (e.g., dry-run items or items that failed to get node IDs)
+		if strings.HasPrefix(item.NodeID, "dry-run-") || strings.HasPrefix(item.NodeID, "created-") {
+			logger.Debug("Skipping item '%s' - no valid node ID available", item.Title)
+			continue
+		}
+
+		err := client.AddItemToProjectV2(ctx, projectID, item.NodeID)
+		if err != nil {
+			wrappedErr := errors.ProjectError("add_item_to_project", "failed to add item to project", err)
+			wrappedErr = errors.WithContextSafe(wrappedErr, "item_title", item.Title)
+			wrappedErr = errors.WithContextSafe(wrappedErr, "item_type", item.Type)
+			wrappedErr = errors.WithContextSafe(wrappedErr, "item_node_id", item.NodeID)
+			errorCollector.Add(wrappedErr)
+			logger.Info("Failed to add %s '%s' to project: %v", item.Type, item.Title, err)
+		} else {
+			successCount++
+			logger.Debug("Added %s '%s' to project", item.Type, item.Title)
+		}
+	}
+
+	logger.Info("Added %d/%d items to project successfully", successCount, len(items))
+	return errorCollector.Result()
 }

@@ -57,13 +57,13 @@ func TestGitHubClientInterfaceMethodSignatures(t *testing.T) {
 	testCtx := context.Background()
 
 	// Creation methods - test that they don't panic and handle any errors
-	if err := client.CreateIssue(testCtx, types.Issue{}); err != nil {
+	if _, err := client.CreateIssue(testCtx, types.Issue{}); err != nil {
 		t.Logf("CreateIssue returned error (expected in interface test): %v", err)
 	}
-	if err := client.CreateDiscussion(testCtx, types.Discussion{}); err != nil {
+	if _, err := client.CreateDiscussion(testCtx, types.Discussion{}); err != nil {
 		t.Logf("CreateDiscussion returned error (expected in interface test): %v", err)
 	}
-	if err := client.CreatePR(testCtx, types.PullRequest{}); err != nil {
+	if _, err := client.CreatePR(testCtx, types.PullRequest{}); err != nil {
 		t.Logf("CreatePR returned error (expected in interface test): %v", err)
 	}
 	if err := client.CreateLabel(testCtx, types.Label{}); err != nil {
@@ -177,13 +177,13 @@ func TestInterfaceDocumentationCompliance(t *testing.T) {
 		ctx := context.Background()
 
 		// Creation operations - test interface compliance and handle errors
-		if err := client.CreateIssue(ctx, types.Issue{Title: "test"}); err != nil {
+		if _, err := client.CreateIssue(ctx, types.Issue{Title: "test"}); err != nil {
 			t.Logf("CreateIssue returned error (expected in interface compliance test): %v", err)
 		}
-		if err := client.CreateDiscussion(ctx, types.Discussion{Title: "test"}); err != nil {
+		if _, err := client.CreateDiscussion(ctx, types.Discussion{Title: "test"}); err != nil {
 			t.Logf("CreateDiscussion returned error (expected in interface compliance test): %v", err)
 		}
-		if err := client.CreatePR(ctx, types.PullRequest{Title: "test"}); err != nil {
+		if _, err := client.CreatePR(ctx, types.PullRequest{Title: "test"}); err != nil {
 			t.Logf("CreatePR returned error (expected in interface compliance test): %v", err)
 		}
 		if err := client.CreateLabel(ctx, types.Label{Name: "test"}); err != nil {

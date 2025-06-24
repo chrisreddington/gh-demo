@@ -1027,8 +1027,9 @@ func TestExecuteHydrate_ParameterValidation(t *testing.T) {
 
 			ctx := context.Background()
 			cleanupFlags := CleanupFlags{}
+			projectFlags := ProjectFlags{}
 
-			err = executeHydrate(ctx, tt.owner, tt.repo, tt.configPath, true, true, true, false, cleanupFlags)
+			err = executeHydrate(ctx, tt.owner, tt.repo, tt.configPath, true, true, true, false, cleanupFlags, projectFlags)
 
 			if tt.expectError {
 				if err == nil {
@@ -1055,8 +1056,9 @@ func TestExecuteHydrate_ContextCancellation(t *testing.T) {
 	cancel() // Cancel immediately
 
 	cleanupFlags := CleanupFlags{}
+	projectFlags := ProjectFlags{}
 
-	err := executeHydrate(ctx, "owner", "repo", ".github/demos", true, true, true, false, cleanupFlags)
+	err := executeHydrate(ctx, "owner", "repo", ".github/demos", true, true, true, false, cleanupFlags, projectFlags)
 
 	if err == nil {
 		t.Error("Expected context cancellation error")
