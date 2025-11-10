@@ -1,9 +1,9 @@
 module github.com/chrisreddington/gh-demo
 
-go 1.24.1
+go 1.25.0
 
 require (
-	github.com/cli/go-gh/v2 v2.12.1
+	github.com/cli/go-gh/v2 v2.13.0
 	github.com/spf13/cobra v1.9.1
 )
 
